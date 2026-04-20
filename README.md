@@ -99,6 +99,14 @@ Practical notes:
 - A good README and icon matter because they are shown directly in the Marketplace listing
 - If you want private/internal distribution only, `.vsix` delivery is usually simpler than Marketplace publishing
 
+## Release checklist
+
+- Confirm the Marketplace publisher really is `jikang-jeong`
+- Verify the listing icon in [media/marketplace-icon.png](/Users/jikjeong/Documents/Codex/2026-04-18-youtube-mp3/media/marketplace-icon.png)
+- Run `vsce package` and confirm there are no packaging warnings
+- Install the generated `.vsix` locally once before publishing
+- Publish with `vsce publish` when the package looks correct
+
 ## Next useful additions
 
 - Auto-run a follow-up Claude CLI command after save.

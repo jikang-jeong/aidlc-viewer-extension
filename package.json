@@ -13,6 +13,7 @@
   "bugs": {
     "url": "https://github.com/jikang-jeong/aidlc-viewer-extension/issues"
   },
+  "icon": "media/marketplace-icon.png",
   "engines": {
     "vscode": "^1.90.0"
   },
