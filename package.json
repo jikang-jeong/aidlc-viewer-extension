@@ -1,0 +1,78 @@
+{
+  "name": "aidlc-viewer",
+  "displayName": "AIDLC-VIEWER",
+  "description": "Watch AIDLC workflow folders, track stage files, and edit Markdown in a custom viewer.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:markdownWatchViewer.selectFolder",
+    "onView:markdownWatchViewer.tree"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "markdownWatchViewer.selectFolder",
+        "title": "AIDLC-VIEWER: Select Folder",
+        "shortTitle": "Open"
+      },
+      {
+        "command": "markdownWatchViewer.refresh",
+        "title": "AIDLC-VIEWER: Refresh",
+        "shortTitle": "Refresh"
+      },
+      {
+        "command": "markdownWatchViewer.openFile",
+        "title": "AIDLC-VIEWER: Open File"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "markdownWatchViewer",
+          "title": "AIDLC",
+          "icon": "media/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "markdownWatchViewer": [
+        {
+          "id": "markdownWatchViewer.tree",
+          "name": "VIEWER"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "markdownWatchViewer.selectFolder",
+          "when": "view == markdownWatchViewer.tree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "markdownWatchViewer.refresh",
+          "when": "view == markdownWatchViewer.tree",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "markdownWatchViewer.openFile",
+          "when": "view == markdownWatchViewer.tree && viewItem == markdownFile",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "package": "vsce package"
+  }
+}
