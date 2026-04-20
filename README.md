@@ -14,7 +14,7 @@ Minimal VS Code extension prototype for AI-DLC workflow folders:
 3. In the new window, open the `AIDLC` activity bar icon.
 4. Run `AIDLC-VIEWER: Select Folder`.
 5. Choose the folder that Claude CLI is writing into.
-6. For a ready-made test fixture, choose `/Users/jikjeong/Develop/aidlc-test/sample-workflow`.
+6. For a ready-made test fixture, choose `../aidlc-test/sample-workflow`.
 
 ## Current scope
 
@@ -27,13 +27,14 @@ Minimal VS Code extension prototype for AI-DLC workflow folders:
 - Adds section-friendly directory labels for rule repositories.
 - Marks newly created Markdown files with a green `NEW` indicator.
 - Marks opened Markdown files as `READ` and rolls counts up to parent folders.
-- Shows a compact stage summary at the top of the tree with `Current Stage` and `Last review`.
+- Shows a compact stage summary at the top of the tree with the current stage and stage counts.
 
 ## Good fit for rule repositories
 
-This works well for repositories like:
+This works well for AI-DLC repositories and assets such as:
 
-- `/Users/jikjeong/Develop/aidlc-workflows/aidlc-rules`
+- [awslabs/aidlc-workflows assets/images](https://github.com/awslabs/aidlc-workflows/tree/main/assets/images)
+- `../aidlc-workflows/aidlc-rules`
 
 That repository has a nested rules structure such as:
 
@@ -50,8 +51,8 @@ Directories such as `common`, `inception`, `construction`, `operations`, and `ex
 ## Suggested test flow
 
 1. Start the extension with `F5`.
-2. Select `/Users/jikjeong/Develop/aidlc-test/sample-workflow`.
-3. Confirm the top row shows the current stage and latest stage file.
+2. Select `../aidlc-test/sample-workflow`.
+3. Confirm the top row shows the current stage.
 4. Open `inception/requirements-analysis.md` and confirm it becomes `READ`.
 5. Create a new file such as `construction/new-task.md` and confirm it appears as green `NEW`.
 6. Open that new file and confirm `NEW` changes to `READ`.
@@ -101,7 +102,7 @@ Practical notes:
 
 ## Release checklist
 
-- Confirm the Marketplace publisher really is `jikang-jeong`
+- Confirm the Marketplace publisher really is `jikjeong`
 - Verify the listing icon in [media/marketplace-icon.png](/Users/jikjeong/Documents/Codex/2026-04-18-youtube-mp3/media/marketplace-icon.png)
 - Run `vsce package` and confirm there are no packaging warnings
 - Install the generated `.vsix` locally once before publishing

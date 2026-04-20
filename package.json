@@ -3,7 +3,7 @@
   "displayName": "AIDLC-VIEWER",
   "description": "Watch AIDLC workflow folders, track stage files, and edit Markdown in a custom viewer.",
   "version": "0.0.1",
-  "publisher": "jikang-jeong",
+  "publisher": "jikjeong",
   "license": "MIT",
   "repository": {
     "type": "git",

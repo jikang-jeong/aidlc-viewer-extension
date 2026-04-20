@@ -1,0 +1,7 @@
+.git/**
+.github/**
+.vscode/**
+media/marketplace-icon.svg
+*.log
+*.vsix
+node_modules/**

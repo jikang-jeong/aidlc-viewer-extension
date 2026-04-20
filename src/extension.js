@@ -478,7 +478,7 @@ class DirectoryItem extends vscode.TreeItem {
     this.tooltip = buildDirectoryTooltip(resourceUri, stats, visualState);
     this.iconPath = new vscode.ThemeIcon(
       getDirectoryIconName(resourceUri),
-      visualState.hasNew ? new vscode.ThemeColor('charts.green') : undefined
+      getDirectoryColor(resourceUri, visualState)
     );
   }
 }
@@ -622,6 +622,19 @@ function getDirectorySectionHint(resourceUri) {
   return undefined;
 }
 
+function getDirectoryColor(resourceUri, visualState) {
+  const stageColor = getStageColor(detectStageFromPath(`${resourceUri.fsPath}${path.sep}placeholder.md`));
+  if (stageColor) {
+    return stageColor;
+  }
+
+  if (visualState.hasNew) {
+    return new vscode.ThemeColor('charts.green');
+  }
+
+  return undefined;
+}
+
 function detectStageFromPath(filePath) {
   const normalized = filePath.toLowerCase();
   if (normalized.includes(`${path.sep}operations${path.sep}`)) {
@@ -658,7 +671,17 @@ function formatStageLabel(summary) {
 }
 
 function formatStageDescription(summary) {
-  return summary.latestModifiedLabel ? `Last review: ${summary.latestModifiedLabel}` : 'Last review: none';
+  const parts = [];
+  if (summary.counts.inception > 0) {
+    parts.push(`I ${summary.counts.inception}`);
+  }
+  if (summary.counts.construction > 0) {
+    parts.push(`C ${summary.counts.construction}`);
+  }
+  if (summary.counts.operations > 0) {
+    parts.push(`O ${summary.counts.operations}`);
+  }
+  return parts.join(' • ') || 'No stage files detected';
 }
 
 function buildStageTooltip(summary) {
@@ -829,7 +852,7 @@ function getWebviewHtml(webview, fileUri, markdown) {
 
       .shell {
         display: grid;
-        grid-template-columns: 1.1fr 1fr;
+        grid-template-columns: 3fr 7fr;
         height: 100vh;
       }
 
