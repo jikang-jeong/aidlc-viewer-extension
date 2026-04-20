@@ -3,12 +3,29 @@
   "displayName": "AIDLC-VIEWER",
   "description": "Watch AIDLC workflow folders, track stage files, and edit Markdown in a custom viewer.",
   "version": "0.0.1",
-  "publisher": "local",
+  "publisher": "jikang-jeong",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jikang-jeong/aidlc-viewer-extension.git"
+  },
+  "homepage": "https://github.com/jikang-jeong/aidlc-viewer-extension",
+  "bugs": {
+    "url": "https://github.com/jikang-jeong/aidlc-viewer-extension/issues"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "aidlc",
+    "ai-dlc",
+    "workflow",
+    "markdown",
+    "viewer",
+    "sdlc"
   ],
   "activationEvents": [
     "onStartupFinished",
