@@ -2,6 +2,20 @@
 
 ![AIDLC-VIEWER demo](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/merged.gif)
 
+## Key Features
+
+AI-DLC generates folders and Markdown artifacts across three lifecycle stages (Inception → Construction → Operations). This extension is purpose-built to track and consume those artifacts:
+
+- **Stage-aware artifact tracking** — only detects folders and `.md` files produced by the AI-DLC workflow (`inception/`, `construction/`, `operations/`), ignoring unrelated files and directories.
+- **Current stage indicator** — shows at a glance which AI-DLC stage the project is currently in, based on the most recently updated artifact.
+- **Overall progress bar** — visual progress bar summarizing how far the project has advanced across all three stages.
+- **Readable Markdown viewer** — opens each `.md` artifact in a split editor with a syntax-colored, prettier-styled preview (color-coded headings, tables, task lists, code blocks) for high readability.
+- **In-place editing** — edit and save changes back to the original `.md` file directly from the viewer, with a resizable splitter and zoom controls.
+- **Live change detection** — automatically picks up new files and folders created by Claude CLI (or any external process) via file watchers and focus-based refresh.
+- **Built-in AI-DLC guide** — a help panel explaining AI-DLC phases, rules, and generated artifacts, accessible from the view toolbar.
+
+## How it works
+
 Minimal VS Code extension prototype for AI-DLC workflow folders:
 
 1. Select a folder to watch.
