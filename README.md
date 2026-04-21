@@ -1,5 +1,7 @@
 # AIDLC-VIEWER
 
+![AIDLC-VIEWER demo](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/merged.gif)
+
 Minimal VS Code extension prototype for AI-DLC workflow folders:
 
 1. Select a folder to watch.
@@ -58,59 +60,4 @@ Directories such as `common`, `inception`, `construction`, `operations`, and `ex
 6. Open that new file and confirm `NEW` changes to `READ`.
 7. Edit `operations/review-checklist.md`, save it, and confirm the stage row moves to `Operations`.
 8. Edit `construction/functional-design.md`, save it, and confirm the stage row moves back to `Construction`.
-
-## Packaging and install
-
-To package the extension for distribution:
-
-1. Install VS Code packaging tooling: `npm install -g @vscode/vsce`
-2. From this folder, run: `vsce package`
-3. This produces a `.vsix` file in the project root.
-4. In VS Code, install it with `Extensions: Install from VSIX...`
-
-For customer distribution:
-
-- Send the `.vsix` file directly, or
-- Publish to the Visual Studio Marketplace if you want in-editor discovery and updates
-
-## Marketplace publish
-
-Before publishing, update the extension metadata in [package.json](/Users/jikjeong/Documents/Codex/2026-04-18-youtube-mp3/package.json):
-
-- Set a real `publisher`
-- Add `repository`
-- Add `homepage`
-- Add `bugs`
-- Add a square extension `icon`
-- Review `description`, `displayName`, `version`, and keywords
-
-Recommended publish flow:
-
-1. Create a publisher in the Visual Studio Marketplace publisher portal
-2. Create a Personal Access Token with Marketplace publish rights
-3. Log in once from your machine: `vsce login <publisher-name>`
-4. Package locally to verify: `vsce package`
-5. Publish the first release: `vsce publish`
-6. Publish later updates with semver bumps such as `vsce publish patch`
-
-Practical notes:
-
-- The `publisher` field in `package.json` must exactly match your Marketplace publisher name
-- The extension name becomes the Marketplace identifier, so `aidlc-viewer` is what users will install
-- A good README and icon matter because they are shown directly in the Marketplace listing
-- If you want private/internal distribution only, `.vsix` delivery is usually simpler than Marketplace publishing
-
-## Release checklist
-
-- Confirm the Marketplace publisher really is `jikjeong`
-- Verify the listing icon in [media/marketplace-icon.png](/Users/jikjeong/Documents/Codex/2026-04-18-youtube-mp3/media/marketplace-icon.png)
-- Run `vsce package` and confirm there are no packaging warnings
-- Install the generated `.vsix` locally once before publishing
-- Publish with `vsce publish` when the package looks correct
-
-## Next useful additions
-
-- Auto-run a follow-up Claude CLI command after save.
-- Show status badges for `waiting`, `editing`, `ready`, `done`.
-- Filter tree to Markdown-only mode.
-- Prompt before overwriting externally changed content.
+ 
