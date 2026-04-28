@@ -1,6 +1,8 @@
 .git/**
 .github/**
 .vscode/**
+.claude/**
+.gitignore
 media/marketplace-icon.svg
 *.log
 *.vsix

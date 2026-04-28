@@ -1,8 +1,8 @@
 {
   "name": "aidlc-viewer",
   "displayName": "AIDLC-VIEWER",
-  "description": "Watch AIDLC workflow folders, track stage files, and edit Markdown in a custom viewer.",
-  "version": "0.0.1",
+  "description": "Watch AIDLC workflow folders, visualize AI-DLC progress, and edit Markdown artifacts in a split editor/preview viewer with zoom.",
+  "version": "0.0.8",
   "publisher": "jikjeong",
   "license": "MIT",
   "repository": {
@@ -31,6 +31,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onCommand:markdownWatchViewer.selectFolder",
+    "onCommand:markdownWatchViewer.showHelp",
     "onView:markdownWatchViewer.tree"
   ],
   "main": "./src/extension.js",
@@ -38,13 +39,21 @@
     "commands": [
       {
         "command": "markdownWatchViewer.selectFolder",
-        "title": "AIDLC-VIEWER: Select Folder",
-        "shortTitle": "Open"
+        "title": "AIDLC-VIEWER: Open Workspace",
+        "shortTitle": "Workspace",
+        "icon": "$(folder-opened)"
       },
       {
         "command": "markdownWatchViewer.refresh",
         "title": "AIDLC-VIEWER: Refresh",
-        "shortTitle": "Refresh"
+        "shortTitle": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "markdownWatchViewer.showHelp",
+        "title": "AIDLC-VIEWER: Help / Guide",
+        "shortTitle": "Help",
+        "icon": "$(question)"
       },
       {
         "command": "markdownWatchViewer.openFile",
@@ -68,6 +77,19 @@
         }
       ]
     },
+    "configurationDefaults": {
+      "[markdownWatchViewer.tree]": {
+        "workbench.tree.indent": 20
+      },
+      "workbench.tree.indent": 20,
+      "workbench.tree.renderIndentGuides": "always"
+    },
+    "viewsWelcome": [
+      {
+        "view": "markdownWatchViewer.tree",
+        "contents": "No AI-DLC folder is being watched yet.\n\n[Select AI-DLC Folder](command:markdownWatchViewer.selectFolder)\n\nAI-DLC generates artifacts under `inception/`, `construction/`, and `operations/`. Pick the root folder where these are (or will be) created.\n\n[Open AI-DLC Guide](command:markdownWatchViewer.showHelp)"
+      }
+    ],
     "menus": {
       "view/title": [
         {
@@ -79,6 +101,11 @@
           "command": "markdownWatchViewer.refresh",
           "when": "view == markdownWatchViewer.tree",
           "group": "navigation@2"
+        },
+        {
+          "command": "markdownWatchViewer.showHelp",
+          "when": "view == markdownWatchViewer.tree",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
