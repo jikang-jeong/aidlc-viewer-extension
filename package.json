@@ -2,7 +2,7 @@
   "name": "aidlc-viewer",
   "displayName": "AIDLC-VIEWER",
   "description": "Watch AIDLC workflow folders, visualize AI-DLC progress, and edit Markdown artifacts in a split editor/preview viewer with zoom.",
-  "version": "0.0.8",
+  "version": "0.0.18",
   "publisher": "jikjeong",
   "license": "MIT",
   "repository": {
@@ -32,6 +32,7 @@
     "onStartupFinished",
     "onCommand:markdownWatchViewer.selectFolder",
     "onCommand:markdownWatchViewer.showHelp",
+    "onCommand:markdownWatchViewer.setupRules",
     "onView:markdownWatchViewer.tree"
   ],
   "main": "./src/extension.js",
@@ -56,15 +57,26 @@
         "icon": "$(question)"
       },
       {
+        "command": "markdownWatchViewer.setupRules",
+        "title": "AIDLC-VIEWER: Set up AI-DLC Rules",
+        "shortTitle": "Setup Rules",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "markdownWatchViewer.openFile",
         "title": "AIDLC-VIEWER: Open File"
+      },
+      {
+        "command": "markdownWatchViewer.openInTextEditor",
+        "title": "Open in Text Editor",
+        "icon": "$(go-to-file)"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "markdownWatchViewer",
-          "title": "AIDLC",
+          "title": "AI-DLC Viewer",
           "icon": "media/activity-icon.svg"
         }
       ]
@@ -87,7 +99,7 @@
     "viewsWelcome": [
       {
         "view": "markdownWatchViewer.tree",
-        "contents": "No AI-DLC folder is being watched yet.\n\n[Select AI-DLC Folder](command:markdownWatchViewer.selectFolder)\n\nAI-DLC generates artifacts under `inception/`, `construction/`, and `operations/`. Pick the root folder where these are (or will be) created.\n\n[Open AI-DLC Guide](command:markdownWatchViewer.showHelp)"
+        "contents": "No AI-DLC folder is being watched yet.\n\n[Select AI-DLC Folder](command:markdownWatchViewer.selectFolder)\n\nAI-DLC generates artifacts under `inception/`, `construction/`, and `operations/`. Pick the root folder where these are (or will be) created.\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)"
       }
     ],
     "menus": {
@@ -103,9 +115,14 @@
           "group": "navigation@2"
         },
         {
-          "command": "markdownWatchViewer.showHelp",
+          "command": "markdownWatchViewer.setupRules",
           "when": "view == markdownWatchViewer.tree",
           "group": "navigation@3"
+        },
+        {
+          "command": "markdownWatchViewer.showHelp",
+          "when": "view == markdownWatchViewer.tree",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -113,6 +130,11 @@
           "command": "markdownWatchViewer.openFile",
           "when": "view == markdownWatchViewer.tree && viewItem == markdownFile",
           "group": "inline"
+        },
+        {
+          "command": "markdownWatchViewer.openInTextEditor",
+          "when": "view == markdownWatchViewer.tree && viewItem == markdownFile",
+          "group": "navigation"
         }
       ]
     }

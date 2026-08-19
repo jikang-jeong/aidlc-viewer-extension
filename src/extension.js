@@ -5,19 +5,43 @@ const STATE_KEY = 'markdownWatchViewer.watchedFolder';
 const OPENED_KEY = 'markdownWatchViewer.openedFiles';
 const KNOWN_KEY = 'markdownWatchViewer.knownFiles';
 const NEW_KEY = 'markdownWatchViewer.newFiles';
+// Tracks the last extension version we showed the "what's new" notice for.
+const SETUP_NOTICE_KEY = 'markdownWatchViewer.aidlcSetupNoticeVersion';
+// Set once we've offered to auto-watch a workspace containing aidlc-docs.
+const AUTODETECT_ASKED_KEY = 'markdownWatchViewer.autoDetectAsked';
 
 function activate(context) {
   const controller = new WatchController(context);
 
   const stageDecorationProvider = new StageDecorationProvider();
 
+  const treeView = vscode.window.createTreeView('markdownWatchViewer.tree', {
+    treeDataProvider: controller.treeDataProvider,
+    showCollapseAll: true
+  });
+  controller.treeView = treeView;
+  controller.updateBadge();
+
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('markdownWatchViewer.tree', controller.treeDataProvider),
+    // Ensure watchers/timers are cleaned up when the extension is deactivated
+    // (disposeWatcher was previously only called on folder re-selection).
+    controller,
+    treeView,
+    // Show the one-time "new setup feature" notice only when the user actually
+    // opens the AI-DLC view, not on editor startup.
+    treeView.onDidChangeVisibility((e) => {
+      if (e.visible) {
+        controller.maybeShowWelcomeGuide();
+        controller.maybeShowSetupNotice();
+      }
+    }),
     vscode.window.registerFileDecorationProvider(stageDecorationProvider),
     vscode.commands.registerCommand('markdownWatchViewer.selectFolder', () => controller.selectFolder()),
     vscode.commands.registerCommand('markdownWatchViewer.refresh', () => controller.refresh()),
     vscode.commands.registerCommand('markdownWatchViewer.openFile', (item) => controller.openFile(item)),
+    vscode.commands.registerCommand('markdownWatchViewer.openInTextEditor', (item) => controller.openInTextEditor(item)),
     vscode.commands.registerCommand('markdownWatchViewer.showHelp', () => controller.showHelp()),
+    vscode.commands.registerCommand('markdownWatchViewer.setupRules', () => controller.setupRules()),
     // Auto-refresh when the editor window regains focus (catches external changes from Finder)
     vscode.window.onDidChangeWindowState((state) => {
       if (state.focused) {
@@ -36,7 +60,7 @@ function deactivate() {
 class WatchController {
   constructor(context) {
     this.context = context;
-    this.treeDataProvider = new MarkdownTreeDataProvider();
+    this.treeDataProvider = new MarkdownTreeDataProvider(context.extensionUri);
     this.fileWatcher = undefined;
     this.previewPanels = new Map();
     this.suppressWatchOnce = new Set();
@@ -44,7 +68,19 @@ class WatchController {
     this.knownFiles = new Set(context.workspaceState.get(KNOWN_KEY, []));
     this.newFiles = new Set(context.workspaceState.get(NEW_KEY, []));
     this.treeDataProvider.setFileState(this.openedFiles, this.knownFiles, this.newFiles);
+    this.updateBadge();
     this.refreshTimer = undefined;
+  }
+
+  // Activity-bar badge showing how many unread NEW artifacts are waiting.
+  updateBadge() {
+    if (!this.treeView) {
+      return;
+    }
+    const count = this.newFiles.size;
+    this.treeView.badge = count > 0
+      ? { value: count, tooltip: `${count} new AI-DLC artifact${count === 1 ? '' : 's'}` }
+      : undefined;
   }
 
   scheduleRefresh() {
@@ -60,8 +96,12 @@ class WatchController {
   async restoreWatcher() {
     const storedFolder = this.context.workspaceState.get(STATE_KEY);
     if (!storedFolder) {
+      // No popup on startup — the tree's viewsWelcome shows the "Select AI-DLC
+      // Folder" call to action only when the user actually opens the view.
       this.treeDataProvider.setRootUri(undefined);
-      this.promptForFolder('Welcome to AIDLC-VIEWER. Select the root folder of your AI-DLC project to start watching.');
+      // Except: if the open workspace already contains AI-DLC artifacts
+      // (an aidlc-docs folder), offer to watch it — one prompt, once.
+      await this.offerWorkspaceAutoDetect();
       return;
     }
 
@@ -70,9 +110,9 @@ class WatchController {
       await vscode.workspace.fs.stat(uri);
       await this.setWatchedFolder(uri, { showMessage: false });
     } catch {
+      // Stored folder is gone — reset to the welcome view without a popup.
       this.context.workspaceState.update(STATE_KEY, undefined);
       this.treeDataProvider.setRootUri(undefined);
-      this.promptForFolder('Previously watched folder was not found. Please select a new AI-DLC root folder.');
     }
   }
 
@@ -99,7 +139,33 @@ class WatchController {
       return;
     }
 
-    await this.setWatchedFolder(selection[0], { showMessage: true });
+    const folderUri = selection[0];
+    await this.setWatchedFolder(folderUri, { showMessage: true });
+
+    // Offer to set up AI-DLC rules right after the user explicitly picks a
+    // folder via "Watch this folder". This runs only on an explicit pick,
+    // never on watcher restore (F5 / window reload).
+    await this.offerAidlcSetup(folderUri);
+  }
+
+  async offerAidlcSetup(folderUri) {
+    try {
+      if (!(await aidlcSetupNeeded(folderUri, this.context.extensionUri))) {
+        return; // already set up, or bundle missing — stay quiet here
+      }
+      const yes = 'Set up AI-DLC';
+      const choice = await vscode.window.showInformationMessage(
+        'Set up the AI-DLC workflow for this folder?',
+        yes,
+        'Not now'
+      );
+      if (choice === yes) {
+        // Consent already given by the prompt above — don't ask again.
+        await ensureAidlcRules(folderUri, this.context.extensionUri, { confirm: false });
+      }
+    } catch (err) {
+      vscode.window.showErrorMessage(`AI-DLC setup failed: ${err && err.message ? err.message : err}`);
+    }
   }
 
   async setWatchedFolder(folderUri, options = { showMessage: true }) {
@@ -112,11 +178,16 @@ class WatchController {
     const mdPattern = new vscode.RelativePattern(folderUri, '**/*.md');
     this.fileWatcher = vscode.workspace.createFileSystemWatcher(mdPattern);
     this.fileWatcher.onDidCreate((uri) => {
+      if (isIgnoredEventPath(folderUri, uri)) return;
       this.handleCreate(uri);
       this.scheduleRefresh();
     });
-    this.fileWatcher.onDidDelete(() => this.scheduleRefresh());
+    this.fileWatcher.onDidDelete((uri) => {
+      if (isIgnoredEventPath(folderUri, uri)) return;
+      this.scheduleRefresh();
+    });
     this.fileWatcher.onDidChange((uri) => {
+      if (isIgnoredEventPath(folderUri, uri)) return;
       this.scheduleRefresh();
       this.notifyOpenPreview(uri);
     });
@@ -124,8 +195,14 @@ class WatchController {
     // Watch all paths (create/delete only) to catch new directories like operations/
     const dirPattern = new vscode.RelativePattern(folderUri, '**');
     this.dirWatcher = vscode.workspace.createFileSystemWatcher(dirPattern, false, true, false);
-    this.dirWatcher.onDidCreate(() => this.scheduleRefresh());
-    this.dirWatcher.onDidDelete(() => this.scheduleRefresh());
+    this.dirWatcher.onDidCreate((uri) => {
+      if (isIgnoredEventPath(folderUri, uri)) return;
+      this.scheduleRefresh();
+    });
+    this.dirWatcher.onDidDelete((uri) => {
+      if (isIgnoredEventPath(folderUri, uri)) return;
+      this.scheduleRefresh();
+    });
 
     // Polling fallback: catches external changes (Finder, git, CLI scripts) even if native watchers miss events
     if (this.pollTimer) clearInterval(this.pollTimer);
@@ -136,6 +213,104 @@ class WatchController {
     }
 
     this.refresh();
+  }
+
+  // AI-DLC rule setup is intentionally manual: triggered only from the
+  // "Set up AI-DLC Rules" toolbar button, never automatically on folder
+  // selection or watcher restore.
+  async setupRules() {
+    const folder = this.context.workspaceState.get(STATE_KEY);
+    if (!folder) {
+      await this.promptForFolder('Select an AI-DLC project folder first, then set up the rules.');
+      return;
+    }
+    try {
+      await ensureAidlcRules(vscode.Uri.file(folder), this.context.extensionUri);
+    } catch (err) {
+      vscode.window.showErrorMessage(`AI-DLC setup failed: ${err && err.message ? err.message : err}`);
+    }
+  }
+
+  // When no folder is watched but the open workspace already contains an
+  // aidlc-docs folder, offer to start watching that workspace folder.
+  // Asked at most once per workspace (declining is remembered).
+  async offerWorkspaceAutoDetect() {
+    try {
+      if (this.context.workspaceState.get(AUTODETECT_ASKED_KEY)) {
+        return;
+      }
+      const wsFolders = vscode.workspace.workspaceFolders || [];
+      let detected;
+      for (const ws of wsFolders) {
+        const docsUri = vscode.Uri.joinPath(ws.uri, 'aidlc-docs');
+        try {
+          const stat = await vscode.workspace.fs.stat(docsUri);
+          if (stat.type === vscode.FileType.Directory) {
+            detected = ws.uri;
+            break;
+          }
+        } catch {
+          // no aidlc-docs here
+        }
+      }
+      if (!detected) {
+        return; // nothing found — stay quiet, don't mark as asked
+      }
+      await this.context.workspaceState.update(AUTODETECT_ASKED_KEY, true);
+      const watchLabel = 'Watch this workspace';
+      const choice = await vscode.window.showInformationMessage(
+        `AI-DLC artifacts detected (aidlc-docs) in ${path.basename(detected.fsPath)}. Watch this folder?`,
+        watchLabel,
+        'Not now'
+      );
+      if (choice === watchLabel) {
+        await this.setWatchedFolder(detected, { showMessage: true });
+      }
+    } catch {
+      // Non-critical convenience; never surface as an error.
+    }
+  }
+
+  // First entry into the viewer with nothing being watched yet: open the
+  // Viewer Guide so new users see what the extension does and how to start.
+  // At most once per session; never again once a folder is being watched.
+  maybeShowWelcomeGuide() {
+    if (this.welcomeGuideShown) {
+      return;
+    }
+    this.welcomeGuideShown = true;
+    if (!this.context.workspaceState.get(STATE_KEY)) {
+      this.showHelp();
+    }
+  }
+
+  // Shows the "new setup feature" notice once per extension version, the first
+  // time the user opens the AI-DLC view after updating.
+  async maybeShowSetupNotice() {
+    try {
+      const version = (this.context.extension && this.context.extension.packageJSON && this.context.extension.packageJSON.version) || '';
+      const shownFor = this.context.globalState.get(SETUP_NOTICE_KEY);
+      if (!version || shownFor === version) {
+        return;
+      }
+      // Record first so we never nag more than once per version, even if dismissed.
+      await this.context.globalState.update(SETUP_NOTICE_KEY, version);
+
+      const setupLabel = 'Set up AI-DLC';
+      const guideLabel = 'Open Guide';
+      const choice = await vscode.window.showInformationMessage(
+        'AI-DLC Viewer: the new "Set up AI-DLC Rules" toolbar button installs the AI-DLC workflow (Kiro, Claude Code, and more) for your project in one click.',
+        setupLabel,
+        guideLabel
+      );
+      if (choice === setupLabel) {
+        await this.setupRules();
+      } else if (choice === guideLabel) {
+        this.showHelp();
+      }
+    } catch {
+      // Non-critical UI nicety; never let it surface as an error.
+    }
   }
 
   refresh() {
@@ -149,22 +324,28 @@ class WatchController {
 
     await this.markFileOpened(item.resourceUri);
 
+    // Highlight active file in the tree
+    if (this.treeView) {
+      try { this.treeView.reveal(item, { select: true, focus: false }); } catch {}
+    }
+
     const key = item.resourceUri.toString();
     let panel = this.previewPanels.get(key);
 
     if (panel) {
       panel.reveal(vscode.ViewColumn.One);
-      await this.updatePreview(panel, item.resourceUri);
       return;
     }
 
+    const extensionUri = this.context.extensionUri;
     panel = vscode.window.createWebviewPanel(
       'markdownWatchViewer.editor',
       path.basename(item.resourceUri.fsPath),
       vscode.ViewColumn.One,
       {
         enableScripts: true,
-        retainContextWhenHidden: true
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
       }
     );
 
@@ -187,6 +368,16 @@ class WatchController {
     await this.updatePreview(panel, item.resourceUri);
   }
 
+  // Context-menu alternative to the custom split viewer: open the file in a
+  // regular VS Code text editor. Counts as "read" the same way openFile does.
+  async openInTextEditor(item) {
+    if (!item || item.type !== 'file') {
+      return;
+    }
+    await this.markFileOpened(item.resourceUri);
+    await vscode.window.showTextDocument(item.resourceUri, { viewColumn: vscode.ViewColumn.One });
+  }
+
   showHelp() {
     if (this.helpPanel) {
       this.helpPanel.reveal(vscode.ViewColumn.One);
@@ -194,7 +385,7 @@ class WatchController {
     }
     this.helpPanel = vscode.window.createWebviewPanel(
       'markdownWatchViewer.help',
-      'AI-DLC Guide',
+      'AI-DLC Viewer Guide',
       vscode.ViewColumn.One,
       { enableScripts: false, retainContextWhenHidden: true }
     );
@@ -209,7 +400,7 @@ class WatchController {
     const content = Buffer.from(bytes).toString('utf8');
     panel.title = path.basename(fileUri.fsPath);
     if (!panel.webview.html) {
-      panel.webview.html = getWebviewHtml(panel.webview, fileUri, content);
+      panel.webview.html = getWebviewHtml(panel.webview, fileUri, content, this.context.extensionUri);
     } else {
       panel.webview.postMessage({ type: 'setContent', content, path: fileUri.fsPath });
     }
@@ -235,6 +426,20 @@ class WatchController {
     await this.updatePreview(panel, uri);
   }
 
+  // Called by VS Code via context.subscriptions on deactivation. Not invoked
+  // during normal operation, so runtime behavior is unchanged.
+  dispose() {
+    this.disposeWatcher();
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+    if (this.revealTimer) {
+      clearTimeout(this.revealTimer);
+      this.revealTimer = undefined;
+    }
+  }
+
   disposeWatcher() {
     if (this.fileWatcher) {
       this.fileWatcher.dispose();
@@ -250,6 +455,32 @@ class WatchController {
     }
   }
 
+  // Best-effort: reveal a newly created file so its ancestor folders expand
+  // even when VS Code remembers them as collapsed. Debounced past the tree
+  // refresh (200ms); only acts while the view is visible, never steals focus.
+  scheduleReveal(uri) {
+    this.pendingRevealUri = uri;
+    if (this.revealTimer) {
+      return;
+    }
+    this.revealTimer = setTimeout(async () => {
+      this.revealTimer = undefined;
+      const target = this.pendingRevealUri;
+      this.pendingRevealUri = undefined;
+      if (!target || !this.treeView || !this.treeView.visible) {
+        return;
+      }
+      try {
+        const item = await this.treeDataProvider.findItemByUri(target);
+        if (item) {
+          await this.treeView.reveal(item, { select: false, focus: false, expand: true });
+        }
+      } catch {
+        // reveal is a convenience — never surface errors
+      }
+    }, 400);
+  }
+
   async handleCreate(uri) {
     try {
       const stat = await vscode.workspace.fs.stat(uri);
@@ -257,8 +488,10 @@ class WatchController {
         this.knownFiles.add(uri.toString());
         this.newFiles.add(uri.toString());
         this.treeDataProvider.setFileState(this.openedFiles, this.knownFiles, this.newFiles);
+        this.updateBadge();
         await this.context.workspaceState.update(KNOWN_KEY, [...this.knownFiles]);
         await this.context.workspaceState.update(NEW_KEY, [...this.newFiles]);
+        this.scheduleReveal(uri);
         return;
       }
 
@@ -275,6 +508,7 @@ class WatchController {
         }
         if (changed) {
           this.treeDataProvider.setFileState(this.openedFiles, this.knownFiles, this.newFiles);
+          this.updateBadge();
           await this.context.workspaceState.update(KNOWN_KEY, [...this.knownFiles]);
           await this.context.workspaceState.update(NEW_KEY, [...this.newFiles]);
         }
@@ -300,6 +534,7 @@ class WatchController {
     }
 
     this.treeDataProvider.setFileState(this.openedFiles, this.knownFiles, this.newFiles);
+    this.updateBadge();
     await this.context.workspaceState.update(OPENED_KEY, [...this.openedFiles]);
     await this.context.workspaceState.update(NEW_KEY, [...this.newFiles]);
   }
@@ -313,6 +548,7 @@ class WatchController {
     this.newFiles = new Set([...this.newFiles].filter((key) => existingSet.has(key) && !this.openedFiles.has(key)));
 
     this.treeDataProvider.setFileState(this.openedFiles, this.knownFiles, this.newFiles);
+    this.updateBadge();
     await this.context.workspaceState.update(OPENED_KEY, [...this.openedFiles]);
     await this.context.workspaceState.update(KNOWN_KEY, [...this.knownFiles]);
     await this.context.workspaceState.update(NEW_KEY, [...this.newFiles]);
@@ -320,7 +556,8 @@ class WatchController {
 }
 
 class MarkdownTreeDataProvider {
-  constructor() {
+  constructor(extensionUri) {
+    this.extensionUri = extensionUri;
     this.rootUri = undefined;
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -355,6 +592,10 @@ class MarkdownTreeDataProvider {
     return element;
   }
 
+  getParent(element) {
+    return element.parent || null;
+  }
+
   async getChildren(element) {
     if (!this.rootUri) {
       // Returning an empty array lets VS Code show the viewsWelcome panel
@@ -363,7 +604,7 @@ class MarkdownTreeDataProvider {
 
     if (!element) {
       const stageSummary = await this.getStageSummary(this.rootUri);
-      const entries = await this.getDirectoryEntries(this.rootUri);
+      const entries = await this.getDirectoryEntries(this.rootUri, null);
       return [
         new StageItem(stageSummary),
         new ProgressItem(stageSummary),
@@ -371,10 +612,50 @@ class MarkdownTreeDataProvider {
       ];
     }
 
-    return this.getDirectoryEntries(element.resourceUri);
+    if (element.contextValue === 'progress') {
+      const progress = element.summary.progress;
+      return ['inception', 'construction', 'operations'].map(
+        (stage) => new StageProgressChild(stage, progress.stages[stage])
+      );
+    }
+
+    return this.getDirectoryEntries(element.resourceUri, element);
   }
 
-  async getDirectoryEntries(targetUri) {
+  // Walks from the root to the given file URI through getChildren(), so the
+  // returned item carries the parent chain treeView.reveal() needs. Returns
+  // undefined when the URI is not under the root or not visible in the tree.
+  async findItemByUri(targetUri) {
+    if (!this.rootUri) {
+      return undefined;
+    }
+    const rel = path.relative(this.rootUri.fsPath, targetUri.fsPath);
+    if (!rel || rel.startsWith('..')) {
+      return undefined;
+    }
+
+    const targetKey = targetUri.toString();
+    let element = undefined; // undefined = root level
+    while (true) {
+      const children = await this.getChildren(element);
+      const next = children.find((item) => {
+        if (!item.resourceUri) {
+          return false;
+        }
+        const key = item.resourceUri.toString();
+        return key === targetKey || targetKey.startsWith(ensureTrailingSlash(key));
+      });
+      if (!next) {
+        return undefined;
+      }
+      if (next.resourceUri.toString() === targetKey) {
+        return next;
+      }
+      element = next;
+    }
+  }
+
+  async getDirectoryEntries(targetUri, parentItem) {
     const entries = await vscode.workspace.fs.readDirectory(targetUri);
 
     const rawItems = await Promise.all(
@@ -394,19 +675,23 @@ class MarkdownTreeDataProvider {
               return undefined;
             }
 
-            return new DirectoryItem(
+            const dirItem = new DirectoryItem(
               childUri,
               stats,
               getDirectoryVisualState(childUri, this.openedFiles, this.knownFiles, this.newFiles)
             );
+            dirItem.parent = parentItem;
+            return dirItem;
           }
 
-          return createFileItem(
+          const fileItem = createFileItem(
             childUri,
             fileType,
             await this.getMarkdownMetadata(childUri),
             getFileVisualState(childUri, this.openedFiles, this.knownFiles, this.newFiles)
           );
+          if (fileItem) fileItem.parent = parentItem;
+          return fileItem;
         })
     );
 
@@ -421,7 +706,12 @@ class MarkdownTreeDataProvider {
       return this.stageSummaryCache.get(cacheKey);
     }
 
-    const markdownFiles = await collectMarkdownFiles(rootUri);
+    // Progress counts only artifacts under <stageRoot>/<stage>/, where
+    // stageRoot is the aidlc-docs folder inside the watched root (or the
+    // root itself when it has no aidlc-docs — e.g. aidlc-docs was selected
+    // directly). Stray files whose path merely contains a stage word no
+    // longer inflate the percentages.
+    const stageRoot = await resolveStageRoot(rootUri);
     const counts = {
       inception: 0,
       construction: 0,
@@ -429,35 +719,51 @@ class MarkdownTreeDataProvider {
     };
     let latest = undefined;
 
-    for (const fileUri of markdownFiles) {
-      const stage = detectStageFromPath(fileUri.fsPath);
-      if (!stage) {
-        continue;
+    for (const stage of ['inception', 'construction', 'operations']) {
+      const stageDir = vscode.Uri.joinPath(stageRoot, stage);
+      let files;
+      try {
+        files = await collectMarkdownFiles(stageDir);
+      } catch {
+        continue; // stage folder doesn't exist yet
       }
 
-      counts[stage] += 1;
+      counts[stage] = files.length;
 
-      try {
-        const stat = await vscode.workspace.fs.stat(fileUri);
-        const candidate = {
-          stage,
-          fileUri,
-          mtime: stat.mtime
-        };
-        if (!latest || candidate.mtime > latest.mtime) {
-          latest = candidate;
+      for (const fileUri of files) {
+        try {
+          const stat = await vscode.workspace.fs.stat(fileUri);
+          if (!latest || stat.mtime > latest.mtime) {
+            latest = { stage, fileUri, mtime: stat.mtime };
+          }
+        } catch {
+          continue;
         }
-      } catch {
-        continue;
       }
     }
 
-    const currentStage = latest?.stage || inferStageFromCounts(counts);
-    const progress = computeProgress(counts);
+    // Layer 1 (accurate): aidlc-state.md checklist with bundled-rule step
+    // counts as denominator. Layer 2 (estimated): artifact-count heuristic,
+    // used when no parseable state file exists.
+    const state = await readAidlcState(stageRoot);
+    let progress;
+    let inProgressLabel;
+    let currentStage;
+    if (state) {
+      const stepCounts = await getBundledStageStepCounts(this.extensionUri);
+      progress = computeProgressFromState(state, stepCounts);
+      inProgressLabel = state.inProgressStep?.name;
+      currentStage = state.inProgressStep?.stage || latest?.stage || inferStageFromCounts(counts);
+    } else {
+      progress = computeProgress(counts);
+      currentStage = latest?.stage || inferStageFromCounts(counts);
+    }
+
     const summary = {
       currentStage,
       counts,
       progress,
+      inProgressLabel,
       latestFile: latest?.fileUri,
       latestModifiedLabel: latest?.fileUri ? path.basename(latest.fileUri.fsPath) : undefined,
       latestMtime: latest?.mtime
@@ -582,21 +888,32 @@ class InfoItem extends vscode.TreeItem {
 class ProgressItem extends vscode.TreeItem {
   constructor(summary) {
     const progress = summary.progress;
-    const bar = renderProgressBar(progress.overall, 13);
-    super(`${bar} ${progress.overall}%`, vscode.TreeItemCollapsibleState.None);
-    this.description = summary.latestModifiedLabel
-      ? `Latest: ${summary.latestModifiedLabel}`
-      : 'No artifacts yet';
+    super(`${progress.overall}%`, vscode.TreeItemCollapsibleState.Collapsed);
+    this.summary = summary;
+    this.description = summary.latestModifiedLabel || '';
     this.tooltip = buildProgressTooltip(summary);
     this.contextValue = 'progress';
     this.iconPath = new vscode.ThemeIcon('pulse', getStageColor(summary.currentStage));
   }
 }
 
+class StageProgressChild extends vscode.TreeItem {
+  constructor(stage, stageData) {
+    const icon = stage === 'inception' ? '🔵' : stage === 'construction' ? '🟣' : '🟡';
+    super(`${icon} ${capitalize(stage)}`, vscode.TreeItemCollapsibleState.None);
+    this.description = `${stageData.pct}%  (${stageData.count}/${stageData.expected})`;
+    this.contextValue = 'stageProgress';
+  }
+}
+
 class StageItem extends vscode.TreeItem {
   constructor(summary) {
     super(formatStageLabel(summary), vscode.TreeItemCollapsibleState.None);
-    this.description = formatStageDescription(summary);
+    // With a parseable aidlc-state.md, show the actual in-progress step name
+    // (the most useful fact); otherwise keep the artifact-count summary.
+    this.description = summary.inProgressLabel
+      ? `▸ ${summary.inProgressLabel}`
+      : formatStageDescription(summary);
     this.tooltip = buildStageTooltip(summary);
     this.contextValue = 'stageSummary';
     this.iconPath = new vscode.ThemeIcon(getStageIcon(summary.currentStage), getStageColor(summary.currentStage));
@@ -605,7 +922,21 @@ class StageItem extends vscode.TreeItem {
 
 class DirectoryItem extends vscode.TreeItem {
   constructor(resourceUri, stats, visualState) {
-    super(path.basename(resourceUri.fsPath), vscode.TreeItemCollapsibleState.Collapsed);
+    // Folders that contain unread NEW files below them start expanded so
+    // freshly generated AI-DLC artifacts are visible without manual digging.
+    // Once every file inside is opened (read), the folder collapses as before.
+    super(
+      path.basename(resourceUri.fsPath),
+      visualState.hasNew
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.Collapsed
+    );
+    // The id must stay stable across NEW→READ transitions — a changing id
+    // makes VS Code treat the folder as a fresh item and reset it to
+    // Collapsed, snapping the expanded chain shut when a file is opened.
+    // Expanded above covers brand-new folders (no remembered state); files
+    // added to existing folders are surfaced via treeView.reveal() instead.
+    this.id = resourceUri.toString();
     this.resourceUri = resourceUri;
     this.type = 'directory';
     this.contextValue = 'directory';
@@ -622,6 +953,7 @@ class MarkdownFileItem extends vscode.TreeItem {
   constructor(resourceUri, metadata, visualState) {
     super(path.basename(resourceUri.fsPath), vscode.TreeItemCollapsibleState.None);
     this.resourceUri = resourceUri;
+    this.id = resourceUri.toString();
     this.type = 'file';
     this.contextValue = 'markdownFile';
     this.description = formatFileDescription(metadata, visualState);
@@ -770,6 +1102,23 @@ function getDirectoryColor(resourceUri, visualState) {
   return undefined;
 }
 
+// AI-DLC generates artifacts under aidlc-docs/{inception,construction,operations}.
+// If the watched root contains an aidlc-docs folder, stages are counted there;
+// otherwise the root itself is treated as the stage root (covers users who
+// select the aidlc-docs folder directly, matching the previous behavior).
+async function resolveStageRoot(rootUri) {
+  const docsUri = vscode.Uri.joinPath(rootUri, 'aidlc-docs');
+  try {
+    const stat = await vscode.workspace.fs.stat(docsUri);
+    if (stat.type === vscode.FileType.Directory) {
+      return docsUri;
+    }
+  } catch {
+    // no aidlc-docs folder
+  }
+  return rootUri;
+}
+
 function detectStageFromPath(filePath) {
   const normalized = filePath.toLowerCase();
   if (normalized.includes(`${path.sep}operations${path.sep}`)) {
@@ -803,6 +1152,100 @@ function inferStageFromCounts(counts) {
     return 'inception';
   }
   return 'unknown';
+}
+
+// ========== Layer 1: accurate progress from aidlc-docs/aidlc-state.md ==========
+//
+// AI-DLC records its own progress as an incrementally-growing checklist:
+//   ## Stage Progress
+//   - [x] INCEPTION - Workspace Detection (COMPLETED)
+//   - [ ] INCEPTION - Requirements Analysis (IN PROGRESS)
+// Steps are appended one at a time, so the file tells us what's done and what's
+// in progress — but not the total step count. The denominator comes from the
+// bundled rule files per stage (getBundledStageStepCounts). Stage names are
+// parsed dynamically (not hardcoded) so future AI-DLC versions with new stages
+// (e.g. IDEATION in v2) still display.
+
+// v2 uses singular OPERATION; map it onto the same bucket as v1's OPERATIONS.
+function normalizeStageName(name) {
+  const s = name.toLowerCase();
+  return s === 'operation' ? 'operations' : s;
+}
+
+// Returns { steps, inProgressStep } or undefined when no parseable
+// "## Stage Progress" checklist exists (→ caller falls back to layer 2).
+function parseAidlcState(content) {
+  const lines = content.split(/\r?\n/);
+  const steps = [];
+  let inSection = false;
+  for (const line of lines) {
+    if (/^##\s+Stage Progress/i.test(line)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && /^##\s/.test(line)) {
+      break; // next section
+    }
+    if (!inSection) {
+      continue;
+    }
+    const m = line.match(/^\s*-\s*\[( |x|X)\]\s*([A-Za-z]+)\s*-\s*(.+?)\s*(?:\(([^)]*)\))?\s*$/);
+    if (!m) {
+      continue;
+    }
+    steps.push({
+      stage: normalizeStageName(m[2]),
+      name: m[3].trim(),
+      done: m[1].toLowerCase() === 'x',
+      status: (m[4] || '').toUpperCase()
+    });
+  }
+  if (steps.length === 0) {
+    return undefined;
+  }
+  const inProgressStep =
+    steps.find((s) => !s.done && s.status.includes('PROGRESS')) ||
+    steps.find((s) => !s.done);
+  return { steps, inProgressStep };
+}
+
+async function readAidlcState(stageRoot) {
+  try {
+    const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(stageRoot, 'aidlc-state.md'));
+    return parseAidlcState(Buffer.from(bytes).toString('utf8'));
+  } catch {
+    return undefined; // missing or unreadable — fall back to artifact counts
+  }
+}
+
+function computeProgressFromState(state, stepCounts) {
+  const byStage = {};
+  for (const step of state.steps) {
+    const bucket = byStage[step.stage] || (byStage[step.stage] = { done: 0, listed: 0 });
+    bucket.listed += 1;
+    if (step.done) {
+      bucket.done += 1;
+    }
+  }
+
+  const stages = {};
+  let overall = 0;
+  for (const stage of ['inception', 'construction', 'operations']) {
+    const info = byStage[stage] || { done: 0, listed: 0 };
+    // Bundle step count is the denominator; if the state file already lists
+    // more steps than the bundle has (custom workflow), trust the state file
+    // so the percentage can never exceed 100.
+    const expected = Math.max(stepCounts[stage] || 1, info.listed);
+    const pct = Math.min(100, Math.round((info.done / expected) * 100));
+    stages[stage] = { pct, count: info.done, expected };
+    overall += pct * STAGE_WEIGHTS[stage];
+  }
+
+  return {
+    overall: Math.min(100, Math.round(overall)),
+    stages,
+    source: 'state'
+  };
 }
 
 const STAGE_EXPECTED_COUNTS = {
@@ -843,21 +1286,31 @@ function renderProgressBar(pct, width) {
 
 function buildProgressTooltip(summary) {
   const progress = summary.progress;
-  const lines = ['**AI-DLC Progress**', ''];
+  const fromState = progress.source === 'state';
+  const lines = [
+    fromState
+      ? '**AI-DLC Progress** (from aidlc-state.md)'
+      : '**AI-DLC Progress** (estimated from artifact counts)',
+    ''
+  ];
 
   for (const stage of ['inception', 'construction', 'operations']) {
     const s = progress.stages[stage];
     const bar = renderProgressBar(s.pct, 12);
     const icon = stage === 'inception' ? '🔵' : stage === 'construction' ? '🟢' : '🟡';
-    lines.push(`${icon} **${capitalize(stage)}** \`${bar}\` ${s.pct}%  (${s.count}/${s.expected})`);
+    const unit = fromState ? 'steps' : 'files';
+    lines.push(`${icon} **${capitalize(stage)}** \`${bar}\` ${s.pct}%  (${s.count}/${s.expected} ${unit})`);
   }
 
   lines.push('', `**Overall**: ${progress.overall}%`);
+  if (summary.inProgressLabel) {
+    lines.push(`**In progress**: ${summary.inProgressLabel}`);
+  }
   if (summary.currentStage && summary.currentStage !== 'unknown') {
     lines.push(`**Current stage**: ${capitalize(summary.currentStage)}`);
   }
   if (summary.latestFile) {
-    lines.push(`**Latest file**: \`${summary.latestFile.fsPath}\``);
+    lines.push(`**Latest file**: \`${path.basename(summary.latestFile.fsPath)}\``);
   }
 
   const md = new vscode.MarkdownString(lines.join('\n'));
@@ -867,10 +1320,9 @@ function buildProgressTooltip(summary) {
 
 function formatStageLabel(summary) {
   if (summary.currentStage === 'unknown') {
-    return 'Current Stage: Unknown';
+    return 'Unknown';
   }
-
-  return `Current Stage: ${capitalize(summary.currentStage)}`;
+  return capitalize(summary.currentStage);
 }
 
 function formatStageDescription(summary) {
@@ -1011,6 +1463,21 @@ function shouldSkipDirectory(name) {
   return name.startsWith('.') || SKIP_DIRS.has(name);
 }
 
+// Watcher events under skipped directories (.git, node_modules, ...) would only
+// trigger refreshes for paths the tree never shows, so drop them early. Uses the
+// same shouldSkipDirectory() rules as tree rendering to stay consistent.
+function isIgnoredEventPath(rootUri, uri) {
+  const rel = path.relative(rootUri.fsPath, uri.fsPath);
+  if (!rel || rel.startsWith('..')) {
+    return false; // the watched root itself, or outside it — never ignore
+  }
+  // Only intermediate directory segments decide skipping. The last segment is
+  // the file/dir the event is about — never filtered here, so events the tree
+  // previously reacted to still trigger a refresh exactly as before.
+  const parentSegments = rel.split(path.sep).slice(0, -1);
+  return parentSegments.some((segment) => shouldSkipDirectory(segment));
+}
+
 async function collectMarkdownFiles(rootUri) {
   const results = [];
 
@@ -1035,14 +1502,26 @@ async function collectMarkdownFiles(rootUri) {
   return results;
 }
 
-function getWebviewHtml(webview, fileUri, markdown) {
+function getNonce() {
+  let text = '';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
+function getWebviewHtml(webview, fileUri, markdown, extensionUri) {
   const safeInitialValue = JSON.stringify(markdown);
   const title = escapeHtml(fileUri.fsPath);
+  const mermaidUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
+  const nonce = getNonce();
 
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${title}</title>
     <style>
@@ -1407,6 +1886,27 @@ function getWebviewHtml(webview, fileUri, markdown) {
 
       .preview img { max-width: 100%; border-radius: 6px; }
 
+      .preview pre.mermaid {
+        background: transparent;
+        border-left: none;
+        padding: 8px 0;
+        text-align: center;
+      }
+      .mermaid-rendered {
+        display: flex;
+        justify-content: center;
+        padding: 16px 0;
+        overflow-x: auto;
+      }
+      .mermaid-rendered svg {
+        max-width: 100%;
+        height: auto;
+      }
+      .mermaid-error {
+        border-left-color: #e06c75 !important;
+        color: #e06c75;
+      }
+
       /* Task list checkboxes */
       .preview input[type="checkbox"] {
         accent-color: #98c379;
@@ -1448,17 +1948,26 @@ function getWebviewHtml(webview, fileUri, markdown) {
       </section>
     </div>
 
-    <script>
+    <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
       const initialValue = ${safeInitialValue};
       const editor = document.getElementById('editor');
       const preview = document.getElementById('preview');
       const status = document.getElementById('status');
       const actions = document.querySelector('.actions');
+
+      const savedState = vscode.getState() || {};
+      const restoredText = savedState.editorText;
       let cleanValue = initialValue;
 
-      editor.value = initialValue;
-      renderMarkdown(initialValue);
+      if (restoredText !== undefined && restoredText !== initialValue) {
+        editor.value = restoredText;
+        renderMarkdown(restoredText);
+        status.textContent = 'Unsaved changes (restored)';
+      } else {
+        editor.value = initialValue;
+        renderMarkdown(initialValue);
+      }
       syncActionVisibility();
 
       let renderTimer;
@@ -1471,6 +1980,7 @@ function getWebviewHtml(webview, fileUri, markdown) {
         scheduleRender(editor.value);
         status.textContent = isDirty() ? 'Unsaved changes' : 'Ready';
         syncActionVisibility();
+        vscode.setState(Object.assign({}, vscode.getState() || {}, { editorText: editor.value }));
       });
 
       // Handle incremental content updates from extension host
@@ -1485,6 +1995,9 @@ function getWebviewHtml(webview, fileUri, markdown) {
           renderMarkdown(incoming);
           status.textContent = 'Ready';
           syncActionVisibility(false);
+          const s = vscode.getState() || {};
+          delete s.editorText;
+          vscode.setState(s);
         }
       });
 
@@ -1496,6 +2009,9 @@ function getWebviewHtml(webview, fileUri, markdown) {
         cleanValue = editor.value;
         status.textContent = 'Saved';
         syncActionVisibility(false);
+        const s = vscode.getState() || {};
+        delete s.editorText;
+        vscode.setState(s);
       }
 
       document.getElementById('save').addEventListener('click', saveNow);
@@ -1513,6 +2029,9 @@ function getWebviewHtml(webview, fileUri, markdown) {
         cleanValue = initialValue;
         status.textContent = 'Ready';
         syncActionVisibility(false);
+        const s = vscode.getState() || {};
+        delete s.editorText;
+        vscode.setState(s);
       });
 
       // Splitter: drag to resize raw/preview panes
@@ -1527,7 +2046,7 @@ function getWebviewHtml(webview, fileUri, markdown) {
         splitPct = Math.min(80, Math.max(15, pct));
         shell.style.setProperty('--split-left', splitPct + '%');
         if (typeof vscode.setState === 'function') {
-          vscode.setState(Object.assign({}, previousState, { splitPct: splitPct }));
+          vscode.setState(Object.assign({}, vscode.getState() || {}, { splitPct: splitPct }));
         }
       }
 
@@ -1732,8 +2251,8 @@ function getWebviewHtml(webview, fileUri, markdown) {
         html = html.replace(/~~([^~\\n]+)~~/g, '<del>$1</del>');
 
         // 12) Links & images  ![alt](url)  [text](url)
-        html = html.replace(/!\\[([^\\]]*)\\]\\(([^)\\s]+)\\)/g, '<img src="$2" alt="$1">');
-        html = html.replace(/\\[([^\\]]+)\\]\\(([^)\\s]+)\\)/g, '<a href="$2">$1</a>');
+        html = html.replace(/!\\[([^\\]]*)\\]\\(([^)\\s]+)\\)/g, (_, alt, url) => '<img src="' + sanitizeUrl(url) + '" alt="' + alt + '">');
+        html = html.replace(/\\[([^\\]]+)\\]\\(([^)\\s]+)\\)/g, (_, text, url) => '<a href="' + sanitizeUrl(url) + '">' + text + '</a>');
 
         // 13) Autolinks (bare URLs)
         html = html.replace(/(^|[\\s(])(https?:\\/\\/[^\\s<)]+)/g, '$1<a href="$2">$2</a>');
@@ -1747,6 +2266,9 @@ function getWebviewHtml(webview, fileUri, markdown) {
         });
         html = html.replace(/\\u0000CODEBLOCK(\\d+)\\u0000/g, (_, i) => {
           const block = codeBlocks[+i];
+          if (block.lang === 'mermaid') {
+            return '<pre class="mermaid">' + block.code.replace(/\\n$/, '') + '</pre>';
+          }
           const langClass = block.lang ? ' class="language-' + block.lang + '"' : '';
           return '<pre><code' + langClass + '>' + escapeHtml(block.code.replace(/\\n$/, '')) + '</code></pre>';
         });
@@ -1758,8 +2280,41 @@ function getWebviewHtml(webview, fileUri, markdown) {
         return value
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
       }
+
+      // Allow only safe link/image destinations; anything else (javascript:,
+      // vbscript:, data: pages, ...) renders as inert "#".
+      function sanitizeUrl(url) {
+        if (/^(https?:|mailto:|#)/i.test(url)) return url;
+        if (/^[^:]*$/.test(url)) return url; // relative path, no scheme
+        return '#';
+      }
+    </script>
+    <script nonce="${nonce}" src="${mermaidUri}"></script>
+    <script nonce="${nonce}">
+      // 'antiscript' strips script tags/event handlers but keeps HTML labels
+      // (e.g. <br/> in node text) rendering exactly as before — 'strict' would
+      // encode those tags and visibly change existing diagrams.
+      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'antiscript' });
+      function renderMermaidBlocks() {
+        document.querySelectorAll('pre.mermaid').forEach(async (el, idx) => {
+          const code = el.textContent;
+          try {
+            const { svg } = await mermaid.render('mermaid-' + Date.now() + '-' + idx, code);
+            el.outerHTML = '<div class="mermaid-rendered">' + svg + '</div>';
+          } catch (e) {
+            el.classList.add('mermaid-error');
+          }
+        });
+      }
+      const origRender = renderMarkdown;
+      renderMarkdown = function(source) {
+        origRender(source);
+        renderMermaidBlocks();
+      };
+      renderMermaidBlocks();
     </script>
   </body>
 </html>`;
@@ -1767,10 +2322,10 @@ function getWebviewHtml(webview, fileUri, markdown) {
 
 function getHelpHtml() {
   return `<!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>AI-DLC Guide</title>
+<title>AI-DLC Viewer Guide</title>
 <style>
   :root { color-scheme: light dark; }
   body {
@@ -1823,180 +2378,119 @@ function getHelpHtml() {
 </style>
 </head>
 <body>
-<h1>AI-DLC 코어 프레임워크</h1>
-<p>AI-DLC는 <strong>AI와 사람의 협업이 만드는 새로운 개발 표준</strong>입니다. AI의 속도와 인간의 판단이 균형을 이루는 체계적인 프레임워크입니다.</p>
+<h1>AI-DLC Viewer Guide</h1>
+<p>AI-DLC Viewer watches your <strong>AI-DLC workflow folder</strong>, visualizes stage progress, and lets you read and edit the generated Markdown artifacts — all inside VS Code.</p>
 
-<h2>AI와 사람의 협업 방식</h2>
-<div class="two-col">
-  <div class="role-box">
-    <h4>🤖 AI의 역할</h4>
-    <ul>
-      <li><strong>계획 수립</strong>: 요구사항 분석 및 작업 분해</li>
-      <li><strong>아키텍처 제안</strong>: 최적 설계와 기술 스택 제안</li>
-      <li><strong>개발 프로세스 조율</strong>: 단계별 실행 계획 수립</li>
-      <li><strong>코드 생성</strong>: 설계 기반 실제 코드 작성</li>
-    </ul>
-  </div>
-  <div class="role-box">
-    <h4>👤 사람의 역할</h4>
-    <ul>
-      <li><strong>검증</strong>: AI 제안 계획·설계 검토</li>
-      <li><strong>의사결정</strong>: 비즈니스 목표에 맞는 최종 결정</li>
-      <li><strong>감독</strong>: 품질·방향성 최종 책임</li>
-      <li><strong>승인</strong>: 각 단계 산출물 확인·승인</li>
-    </ul>
-  </div>
-</div>
+<h2>Getting Started</h2>
+<ol>
+  <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root — the folder that contains (or will contain) <code>aidlc-docs/</code>.</li>
+  <li>Optionally click <strong>Set up AI-DLC Rules</strong> (cloud icon) to install the AI-DLC workflow rules for your AI agent in one click.</li>
+  <li>Start your agent and say <code>"Using AI-DLC, ..."</code> — new artifacts appear in the tree automatically as they are generated.</li>
+</ol>
 
-<hr/>
+<h2>Key Features</h2>
 
-<h2>3단계 개발 라이프사이클</h2>
 <div class="stage-card inception">
-  <h3>🔵 INCEPTION: 프로젝트 정의</h3>
-  <p><strong>목표</strong>: 비즈니스 의도를 실행 가능한 개발 계획으로 변환</p>
-  <ul><li>도메인 컨텍스트 구축</li><li>사용자 스토리로 의도 구체화</li><li>작업 단위로 계획 수립</li></ul>
+  <h3>📊 Stage &amp; Progress Tracking</h3>
+  <p>The top of the tree shows the <strong>current stage</strong> and an <strong>overall progress percentage</strong>.</p>
+  <ul>
+    <li>Progress is computed from the number of <code>.md</code> artifacts inside <code>aidlc-docs/inception/</code>, <code>aidlc-docs/construction/</code>, and <code>aidlc-docs/operations/</code>.</li>
+    <li>Expand the progress row to see per-stage percentages: 🔵 Inception · 🟣 Construction · 🟡 Operations.</li>
+    <li>Stage folders and files are color-badged: <strong>I</strong> (blue), <strong>C</strong> (purple), <strong>O</strong> (green).</li>
+  </ul>
 </div>
+
 <div class="stage-card construction">
-  <h3>🟢 CONSTRUCTION: 구축</h3>
-  <p><strong>목표</strong>: 설계를 프로덕션 품질의 코드로 구현</p>
-  <ul><li>도메인 모델 (컴포넌트 모델)</li><li>아키텍처 컴포넌트 추가</li><li>코드 생성 및 테스트</li></ul>
+  <h3>🌲 Live Workflow Tree</h3>
+  <ul>
+    <li>Only Markdown artifacts are shown; build folders (<code>node_modules</code>, <code>.git</code>, …) are ignored.</li>
+    <li>Files created after you started watching are marked <strong>NEW</strong> (green dot); opened files switch to <strong>READ</strong> (check mark).</li>
+    <li>Folders containing NEW files are <strong>expanded automatically</strong>, so freshly generated artifacts are immediately visible.</li>
+    <li>The tree refreshes on file changes, on window focus, and via periodic polling — external changes from Finder, git, or CLI tools are picked up too.</li>
+  </ul>
 </div>
+
 <div class="stage-card operations">
-  <h3>🟡 OPERATIONS: 운영</h3>
-  <p><strong>목표</strong>: 안정적인 프로덕션 환경 구축</p>
-  <ul><li>배포 파이프라인 생성</li><li>IaC로 프로덕션 배포</li></ul>
+  <h3>📝 Split Editor / Preview</h3>
+  <ul>
+    <li>Click any file to open a <strong>raw Markdown editor</strong> (left) with a <strong>styled live preview</strong> (right).</li>
+    <li><strong>Save</strong> with the Save button or <code>Ctrl/Cmd + S</code>; <strong>Reload</strong> discards local edits and re-reads the file.</li>
+    <li><strong>Mermaid diagrams</strong> render inline in the preview.</li>
+    <li><strong>Zoom</strong> the preview: +/− buttons, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, mouse wheel with <code>Ctrl/Cmd</code>, or trackpad pinch.</li>
+    <li><strong>Drag the splitter</strong> to resize panes (double-click resets); editor and preview <strong>scroll in sync</strong>.</li>
+  </ul>
 </div>
 
-<hr/>
-
-<h2>AI-DLC Rules: 체계화된 프롬프트 체인</h2>
-<h3>INCEPTION 단계</h3>
+<h2>Toolbar Reference</h2>
 <table>
-  <tr><th>Rules 파일</th><th>역할</th><th>주요 산출물</th></tr>
-  <tr><td><code>requirements-analysis.md</code></td><td>시스템 요구사항 정의</td><td>requirements.md</td></tr>
-  <tr><td><code>user-stories.md</code></td><td>사용자 관점 기능 정의</td><td>personas.md, stories.md</td></tr>
-  <tr><td><code>application-design.md</code></td><td>시스템 구조 설계</td><td>components.md, services.md, component-dependency.md</td></tr>
-  <tr><td><code>units-generation.md</code></td><td>개발 단위 구성</td><td>unit-of-work.md, unit-of-work-story-map.md</td></tr>
-</table>
-<h3>CONSTRUCTION 단계</h3>
-<table>
-  <tr><th>Rules 파일</th><th>역할</th><th>주요 산출물</th></tr>
-  <tr><td><code>functional-design.md</code></td><td>비즈니스 로직 모델링</td><td>domain-entities.md, business-rules.md</td></tr>
-  <tr><td><code>nfr-requirements.md</code></td><td>비기능 요구사항</td><td>nfr-requirements.md, tech-stack-decisions.md</td></tr>
-  <tr><td><code>nfr-design.md</code></td><td>품질 속성 설계</td><td>nfr-design-patterns.md, logical-components.md</td></tr>
-  <tr><td><code>infrastructure-design.md</code></td><td>인프라 구성</td><td>infrastructure-design.md, deployment-architecture.md</td></tr>
-  <tr><td><code>code-generation.md</code></td><td>코드 생성</td><td>실제 코드, 테스트, 배포 아티팩트</td></tr>
-  <tr><td><code>build-and-test.md</code></td><td>품질 검증</td><td>build-instructions.md, *-test-instructions.md</td></tr>
-</table>
-<h3>OPERATIONS 단계</h3>
-<table>
-  <tr><th>Rules 파일</th><th>역할</th><th>주요 산출물</th></tr>
-  <tr><td><code>operations.md</code></td><td>운영 체계 수립</td><td>(추후 업데이트 예정)</td></tr>
+  <tr><th>Button</th><th>Action</th></tr>
+  <tr><td>📂 Open Workspace</td><td>Select the AI-DLC root folder to watch</td></tr>
+  <tr><td>🔄 Refresh</td><td>Re-scan the folder and rebuild the tree</td></tr>
+  <tr><td>☁️ Set up AI-DLC Rules</td><td>Install bundled AI-DLC workflow rules (Kiro, Claude Code, and your current editor's agent)</td></tr>
+  <tr><td>❓ Help / Guide</td><td>Open this guide</td></tr>
 </table>
 
-<hr/>
-
-<h2>산출물 전체 구조</h2>
-<pre>aidlc-docs/
-├── audit.md                                  # 모든 결정의 감사 추적
-├── aidlc-state.md                            # 현재 진행 상태
-│
-├── inception/                                # 🔵 INCEPTION
-│   ├── requirements/
-│   │   ├── requirement-verification-questions.md
-│   │   └── requirements.md                   ⭐ 요구사항
-│   ├── user-stories/
-│   │   ├── personas.md                       ⭐ 페르소나
-│   │   └── stories.md                        ⭐ 스토리
-│   ├── application-design/
-│   │   ├── components.md                     ⭐ 컴포넌트
-│   │   ├── component-methods.md              ⭐ 메서드 시그니처
-│   │   ├── services.md                       ⭐ 서비스 레이어
-│   │   └── component-dependency.md           ⭐ 의존성 매트릭스
-│   └── plans/
-│       ├── story-generation-plan.md
-│       └── application-design-plan.md
-│
-└── construction/                             # 🟢 CONSTRUCTION
-    └── {unit-name}/
-        └── functional-design/
-            ├── domain-entities.md            ⭐ 도메인 엔티티 (DDD)
-            ├── business-rules.md             ⭐ 비즈니스 규칙
-            └── business-logic-model.md       ⭐ 비즈니스 로직
-</pre>
-
-<hr/>
-
-<h2>1단계: 프로젝트 정의 (Inception)</h2>
-<p>비즈니스 목적을 실행 가능한 개발 유닛으로 변환. <strong>몹 엘라보레이션(Mob Elaboration)</strong> 방식으로 제품 책임자·개발자·AI가 협업합니다.</p>
-<table>
-  <tr><th>스테이지</th><th>실행 조건</th><th>주요 산출물</th></tr>
-  <tr><td>Workspace Detection</td><td>항상</td><td>aidlc-state.md</td></tr>
-  <tr><td>Requirements Analysis</td><td>항상</td><td>requirements.md</td></tr>
-  <tr><td>Workflow Planning</td><td>항상</td><td>execution-plan.md</td></tr>
-  <tr><td>Reverse Engineering</td><td>기존 프로젝트만</td><td>architecture.md</td></tr>
-  <tr><td>User Stories</td><td>사용자 영향 기능</td><td>personas.md, stories.md</td></tr>
-  <tr><td>Application Design</td><td>새 컴포넌트 필요시</td><td>components.md, services.md</td></tr>
-  <tr><td>Units Generation</td><td>복잡한 프로젝트</td><td>unit-of-work.md</td></tr>
-</table>
 <div class="callout">
-  <strong>핵심 원칙</strong>: AI는 <code>requirement-verification-questions.md</code>를 만들고, 여러분은 <code>[Answer]:</code> 태그를 채웁니다. 채팅이 아닌 <strong>문서 기반 협업</strong>.
+  <strong>Tip</strong>: AI-DLC artifacts live under <code>aidlc-docs/</code> — <code>inception/</code> for requirements, stories and design; <code>construction/</code> for functional design and code docs; <code>operations/</code> for deployment and ops. The viewer detects these folders and tracks progress per stage.
 </div>
-<h3>User Stories - INVEST</h3>
-<ul>
-  <li><strong>I</strong>ndependent · <strong>N</strong>egotiable · <strong>V</strong>aluable · <strong>E</strong>stimable · <strong>S</strong>mall · <strong>T</strong>estable</li>
-</ul>
 
 <hr/>
 
-<h2>2단계: 구축 (Construction)</h2>
+<h1>AI-DLC 뷰어 가이드 (한국어)</h1>
+<p>AI-DLC Viewer는 <strong>AI-DLC 워크플로우 폴더</strong>를 감시하며 단계별 진행 상황을 시각화하고, 생성된 Markdown 산출물을 VS Code 안에서 바로 읽고 편집할 수 있게 해줍니다.</p>
+
+<h2>시작하기</h2>
+<ol>
+  <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트 — <code>aidlc-docs/</code>가 있거나 생성될 폴더 — 를 선택합니다.</li>
+  <li>필요하면 <strong>Set up AI-DLC Rules</strong>(클라우드 아이콘)로 AI 에이전트용 AI-DLC 워크플로우 룰을 원클릭 설치합니다.</li>
+  <li>에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말하면 — 생성되는 산출물이 트리에 자동으로 나타납니다.</li>
+</ol>
+
+<h2>주요 기능</h2>
+
+<div class="stage-card inception">
+  <h3>📊 단계 및 진행률 추적</h3>
+  <p>트리 상단에 <strong>현재 단계</strong>와 <strong>전체 진행률(%)</strong>이 표시됩니다.</p>
+  <ul>
+    <li>진행률은 <code>aidlc-docs/inception/</code>, <code>aidlc-docs/construction/</code>, <code>aidlc-docs/operations/</code> 폴더 안의 <code>.md</code> 산출물 수로 계산됩니다.</li>
+    <li>진행률 행을 펼치면 단계별 퍼센트를 볼 수 있습니다: 🔵 Inception · 🟣 Construction · 🟡 Operations.</li>
+    <li>단계 폴더와 파일에는 색상 배지가 붙습니다: <strong>I</strong>(파랑), <strong>C</strong>(보라), <strong>O</strong>(초록).</li>
+  </ul>
+</div>
+
+<div class="stage-card construction">
+  <h3>🌲 실시간 워크플로우 트리</h3>
+  <ul>
+    <li>Markdown 산출물만 표시되며, 빌드 폴더(<code>node_modules</code>, <code>.git</code> 등)는 무시됩니다.</li>
+    <li>감시 시작 후 생성된 파일은 <strong>NEW</strong>(초록 점), 열어본 파일은 <strong>READ</strong>(체크)로 표시됩니다.</li>
+    <li>NEW 파일이 있는 폴더는 <strong>자동으로 펼쳐져</strong>, 새로 생성된 산출물이 바로 보입니다.</li>
+    <li>파일 변경·창 포커스·주기적 폴링으로 트리가 자동 갱신됩니다 — Finder, git, CLI 도구로 인한 외부 변경도 반영됩니다.</li>
+  </ul>
+</div>
+
+<div class="stage-card operations">
+  <h3>📝 분할 에디터 / 프리뷰</h3>
+  <ul>
+    <li>파일을 클릭하면 <strong>Markdown 원본 에디터</strong>(왼쪽)와 <strong>스타일 적용 실시간 프리뷰</strong>(오른쪽)가 열립니다.</li>
+    <li>Save 버튼 또는 <code>Ctrl/Cmd + S</code>로 <strong>저장</strong>, <strong>Reload</strong>로 로컬 편집을 버리고 파일을 다시 읽습니다.</li>
+    <li><strong>Mermaid 다이어그램</strong>이 프리뷰에 인라인 렌더링됩니다.</li>
+    <li>프리뷰 <strong>줌</strong>: +/− 버튼, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, <code>Ctrl/Cmd</code> + 휠, 트랙패드 핀치.</li>
+    <li><strong>스플리터 드래그</strong>로 패널 크기 조절(더블클릭 시 초기화), 에디터와 프리뷰는 <strong>스크롤 동기화</strong>됩니다.</li>
+  </ul>
+</div>
+
+<h2>툴바 안내</h2>
 <table>
-  <tr><th>#</th><th>스테이지</th><th>설명</th><th>실행 조건</th></tr>
-  <tr><td>1</td><td>Functional Design</td><td>기술 독립적 비즈니스 로직 설계</td><td>조건부 (유닛별)</td></tr>
-  <tr><td>2</td><td>NFR Requirements</td><td>비기능 요구사항 및 기술 스택</td><td>조건부</td></tr>
-  <tr><td>3</td><td>NFR Design</td><td>NFR 패턴·논리적 컴포넌트</td><td>조건부</td></tr>
-  <tr><td>4</td><td>Infrastructure Design</td><td>논리적 컴포넌트 → 인프라</td><td>조건부</td></tr>
-  <tr><td>5</td><td>Code Planning</td><td>코드 생성 상세 계획</td><td>항상</td></tr>
-  <tr><td>6</td><td>Code Generation</td><td>실제 코드 생성</td><td>항상</td></tr>
-  <tr><td>7</td><td>Build and Test</td><td>빌드·포괄적 테스트</td><td>항상</td></tr>
+  <tr><th>버튼</th><th>동작</th></tr>
+  <tr><td>📂 Open Workspace</td><td>감시할 AI-DLC 루트 폴더 선택</td></tr>
+  <tr><td>🔄 Refresh</td><td>폴더 재스캔 및 트리 갱신</td></tr>
+  <tr><td>☁️ Set up AI-DLC Rules</td><td>번들된 AI-DLC 워크플로우 룰 설치 (Kiro, Claude Code 및 현재 에디터의 에이전트)</td></tr>
+  <tr><td>❓ Help / Guide</td><td>이 가이드 열기</td></tr>
 </table>
+
 <div class="callout">
-  <strong>생성 위치 규칙</strong>:<br>
-  • 실제 코드: <code>workspace root</code> (src/, tests/)<br>
-  • 코드 문서: <code>aidlc-docs/construction/</code>
+  <strong>팁</strong>: AI-DLC 산출물은 <code>aidlc-docs/</code> 아래에 생성됩니다 — 요구사항·스토리·설계는 <code>inception/</code>, 기능 설계와 코드 문서는 <code>construction/</code>, 배포·운영은 <code>operations/</code>. 뷰어가 이 폴더들을 감지해 단계별 진행률을 추적합니다.
 </div>
-
-<hr/>
-
-<h2>3단계: 운영 (Operations)</h2>
-<table>
-  <tr><th>축</th><th>핵심 요소</th><th>AI의 역할</th></tr>
-  <tr><td><strong>안정성</strong></td><td>HA·DR·Fault Tolerance·SLA</td><td>가용성 추적, 장애 예측, 자동 복구</td></tr>
-  <tr><td><strong>보안</strong></td><td>취약점 평가·규정 준수·액세스 제어</td><td>위협 감지, 취약점 스캔, 규정 검증</td></tr>
-  <tr><td><strong>성능</strong></td><td>모니터링·최적화·용량 계획</td><td>병목 감지, 최적화 제안, 수요 예측</td></tr>
-</table>
-
-<hr/>
-
-<h2>AS-IS vs TO-BE</h2>
-<div class="two-col">
-  <div class="role-box">
-    <h4>AS-IS: 사람 주도 개발</h4>
-    <ul><li>전문 영역별 분리 (사일로)</li><li>주/월 단위 긴 사이클</li><li>사람이 모든 프로세스 주도</li></ul>
-  </div>
-  <div class="role-box">
-    <h4>TO-BE: AI 주도 개발</h4>
-    <ul><li>통합된 개발 영역</li><li>시간/일 단위 빠른 사이클</li><li>AI가 주도·사람이 검증</li></ul>
-  </div>
-</div>
-
-<h2>주요 이점</h2>
-<ul>
-  <li><strong>개발 속도</strong>: 주/월 → 시간/일 (최대 10배 생산성)</li>
-  <li><strong>종단간 품질</strong>: DDD/BDD/TDD 통합 Best Practice</li>
-  <li><strong>개발자 역량 강화</strong>: 고부가가치 의사결정에 집중</li>
-  <li><strong>비즈니스 민첩성</strong>: 빠른 기능 구현·시장 대응</li>
-</ul>
 </body>
 </html>`;
 }
@@ -2007,6 +2501,281 @@ function escapeHtml(value) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ========== AI-DLC rule bootstrapping ==========
+//
+// AI-DLC requires platform-specific rule/steering files in the project root before
+// the "Using AI-DLC, ..." workflow can run. New users often struggle with the manual
+// copy steps. When a project folder is selected, we detect which targets are missing
+// and offer to copy the bundled rules into the correct per-platform layout.
+//
+// Bundled source (snapshot of awslabs/aidlc-workflows release):
+//   rules/aidlc-rules/aws-aidlc-rules/core-workflow.md
+//   rules/aidlc-rules/aws-aidlc-rule-details/**
+
+const CURSOR_FRONTMATTER =
+  '---\n' +
+  'description: "AI-DLC (AI-Driven Development Life Cycle) adaptive workflow for software development"\n' +
+  'alwaysApply: true\n' +
+  '---\n\n';
+
+// Maps vscode.env.appName -> an extra target key to set up in addition to the
+// always-on Kiro + Claude Code targets. Kiro hosts are intentionally absent
+// because the Kiro target is always created (dedupe).
+function detectHostTargetKey() {
+  const appName = (vscode.env.appName || '').toLowerCase();
+  if (appName.includes('cursor')) {
+    return 'cursor';
+  }
+  if (appName.includes('visual studio code') || appName.includes('vscodium')) {
+    return 'copilot';
+  }
+  return undefined;
+}
+
+function getAidlcTargets(hostKey) {
+  // Each target declares the files/dirs it needs and how to check whether it
+  // is already set up (idempotency). `needsRuleDetails` means the shared
+  // `.aidlc-rule-details/` folder must exist for this target.
+  const targets = {
+    kiro: {
+      key: 'kiro',
+      label: 'Kiro CLI / IDE',
+      // core-workflow folder copied wholesale + dedicated rule-details path
+      check: '.kiro/steering/aws-aidlc-rules',
+      build: (ctx) => [
+        { type: 'copyDir', from: ctx.coreDir, to: '.kiro/steering/aws-aidlc-rules' },
+        { type: 'copyDir', from: ctx.ruleDetailsDir, to: '.kiro/aws-aidlc-rule-details' }
+      ]
+    },
+    claude: {
+      key: 'claude',
+      label: 'Claude Code',
+      check: 'CLAUDE.md',
+      build: (ctx) => [
+        { type: 'copyFile', from: ctx.coreFile, to: 'CLAUDE.md' },
+        { type: 'copyDir', from: ctx.ruleDetailsDir, to: '.aidlc-rule-details' }
+      ]
+    },
+    cursor: {
+      key: 'cursor',
+      label: 'Cursor',
+      check: '.cursor/rules/ai-dlc-workflow.mdc',
+      build: (ctx) => [
+        { type: 'writeFileWithPrefix', prefix: CURSOR_FRONTMATTER, from: ctx.coreFile, to: '.cursor/rules/ai-dlc-workflow.mdc' },
+        { type: 'copyDir', from: ctx.ruleDetailsDir, to: '.aidlc-rule-details' }
+      ]
+    },
+    copilot: {
+      key: 'copilot',
+      label: 'GitHub Copilot',
+      check: '.github/copilot-instructions.md',
+      build: (ctx) => [
+        { type: 'copyFile', from: ctx.coreFile, to: '.github/copilot-instructions.md' },
+        { type: 'copyDir', from: ctx.ruleDetailsDir, to: '.aidlc-rule-details' }
+      ]
+    }
+  };
+
+  const selected = [targets.kiro, targets.claude];
+  if (hostKey && targets[hostKey] && hostKey !== 'kiro' && hostKey !== 'claude') {
+    selected.push(targets[hostKey]);
+  }
+  return selected;
+}
+
+// Single place that resolves the bundled AI-DLC rules root. When a v2 bundle
+// is added, extend this with a version parameter (e.g. 'rules/aidlc-rules-v2')
+// — every consumer (setup, step counting) resolves through here.
+function getBundleRoot(extensionUri) {
+  return vscode.Uri.joinPath(extensionUri, 'rules', 'aidlc-rules');
+}
+
+// Fallback when the bundled rules can't be read (matches the current bundle).
+const BUNDLED_STAGE_STEP_FALLBACK = {
+  inception: 7,
+  construction: 6,
+  operations: 1
+};
+
+// Number of workflow steps per stage = number of bundled rule files per stage.
+// Used as the denominator for state-file-based progress. Read once per session
+// (the bundle never changes at runtime).
+let bundledStageStepCountsCache;
+async function getBundledStageStepCounts(extensionUri) {
+  if (bundledStageStepCountsCache) {
+    return bundledStageStepCountsCache;
+  }
+  const counts = { ...BUNDLED_STAGE_STEP_FALLBACK };
+  try {
+    const detailsRoot = vscode.Uri.joinPath(getBundleRoot(extensionUri), 'aws-aidlc-rule-details');
+    for (const stage of ['inception', 'construction', 'operations']) {
+      const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(detailsRoot, stage));
+      const mdCount = entries.filter(
+        ([name, type]) => type === vscode.FileType.File && name.toLowerCase().endsWith('.md')
+      ).length;
+      if (mdCount > 0) {
+        counts[stage] = mdCount;
+      }
+    }
+  } catch {
+    // bundle missing (dev checkout) — keep fallback values
+  }
+  bundledStageStepCountsCache = counts;
+  return counts;
+}
+
+async function pathExists(uri) {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Returns true when at least one target is missing and the bundle is present.
+// Used to decide whether to even offer setup (no dialogs / messages here).
+async function aidlcSetupNeeded(folderUri, extensionUri) {
+  const bundleRoot = getBundleRoot(extensionUri);
+  const coreFile = vscode.Uri.joinPath(bundleRoot, 'aws-aidlc-rules', 'core-workflow.md');
+  if (!(await pathExists(coreFile))) {
+    return false; // no bundle — nothing to offer
+  }
+  const targets = getAidlcTargets(detectHostTargetKey());
+  for (const target of targets) {
+    const checkUri = vscode.Uri.joinPath(folderUri, target.check);
+    if (!(await pathExists(checkUri))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// options.confirm: when true, ask before installing (toolbar-button path).
+// When false, the caller already obtained consent (folder-pick path).
+// options.announceNoop: when true, show a message if everything is already set up.
+async function ensureAidlcRules(folderUri, extensionUri, options = {}) {
+  const { confirm = true, announceNoop = true } = options;
+  const bundleRoot = getBundleRoot(extensionUri);
+  const coreDir = vscode.Uri.joinPath(bundleRoot, 'aws-aidlc-rules');
+  const coreFile = vscode.Uri.joinPath(coreDir, 'core-workflow.md');
+  const ruleDetailsDir = vscode.Uri.joinPath(bundleRoot, 'aws-aidlc-rule-details');
+
+  // If the bundle is missing (e.g. dev checkout without rules), report and stop.
+  if (!(await pathExists(coreFile))) {
+    vscode.window.showErrorMessage('AI-DLC rule bundle is missing from the extension. Cannot set up rules.');
+    return;
+  }
+
+  const hostKey = detectHostTargetKey();
+  const targets = getAidlcTargets(hostKey);
+
+  // Determine which targets are not yet set up.
+  const missing = [];
+  for (const target of targets) {
+    const checkUri = vscode.Uri.joinPath(folderUri, target.check);
+    if (!(await pathExists(checkUri))) {
+      missing.push(target);
+    }
+  }
+
+  if (missing.length === 0) {
+    if (announceNoop) {
+      const labels = targets.map((t) => t.label).join(', ');
+      vscode.window.showInformationMessage(`AI-DLC rules are already set up for: ${labels}.`);
+    }
+    return;
+  }
+
+  if (confirm) {
+    const labels = missing.map((t) => t.label).join(', ');
+    const setupLabel = 'Set up AI-DLC';
+    const choice = await vscode.window.showInformationMessage(
+      `Set up AI-DLC rules in this project? Missing: ${labels}.`,
+      setupLabel,
+      'Not now'
+    );
+    if (choice !== setupLabel) {
+      return;
+    }
+  }
+
+  const ctx = { coreDir, coreFile, ruleDetailsDir };
+  const done = [];
+  for (const target of missing) {
+    const ops = target.build(ctx);
+    for (const op of ops) {
+      await runSetupOp(folderUri, op);
+    }
+    done.push(target.label);
+  }
+
+  vscode.window.showInformationMessage(
+    `AI-DLC rules installed for: ${done.join(', ')}. Start your agent and say "Using AI-DLC, ...".`
+  );
+}
+
+async function runSetupOp(folderUri, op) {
+  if (op.type === 'copyFile') {
+    const dest = vscode.Uri.joinPath(folderUri, op.to);
+    await ensureParentDir(dest);
+    // Skip if the destination already exists (idempotent at the file level too)
+    if (await pathExists(dest)) {
+      return;
+    }
+    const bytes = await vscode.workspace.fs.readFile(op.from);
+    await vscode.workspace.fs.writeFile(dest, bytes);
+    return;
+  }
+
+  if (op.type === 'writeFileWithPrefix') {
+    const dest = vscode.Uri.joinPath(folderUri, op.to);
+    await ensureParentDir(dest);
+    if (await pathExists(dest)) {
+      return;
+    }
+    const bytes = await vscode.workspace.fs.readFile(op.from);
+    const body = Buffer.from(bytes).toString('utf8');
+    const merged = Buffer.from(op.prefix + body, 'utf8');
+    await vscode.workspace.fs.writeFile(dest, merged);
+    return;
+  }
+
+  if (op.type === 'copyDir') {
+    const dest = vscode.Uri.joinPath(folderUri, op.to);
+    // Skip the whole copy if the directory already exists
+    if (await pathExists(dest)) {
+      return;
+    }
+    await copyDirectory(op.from, dest);
+    return;
+  }
+}
+
+async function ensureParentDir(fileUri) {
+  const parent = vscode.Uri.joinPath(fileUri, '..');
+  try {
+    await vscode.workspace.fs.createDirectory(parent);
+  } catch {
+    // createDirectory is recursive and ignores existing dirs; swallow errors
+  }
+}
+
+async function copyDirectory(fromUri, toUri) {
+  await vscode.workspace.fs.createDirectory(toUri);
+  const entries = await vscode.workspace.fs.readDirectory(fromUri);
+  for (const [name, fileType] of entries) {
+    const childFrom = vscode.Uri.joinPath(fromUri, name);
+    const childTo = vscode.Uri.joinPath(toUri, name);
+    if (fileType === vscode.FileType.Directory) {
+      await copyDirectory(childFrom, childTo);
+    } else if (fileType === vscode.FileType.File) {
+      const bytes = await vscode.workspace.fs.readFile(childFrom);
+      await vscode.workspace.fs.writeFile(childTo, bytes);
+    }
+  }
 }
 
 module.exports = {

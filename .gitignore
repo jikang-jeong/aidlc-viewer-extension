@@ -2,4 +2,5 @@
 *.vsix
 node_modules/
 *.log
+.kiro/
 

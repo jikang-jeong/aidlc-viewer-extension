@@ -4,6 +4,7 @@
 .claude/**
 .gitignore
 media/marketplace-icon.svg
+media/icon-drafts/**
 *.log
 *.vsix
 node_modules/**
