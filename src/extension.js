@@ -664,10 +664,20 @@ class MarkdownTreeDataProvider {
     }
 
     if (element.contextValue === 'progress') {
-      const progress = element.summary.progress;
-      return ['inception', 'construction', 'operations'].map(
-        (stage) => new StageProgressChild(stage, progress.stages[stage])
-      );
+      const journey = element.summary.journey;
+      if (!journey || !Array.isArray(journey.checkpoints)) {
+        return [];
+      }
+      const byPhase = new Map();
+      for (const cp of journey.checkpoints) {
+        if (!byPhase.has(cp.phase)) {
+          byPhase.set(cp.phase, []);
+        }
+        byPhase.get(cp.phase).push(cp);
+      }
+      return ['setup', 'inception', 'construction', 'operations']
+        .filter((phase) => byPhase.has(phase))
+        .map((phase) => new StageProgressChild(phase, byPhase.get(phase)));
     }
 
     return this.getDirectoryEntries(element.resourceUri, element);
@@ -820,6 +830,9 @@ class MarkdownTreeDataProvider {
     const summary = {
       currentStage,
       counts,
+      // No longer displayed anywhere: the percentage was replaced by reached-stage
+      // counts derived from `journey`. Kept only until the layer-1/layer-2 progress
+      // computation is removed in a follow-up, so nothing reads this field.
       progress,
       inProgressLabel,
       latestFile: latest?.fileUri,
@@ -952,21 +965,57 @@ class InfoItem extends vscode.TreeItem {
 
 class ProgressItem extends vscode.TreeItem {
   constructor(summary) {
-    const progress = summary.progress;
-    super(`${progress.overall}%`, vscode.TreeItemCollapsibleState.Collapsed);
+    // No percentage. AI-DLC is adaptive, so the denominator is not knowable: most
+    // stages are CONDITIONAL, and Construction repeats per unit with a unit count
+    // that does not exist until Units Generation has run. Counting reached stages is
+    // defensible; the old weighted percentage was invented, and it reported 0% on
+    // real projects full of artifacts.
+    const journey = summary.journey;
+    const current =
+      journey && journey.currentIndex >= 0 ? journey.checkpoints[journey.currentIndex] : undefined;
+    super(current ? current.label : 'Not started', vscode.TreeItemCollapsibleState.Collapsed);
     this.summary = summary;
-    this.description = summary.latestModifiedLabel || '';
+    this.description = formatJourneyCounts(journey);
     this.tooltip = buildProgressTooltip(summary);
     this.contextValue = 'progress';
     this.iconPath = new vscode.ThemeIcon('pulse', getStageColor(summary.currentStage));
   }
 }
 
+// Skipped stages are excluded from the denominator: they are not work left to do.
+function formatJourneyCounts(journey) {
+  if (!journey || !Array.isArray(journey.checkpoints)) {
+    return '';
+  }
+  const counts = journey.counts || {};
+  const skipped = counts.skipped || 0;
+  const parts = [`${counts.done || 0}/${journey.plannedTotal}`];
+  if (counts.active) {
+    parts.push(`${counts.active} in progress`);
+  }
+  if (skipped) {
+    parts.push(`${skipped} skipped`);
+  }
+  return parts.join(' · ');
+}
+
 class StageProgressChild extends vscode.TreeItem {
-  constructor(stage, stageData) {
-    const icon = stage === 'inception' ? '🔵' : stage === 'construction' ? '🟣' : '🟡';
-    super(`${icon} ${capitalize(stage)}`, vscode.TreeItemCollapsibleState.None);
-    this.description = `${stageData.pct}%  (${stageData.count}/${stageData.expected})`;
+  constructor(phase, checkpoints) {
+    super(capitalize(phase), vscode.TreeItemCollapsibleState.None);
+    const done = checkpoints.filter((cp) => cp.status === 'done').length;
+    const skipped = checkpoints.filter((cp) => cp.status === 'skipped').length;
+    const planned = checkpoints.filter(
+      (cp) => cp.status !== 'skipped' && !(cp.placeholder && cp.status !== 'done')
+    ).length;
+    const parts = [`${done}/${planned}`];
+    if (skipped) {
+      parts.push(`${skipped} skipped`);
+    }
+    if (checkpoints.some((cp) => cp.placeholder && cp.status !== 'done')) {
+      parts.push('placeholder');
+    }
+    this.description = parts.join(' · ');
+    this.iconPath = new vscode.ThemeIcon('circle-small-filled', getStageColor(phase));
     this.contextValue = 'stageProgress';
   }
 }
@@ -1368,39 +1417,33 @@ function computeProgress(counts) {
   };
 }
 
-function renderProgressBar(pct, width) {
-  const clamped = Math.max(0, Math.min(100, pct));
-  const filled = Math.round((clamped / 100) * width);
-  return '█'.repeat(filled) + '░'.repeat(width - filled);
-}
-
 function buildProgressTooltip(summary) {
-  const progress = summary.progress;
-  const fromState = progress.source === 'state';
-  const lines = [
-    fromState
-      ? '**AI-DLC Progress** (from aidlc-state.md)'
-      : '**AI-DLC Progress** (estimated from artifact counts)',
-    ''
-  ];
-
-  for (const stage of ['inception', 'construction', 'operations']) {
-    const s = progress.stages[stage];
-    const bar = renderProgressBar(s.pct, 12);
-    const icon = stage === 'inception' ? '🔵' : stage === 'construction' ? '🟢' : '🟡';
-    const unit = fromState ? 'steps' : 'files';
-    lines.push(`${icon} **${capitalize(stage)}** \`${bar}\` ${s.pct}%  (${s.count}/${s.expected} ${unit})`);
+  const journey = summary.journey;
+  if (!journey || !Array.isArray(journey.checkpoints)) {
+    return new vscode.MarkdownString('**AI-DLC Progress**\n\nNo artifacts detected yet.');
   }
 
-  lines.push('', `**Overall**: ${progress.overall}%`);
-  if (summary.inProgressLabel) {
-    lines.push(`**In progress**: ${summary.inProgressLabel}`);
+  const MARK = { done: '●', active: '◐', pending: '○', skipped: '⌁' };
+  const lines = ['**AI-DLC Progress**', '', '_Derived from the artifact tree, not from file contents._', ''];
+
+  let lastPhase;
+  for (const cp of journey.checkpoints) {
+    if (cp.phase !== lastPhase) {
+      lines.push(`**${capitalize(cp.phase)}**`);
+      lastPhase = cp.phase;
+    }
+    const units =
+      cp.unitProgress && cp.unitProgress.total > 1 ? ` (${cp.unitProgress.done}/${cp.unitProgress.total})` : '';
+    const isCurrent = journey.checkpoints.indexOf(cp) === journey.currentIndex;
+    lines.push(`${MARK[cp.status] || '·'} ${isCurrent ? `**${cp.label}**` : cp.label}${units}`);
   }
-  if (summary.currentStage && summary.currentStage !== 'unknown') {
-    lines.push(`**Current stage**: ${capitalize(summary.currentStage)}`);
+
+  lines.push('', `**Reached**: ${formatJourneyCounts(journey)}`);
+  if (journey.units.length) {
+    lines.push(`**Units**: ${journey.units.join(', ')}`);
   }
-  if (summary.latestFile) {
-    lines.push(`**Latest file**: \`${path.basename(summary.latestFile.fsPath)}\``);
+  if (journey.unattributed.length) {
+    lines.push('', `⚠ ${journey.unattributed.length} artifact(s) not mapped to a stage`);
   }
 
   const md = new vscode.MarkdownString(lines.join('\n'));
@@ -1647,78 +1690,134 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
 
       /* ---------- AI-DLC journey strip ----------
-         Always visible above the editor/preview split so the current position is
-         perceived passively while reading. Collapsed by default (phase-grouped
-         ticks); click to expand into numbered checkpoints. Hidden entirely when
-         no journey could be determined, leaving the viewer exactly as before. */
+         Purple is the product's tone and the existing colour for the Construction
+         phase (charts.purple, see getStageColor / StageDecorationProvider). Green is
+         deliberately NOT used for progress: charts.green already means "unread NEW
+         artifact" in the tree, so reusing it here would collide semantically.
+
+         The band sits slightly lighter than the editor so the unfilled track and the
+         hatched skipped segments are visible in a dark theme.
+
+         The rail is continuous: every stage is a filled segment, so nothing can look
+         like a missing tooth. Segments are 10px tall with a 9px floor so the hatch
+         pattern on a skipped stage actually reads at realistic panel widths. */
       .journey {
         flex: none;
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 5px 12px;
+        gap: 12px;
+        padding: 7px 12px;
         border-bottom: 1px solid var(--border);
-        background: color-mix(in srgb, var(--panel) 94%, transparent);
+        background: color-mix(in srgb, var(--bg) 86%, var(--text) 14%);
         font-size: 11px;
         cursor: pointer;
         user-select: none;
+        overflow: hidden;
       }
       .journey[hidden] { display: none; }
-      .journey:hover { background: color-mix(in srgb, var(--panel) 80%, transparent); }
-
-      .j-phase {
-        flex: none;
-        font-size: 9px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--muted);
+      .journey:hover { background: color-mix(in srgb, var(--bg) 80%, var(--text) 20%); }
+      /* Plain focus drew a full-width browser outline around the whole band. */
+      .journey:focus { outline: none; }
+      .journey:focus-visible {
+        outline: 1px solid var(--vscode-charts-purple, #b180d7);
+        outline-offset: -2px;
       }
-      .j-ticks { display: flex; gap: 2px; flex: 1 1 auto; min-width: 24px; }
-      .j-tick {
-        height: 5px;
+
+      .j-now { flex: none; font-weight: 600; color: var(--text); white-space: nowrap; }
+      .j-now::before { content: '▸ '; color: var(--muted); }
+
+      .j-rail {
+        flex: 1 1 auto;
+        min-width: 60px;
+        display: flex;
+        gap: 1px;
+        align-items: center;
+      }
+      .j-rail .j-gap { flex: none; width: 6px; }
+      .j-seg {
+        height: 10px;
         border-radius: 2px;
         flex: 1 1 auto;
-        min-width: 4px;
-        background: var(--vscode-editorWidget-border, #3c3c3c);
+        min-width: 9px;
+        background: color-mix(in srgb, var(--text) 16%, transparent);
       }
-      .j-tick.done { background: var(--vscode-charts-green, #98c379); }
-      .j-tick.active { background: var(--vscode-charts-yellow, #e5c07b); }
-      .j-tick.skipped { background: transparent; border: 1px dashed var(--border); height: 3px; }
-      .j-tick.current { box-shadow: 0 0 0 1px var(--vscode-focusBorder, #569cd6); }
-      .j-tick.open { background-image: linear-gradient(90deg, transparent 35%, var(--vscode-focusBorder, #569cd6) 35% 65%, transparent 65%); }
+      .j-seg.done { background: var(--vscode-charts-purple, #b180d7); }
+      .j-seg.active {
+        background: color-mix(in srgb, var(--vscode-charts-purple, #b180d7) 55%, transparent);
+      }
+      .j-seg.skipped {
+        background: repeating-linear-gradient(
+          125deg,
+          color-mix(in srgb, var(--text) 34%, transparent) 0 2px,
+          transparent 2px 5px
+        );
+      }
+      .j-seg.current {
+        background: var(--vscode-charts-purple, #b180d7);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-charts-purple, #b180d7) 40%, transparent);
+      }
 
-      .j-now { flex: none; font-weight: 600; color: var(--vscode-focusBorder, #569cd6); }
-      .j-counts { flex: none; color: var(--muted); }
+      .j-frac { flex: none; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
       .j-chevron { flex: none; color: var(--muted); font-size: 10px; }
 
-      /* expanded: numbered checkpoints */
-      .journey.expanded { flex-wrap: wrap; align-items: flex-start; padding-bottom: 8px; }
-      .journey.expanded .j-collapsed { display: none; }
-      .j-expanded { display: none; width: 100%; }
+      /* ---------- expanded ----------
+         Two-column grid so the phase label column stays put when the stage list
+         wraps. A flex row lost the label on every wrapped line. */
+      .journey.expanded { display: block; padding: 8px 12px 10px; }
+      .j-expanded { display: none; }
       .journey.expanded .j-expanded { display: block; }
-      .j-collapsed { display: flex; align-items: center; gap: 10px; width: 100%; }
+      .journey.expanded .j-collapsed { margin-bottom: 9px; }
+      .j-collapsed { display: flex; align-items: center; gap: 12px; }
 
-      .j-steps { display: flex; align-items: flex-start; gap: 0; width: 100%; }
-      .j-step { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 0 0 auto; }
-      .j-dot {
-        width: 16px; height: 16px; border-radius: 50%;
-        border: 1.5px solid var(--border);
-        color: var(--muted);
-        font-size: 8px;
-        display: flex; align-items: center; justify-content: center;
+      .j-grid {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 4px 10px;
+        align-items: start;
       }
-      .j-dot.done { background: var(--vscode-charts-green, #98c379); border-color: var(--vscode-charts-green, #98c379); color: var(--bg); }
-      .j-dot.active { background: var(--vscode-charts-yellow, #e5c07b); border-color: var(--vscode-charts-yellow, #e5c07b); color: var(--bg); }
-      .j-dot.skipped { border-style: dashed; opacity: 0.45; }
-      .j-dot.current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-focusBorder, #569cd6) 45%, transparent); }
-      .j-dot.open { border-color: var(--vscode-focusBorder, #569cd6); border-width: 2px; }
-      .j-label { font-size: 9px; color: var(--muted); max-width: 70px; text-align: center; line-height: 1.25; }
-      .j-line { height: 1px; background: var(--border); flex: 1 1 auto; min-width: 4px; margin-top: 8px; }
-      .j-legend { margin-top: 6px; color: var(--muted); font-size: 10px; }
+      .j-gname {
+        font-size: 9px;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding-top: 3px;
+      }
+      .j-cell { display: flex; flex-wrap: wrap; gap: 3px 12px; }
+
+      /* Two signals per stage: a mark and a name. No numbers, no repeated DONE. */
+      .j-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 11px; }
+      .j-mark {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: none;
+        background: var(--vscode-charts-purple, #b180d7);
+      }
+      .j-item.active .j-mark {
+        background: color-mix(in srgb, var(--vscode-charts-purple, #b180d7) 55%, transparent);
+      }
+      .j-item.pending .j-mark { background: color-mix(in srgb, var(--text) 22%, transparent); }
+      /* A square swatch, not a dot: a hatch pattern is unreadable inside 8px of circle. */
+      .j-item.skipped .j-mark {
+        width: 14px;
+        height: 8px;
+        border-radius: 2px;
+        background: repeating-linear-gradient(
+          125deg,
+          color-mix(in srgb, var(--text) 38%, transparent) 0 2px,
+          transparent 2px 5px
+        );
+      }
+      .j-item.skipped .j-label,
+      .j-item.pending .j-label { color: var(--muted); }
+      .j-item.current .j-label { font-weight: 700; }
+      .j-tag { font-size: 9px; color: var(--muted); opacity: 0.85; }
+
+      .j-legend { margin-top: 7px; color: var(--muted); font-size: 10px; }
       .j-warn { color: var(--vscode-charts-yellow, #e5c07b); }
 
       @media (prefers-reduced-motion: reduce) {
-        .journey, .j-tick, .j-dot { transition: none; }
+        .journey, .j-seg, .j-item { transition: none; }
       }
 
       .pane {
@@ -2153,35 +2252,40 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
 
       // ---------- AI-DLC journey strip ----------
-      // Collapsed by default: one tick per checkpoint, grouped by phase, with only
-      // the current checkpoint named. Click to expand into numbered checkpoints with
-      // labels. Renders nothing at all when the host could not determine a journey,
-      // so a non-AI-DLC file or an unreadable workspace leaves the viewer untouched.
+      // Collapsed by default: the current stage name, then a continuous rail of one
+      // tick per checkpoint with a wider gap at each phase boundary. Click to expand
+      // into phase groups of chips that WRAP, so the strip never runs off the panel.
+      //
+      // Only the furthest reached checkpoint is highlighted. The checkpoint of the
+      // file being viewed is available in journey.openIndex but is deliberately not
+      // rendered: it competed with the position marker for attention.
+      //
+      // Status is spelled out as a word in the expanded view rather than encoded in
+      // colour alone, so skipped and pending stay distinguishable in any theme.
       let journey = ${safeJourney};
       const journeyEl = document.getElementById('journey');
       const jCollapsedEl = document.getElementById('jCollapsed');
       const jExpandedEl = document.getElementById('jExpanded');
       const PHASE_LABEL = { setup: 'Setup', inception: 'Inception', construction: 'Construction', operations: 'Operations' };
+      const STATE_LABEL = { done: 'done', active: 'in progress', pending: 'not started', skipped: 'skipped' };
 
       function statusClass(cp, index) {
-        const parts = [cp.status];
-        if (index === journey.currentIndex) parts.push('current');
-        if (index === journey.openIndex) parts.push('open');
-        return parts.join(' ');
+        return index === journey.currentIndex ? cp.status + ' current' : cp.status;
       }
 
       function tooltipFor(cp, index) {
-        const bits = [(index + 1) + '. ' + cp.label, cp.status];
+        const bits = [(index + 1) + '. ' + cp.label, STATE_LABEL[cp.status] || cp.status];
+        bits.push(PHASE_LABEL[cp.phase] || cp.phase);
         if (cp.unitProgress && cp.unitProgress.total > 0) {
           bits.push(cp.unitProgress.done + '/' + cp.unitProgress.total + ' units');
         }
-        if (cp.planned) bits.push('planned');
-        if (index === journey.currentIndex) bits.push('current position');
-        if (index === journey.openIndex) bits.push('this file');
+        if (cp.planned) bits.push('plan recorded');
+        if (cp.placeholder) bits.push('placeholder in AI-DLC v1: the workflow ends after Build and test');
+        if (index === journey.currentIndex) bits.push('furthest reached');
         return bits.join(' — ');
       }
 
-      function renderCollapsed() {
+      function phaseGroups() {
         const groups = [];
         let last;
         journey.checkpoints.forEach((cp, i) => {
@@ -2191,40 +2295,45 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
           }
           last.items.push({ cp: cp, i: i });
         });
+        return groups;
+      }
 
+      function renderCollapsed() {
         const frag = document.createDocumentFragment();
-        for (const group of groups) {
-          const label = document.createElement('span');
-          label.className = 'j-phase';
-          label.textContent = PHASE_LABEL[group.phase] || group.phase;
-          frag.appendChild(label);
-
-          const ticks = document.createElement('span');
-          ticks.className = 'j-ticks';
-          for (const entry of group.items) {
-            const tick = document.createElement('span');
-            tick.className = 'j-tick ' + statusClass(entry.cp, entry.i);
-            tick.title = tooltipFor(entry.cp, entry.i);
-            ticks.appendChild(tick);
-          }
-          frag.appendChild(ticks);
-        }
 
         const now = document.createElement('span');
         now.className = 'j-now';
         const cur = journey.checkpoints[journey.currentIndex];
-        now.textContent = cur ? cur.label : '';
+        now.textContent = cur ? cur.label : 'Not started';
+        now.title = cur ? tooltipFor(cur, journey.currentIndex) : '';
         frag.appendChild(now);
 
-        const counts = document.createElement('span');
-        counts.className = 'j-counts';
+        const rail = document.createElement('span');
+        rail.className = 'j-rail';
+        phaseGroups().forEach((group, gi) => {
+          if (gi > 0) {
+            const gap = document.createElement('span');
+            gap.className = 'j-gap';
+            rail.appendChild(gap);
+          }
+          for (const entry of group.items) {
+            const seg = document.createElement('span');
+            seg.className = 'j-seg ' + statusClass(entry.cp, entry.i);
+            seg.title = tooltipFor(entry.cp, entry.i);
+            rail.appendChild(seg);
+          }
+        });
+        frag.appendChild(rail);
+
+        // The denominator comes from the model: skipped stages and the unreached
+        // Operations placeholder are not work left to do.
         const c = journey.counts || {};
-        const bits = [(c.done || 0) + ' done'];
-        if (c.active) bits.push(c.active + ' in progress');
-        if (c.skipped) bits.push(c.skipped + ' skipped');
-        if (c.pending) bits.push(c.pending + ' left');
-        counts.textContent = bits.join(' · ');
-        frag.appendChild(counts);
+        const frac = document.createElement('span');
+        frac.className = 'j-frac';
+        frac.textContent = (c.done || 0) + '/' + journey.plannedTotal;
+        frac.title = (c.done || 0) + ' done · ' + (c.active || 0) + ' in progress · ' +
+          (c.pending || 0) + ' not started · ' + (c.skipped || 0) + ' skipped';
+        frag.appendChild(frac);
 
         const chevron = document.createElement('span');
         chevron.className = 'j-chevron';
@@ -2235,54 +2344,81 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
 
       function renderExpanded() {
-        const steps = document.createElement('div');
-        steps.className = 'j-steps';
+        const frag = document.createDocumentFragment();
 
-        journey.checkpoints.forEach((cp, i) => {
-          if (i > 0) {
-            const line = document.createElement('div');
-            line.className = 'j-line';
-            steps.appendChild(line);
+        const grid = document.createElement('div');
+        grid.className = 'j-grid';
+
+        for (const group of phaseGroups()) {
+          const name = document.createElement('div');
+          name.className = 'j-gname';
+          name.textContent = PHASE_LABEL[group.phase] || group.phase;
+          grid.appendChild(name);
+
+          const cell = document.createElement('div');
+          cell.className = 'j-cell';
+          for (const entry of group.items) {
+            const item = document.createElement('span');
+            item.className = 'j-item ' + statusClass(entry.cp, entry.i);
+            item.title = tooltipFor(entry.cp, entry.i);
+
+            const mark = document.createElement('i');
+            mark.className = 'j-mark';
+            item.appendChild(mark);
+
+            const label = document.createElement('span');
+            label.className = 'j-label';
+            label.textContent = entry.cp.label;
+            item.appendChild(label);
+
+            // A tag only where the state is not obvious from the mark alone.
+            let tag = '';
+            if (entry.cp.placeholder && entry.cp.status !== 'done') tag = 'placeholder';
+            else if (entry.cp.status === 'skipped') tag = 'skipped';
+            else if (entry.cp.status === 'pending') tag = 'not started';
+            else if (entry.cp.unitProgress && entry.cp.unitProgress.total > 1) {
+              tag = entry.cp.unitProgress.done + '/' + entry.cp.unitProgress.total;
+            }
+            if (tag) {
+              const tagEl = document.createElement('span');
+              tagEl.className = 'j-tag';
+              tagEl.textContent = tag;
+              item.appendChild(tagEl);
+            }
+
+            cell.appendChild(item);
           }
-          const step = document.createElement('div');
-          step.className = 'j-step';
-          step.title = tooltipFor(cp, i);
-
-          const dot = document.createElement('div');
-          dot.className = 'j-dot ' + statusClass(cp, i);
-          dot.textContent = String(i + 1);
-          step.appendChild(dot);
-
-          const label = document.createElement('div');
-          label.className = 'j-label';
-          label.textContent = cp.label;
-          if (cp.unitProgress && cp.unitProgress.total > 0) {
-            label.textContent += ' ' + cp.unitProgress.done + '/' + cp.unitProgress.total;
-          }
-          step.appendChild(label);
-          steps.appendChild(step);
-        });
-
-        const legend = document.createElement('div');
-        legend.className = 'j-legend';
-        const openCp = journey.checkpoints[journey.openIndex];
-        const legendBits = ['Filled = done', 'dashed = skipped by the adaptive workflow'];
-        if (openCp) legendBits.push('outlined = this file (' + openCp.label + ')');
-        if (journey.units && journey.units.length) {
-          legendBits.push(journey.units.length + ' unit' + (journey.units.length === 1 ? '' : 's') + ': ' + journey.units.join(', '));
+          grid.appendChild(cell);
         }
-        legend.textContent = legendBits.join(' · ');
+        frag.appendChild(grid);
 
-        jExpandedEl.replaceChildren(steps, legend);
+        if (journey.units && journey.units.length) {
+          const legend = document.createElement('div');
+          legend.className = 'j-legend';
+          legend.textContent =
+            journey.units.length + ' unit' + (journey.units.length === 1 ? '' : 's') + ' · ' + journey.units.join(', ');
+          frag.appendChild(legend);
+        }
 
         if (journey.unattributed && journey.unattributed.length) {
           const warn = document.createElement('div');
           warn.className = 'j-legend j-warn';
-          warn.textContent = journey.unattributed.length +
+          warn.textContent =
+            journey.unattributed.length +
             ' artifact' + (journey.unattributed.length === 1 ? '' : 's') +
-            ' could not be mapped to a checkpoint: ' + journey.unattributed.join(', ');
-          jExpandedEl.appendChild(warn);
+            ' could not be mapped to a stage: ' + journey.unattributed.join(', ');
+          frag.appendChild(warn);
         }
+
+        jExpandedEl.replaceChildren(frag);
+      }
+
+      function renderJourney() {
+        const usable = journey && Array.isArray(journey.checkpoints) && journey.checkpoints.length > 0;
+        journeyEl.hidden = !usable;
+        if (!usable) return;
+        renderCollapsed();
+        if (journeyEl.classList.contains('expanded')) renderExpanded();
       }
 
       function renderJourney() {
@@ -2729,12 +2865,16 @@ function getHelpHtml() {
 <h2>Key Features</h2>
 
 <div class="stage-card inception">
-  <h3>📊 Stage &amp; Progress Tracking</h3>
-  <p>The top of the tree shows the <strong>current stage</strong> and an <strong>overall progress percentage</strong>.</p>
+  <h3>📊 Journey &amp; Stage Tracking</h3>
+  <p>The top of the tree names the <strong>furthest stage reached</strong> and how many stages are done, for example <code>Build and test</code> · <code>9/9</code>. Expand it for the same figure per phase.</p>
+  <p>Opening a <code>.md</code> artifact also shows an <strong>AI-DLC journey strip</strong> across the top of the viewer, so the position stays visible while you read. Click the strip to expand it into the full stage list.</p>
   <ul>
-    <li>Progress is computed from the number of <code>.md</code> artifacts inside <code>aidlc-docs/inception/</code>, <code>aidlc-docs/construction/</code>, and <code>aidlc-docs/operations/</code>.</li>
-    <li>Expand the progress row to see per-stage percentages: 🔵 Inception · 🟣 Construction · 🟡 Operations.</li>
-    <li>Stage folders and files are color-badged: <strong>I</strong> (blue), <strong>C</strong> (purple), <strong>O</strong> (green).</li>
+    <li>Everything is derived from the <strong>artifact tree</strong>: which folders exist under <code>aidlc-docs/</code>, plus the plan files under <code>plans/</code>. No file contents are parsed, so a state file in an unexpected format cannot make the position wrong.</li>
+    <li><strong>There is no percentage.</strong> AI-DLC is adaptive: most stages are conditional, and Construction repeats per unit of work with a unit count that does not exist until Units Generation has run. A denominator would be guesswork, so reached stages are counted instead.</li>
+    <li>A stage with no artifacts that the workflow has already moved past is marked <strong>skipped</strong> (hatched), not pending. That is normal: Reverse Engineering is skipped on a greenfield project, and design stages are skipped whenever the workflow decides they add nothing.</li>
+    <li><strong>Operations is a placeholder in AI-DLC v1.</strong> The rules state that the workflow ends after Build and Test in Construction, so an unreached Operations stage is excluded from the count and a project that finished Build and Test reads as complete.</li>
+    <li>Stage folders and files keep their badges: <strong>I</strong> (blue), <strong>C</strong> (purple), <strong>O</strong> (green). Progress itself uses purple, because green already marks unread <code>NEW</code> artifacts.</li>
+    <li>An artifact that matches no known stage layout is reported at the bottom of the expanded strip rather than guessed into a stage.</li>
   </ul>
 </div>
 
@@ -2787,12 +2927,16 @@ function getHelpHtml() {
 <h2>주요 기능</h2>
 
 <div class="stage-card inception">
-  <h3>📊 단계 및 진행률 추적</h3>
-  <p>트리 상단에 <strong>현재 단계</strong>와 <strong>전체 진행률(%)</strong>이 표시됩니다.</p>
+  <h3>📊 여정(Journey) 및 단계 추적</h3>
+  <p>트리 상단은 <strong>도달한 최종 단계</strong>와 완료 단계 수를 보여줍니다. 예를 들어 <code>Build and test</code> · <code>9/9</code> 형태입니다. 펼치면 phase별로 같은 수치를 봅니다.</p>
+  <p><code>.md</code> 산출물을 열면 뷰어 상단에 <strong>AI-DLC 여정 스트립</strong>이 함께 나오므로, 문서를 읽는 동안에도 현재 위치가 계속 보입니다. 스트립을 클릭하면 전체 단계 목록으로 펼쳐집니다.</p>
   <ul>
-    <li>진행률은 <code>aidlc-docs/inception/</code>, <code>aidlc-docs/construction/</code>, <code>aidlc-docs/operations/</code> 폴더 안의 <code>.md</code> 산출물 수로 계산됩니다.</li>
-    <li>진행률 행을 펼치면 단계별 퍼센트를 볼 수 있습니다: 🔵 Inception · 🟣 Construction · 🟡 Operations.</li>
-    <li>단계 폴더와 파일에는 색상 배지가 붙습니다: <strong>I</strong>(파랑), <strong>C</strong>(보라), <strong>O</strong>(초록).</li>
+    <li>모든 판정은 <strong>산출물 트리</strong>에서 나옵니다. <code>aidlc-docs/</code> 아래 어떤 폴더가 있는지와 <code>plans/</code>의 계획 파일이 근거이며, 파일 내용은 파싱하지 않습니다. 그래서 상태 파일 서식이 예상과 달라도 위치가 틀리지 않습니다.</li>
+    <li><strong>퍼센트는 없습니다.</strong> AI-DLC는 적응형 워크플로우라 대부분의 단계가 조건부이고, Construction은 유닛별로 반복되는데 그 유닛 수는 Units Generation이 끝나기 전에는 존재하지 않습니다. 분모를 정할 수 없으니 도달한 단계 수를 셉니다.</li>
+    <li>산출물이 없는데 워크플로우가 이미 그 단계를 지나갔다면 <strong>skipped</strong>(빗살무늬)로 표시됩니다. 정상입니다. 그린필드에서는 Reverse Engineering이 생략되고, 설계 단계도 필요 없다고 판단되면 건너뜁니다.</li>
+    <li><strong>Operations는 AI-DLC v1에서 placeholder입니다.</strong> 규칙이 워크플로우가 Construction의 Build and Test에서 끝난다고 명시하므로, 도달하지 않은 Operations는 분모에서 제외되고 Build and Test를 마쳤다면 완료로 표시됩니다.</li>
+    <li>단계 폴더와 파일의 배지는 그대로입니다: <strong>I</strong>(파랑), <strong>C</strong>(보라), <strong>O</strong>(초록). 진행 표시 자신은 보라를 씁니다. 초록은 아직 읽지 않은 <code>NEW</code> 산출물을 뜻하기 때문입니다.</li>
+    <li>알려진 단계 구조에 맞지 않는 산출물은 짐작하지 않고 펼침 스트립 하단에 그대로 알려줍니다.</li>
   </ul>
 </div>
 

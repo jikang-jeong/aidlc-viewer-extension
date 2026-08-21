@@ -424,6 +424,49 @@ test('current position is the furthest evidenced checkpoint, not the newest file
 });
 
 // ---------------------------------------------------------------------------
+// Operations is a placeholder in AI-DLC v1
+// ---------------------------------------------------------------------------
+
+test('Operations is flagged as a placeholder', () => {
+  const cp = byId(buildJourney({ artifacts: GREENFIELD }));
+  assert.equal(cp.get('operations').placeholder, true);
+  // No other checkpoint is a placeholder.
+  const flagged = buildJourney({ artifacts: GREENFIELD }).checkpoints.filter((c) => c.placeholder);
+  assert.deepEqual(flagged.map((c) => c.id), ['operations']);
+});
+
+test('an unreached Operations placeholder is excluded from plannedTotal', () => {
+  // v1 rules: "The AI-DLC workflow currently ends after the Build and Test phase
+  // in CONSTRUCTION." A project that finished Build and Test must read complete.
+  const artifacts = [
+    ...md('inception/requirements', ['requirements'], 1000),
+    ...md('inception/application-design', ['unit-of-work'], 1100),
+    ...md('construction/backend/code', ['summary'], 1200),
+    ...md('construction/build-and-test', ['summary'], 1300)
+  ];
+  const journey = buildJourney({ artifacts, rulesInstalled: true });
+  const cp = byId(journey);
+  assert.equal(cp.get('operations').status, STATUS.PENDING);
+  assert.equal(journey.counts.done, journey.plannedTotal, 'should read as complete');
+});
+
+test('Operations counts toward plannedTotal once it produces artifacts', () => {
+  const withOps = buildJourney({ artifacts: [...GREENFIELD] });
+  assert.equal(byId(withOps).get('operations').status, STATUS.DONE);
+  const withoutOps = buildJourney({ artifacts: GREENFIELD.filter((a) => !a.relPath.startsWith('operations/')) });
+  assert.equal(withOps.plannedTotal, withoutOps.plannedTotal + 1);
+});
+
+test('plannedTotal excludes skipped stages as well', () => {
+  const journey = buildJourney({ artifacts: GREENFIELD });
+  assert.equal(
+    journey.plannedTotal,
+    journey.checkpoints.length - journey.counts.skipped,
+    'greenfield reached Operations, so only the skipped stage is excluded'
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Degenerate input
 // ---------------------------------------------------------------------------
 

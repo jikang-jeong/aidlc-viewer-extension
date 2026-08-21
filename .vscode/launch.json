@@ -2,13 +2,46 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Markdown Watch Viewer",
+      // Plain dev host, no folder opened. Pick a folder from the AI-DLC view yourself.
+      "name": "Run AI-DLC Viewer",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "preLaunchTask": "npm: verify"
+    },
+    {
+      // Opens an AI-DLC project directly, so the tree and the journey strip have
+      // real artifacts to render. Enter the folder that CONTAINS aidlc-docs.
+      "name": "Run AI-DLC Viewer (open an AI-DLC project…)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}", "${input:aidlcProject}"],
+      "preLaunchTask": "npm: verify"
+    },
+    {
+      // Same, but with a throwaway profile so first-run behaviour is reproducible:
+      // the welcome guide, the "AI-DLC artifacts detected" prompt and the per-version
+      // setup notice all fire again instead of being remembered from a previous run.
+      "name": "Run AI-DLC Viewer (clean profile, open an AI-DLC project…)",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",
       "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}"
-      ]
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--profile-temp",
+        "${input:aidlcProject}"
+      ],
+      "preLaunchTask": "npm: verify"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "aidlcProject",
+      "type": "promptString",
+      "description": "Path to an AI-DLC project (the folder that contains aidlc-docs)",
+      "default": ""
     }
   ]
 }

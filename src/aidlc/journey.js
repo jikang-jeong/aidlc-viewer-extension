@@ -134,7 +134,20 @@ const CHECKPOINTS = [
   { id: 'infrastructure-design', label: 'Infrastructure design', phase: PHASE.CONSTRUCTION, kind: 'unit', unitDir: 'infrastructure-design', plan: /^(?:(.+)-)?infrastructure-design-plan\.md$/i, conditional: true },
   { id: 'code-generation', label: 'Code generation', phase: PHASE.CONSTRUCTION, kind: 'unit', unitDir: 'code', plan: /^(?:(.+)-)?code-generation-plan\.md$/i },
   { id: 'build-and-test', label: 'Build and test', phase: PHASE.CONSTRUCTION, kind: 'dir', dir: ['construction', 'build-and-test'] },
-  { id: 'operations', label: 'Operations', phase: PHASE.OPERATIONS, kind: 'dir', dir: ['operations'] }
+  {
+    // v1 does not implement this phase. operations.md states it plainly:
+    //   "This phase is currently a placeholder and will be expanded in future
+    //    versions. The AI-DLC workflow currently ends after the Build and Test
+    //    phase in CONSTRUCTION."
+    // So it is excluded from the planned count until it actually produces
+    // artifacts. Counting it would mean no v1 project could ever read complete.
+    id: 'operations',
+    label: 'Operations',
+    phase: PHASE.OPERATIONS,
+    kind: 'dir',
+    dir: ['operations'],
+    placeholder: true
+  }
 ];
 
 const CHECKPOINT_INDEX_BY_ID = new Map(CHECKPOINTS.map((cp, i) => [cp.id, i]));
@@ -324,6 +337,7 @@ function buildJourney(input) {
       label: cp.label,
       phase: cp.phase,
       conditional: Boolean(cp.conditional),
+      placeholder: Boolean(cp.placeholder),
       artifactCount,
       planned: Boolean(planned),
       status: STATUS.PENDING
@@ -403,6 +417,13 @@ function buildJourney(input) {
   const counts = { done: 0, active: 0, pending: 0, skipped: 0 };
   for (const node of checkpoints) counts[node.status] += 1;
 
+  // Denominator for "how far along is this project". A checkpoint is excluded when
+  // it was skipped by the adaptive workflow (not work left to do) or when it is a
+  // placeholder the workflow never reaches and it produced nothing.
+  const plannedTotal = checkpoints.filter(
+    (node) => node.status !== STATUS.SKIPPED && !(node.placeholder && node.status !== STATUS.DONE)
+  ).length;
+
   return {
     checkpoints,
     units,
@@ -410,6 +431,7 @@ function buildJourney(input) {
     recentIndex,
     openIndex,
     counts,
+    plannedTotal,
     // Sorted so the UI renders a stable list and tests are order-independent:
     // directory walk order is filesystem-dependent.
     unattributed: unattributed.sort()

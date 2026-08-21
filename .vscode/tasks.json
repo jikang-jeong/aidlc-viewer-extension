@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Runs before every debug launch so the dev host never starts on code that
+      // fails the syntax check or the tests.
+      "type": "npm",
+      "script": "verify",
+      "problemMatcher": [],
+      "label": "npm: verify",
+      "detail": "node --check src/extension.js && node --test tests/*.test.js",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "type": "npm",
+      "script": "test",
+      "problemMatcher": [],
+      "label": "npm: test",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    }
+  ]
+}

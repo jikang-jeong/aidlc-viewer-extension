@@ -4,6 +4,18 @@
 
 ## What's New
 
+### 0.0.19
+
+- **AI-DLC journey strip in the viewer** — opening a `.md` artifact now shows a strip across the top of the editor/preview split: the furthest stage reached, a continuous rail with one segment per stage, and how many stages are done. Click it to expand into the full stage list grouped by phase. The position stays visible while you read instead of having to go look for it.
+- **The progress percentage is gone.** It could not be computed honestly. AI-DLC is adaptive, so most stages are conditional, and Construction repeats per unit of work with a unit count that does not exist until Units Generation has run. The old weighted figure reported **0% on real projects full of artifacts**; reached-stage counts replaced it in both the tree and the strip.
+- **Progress is derived from the artifact tree, not from file contents.** Which folders exist under `aidlc-docs/`, plus the plan files under `plans/`. Nothing is parsed out of markdown, so a state file in an unexpected format can no longer make the position wrong. Status comes from three kinds of evidence, because absence of a stage's own artifact is not absence of the stage: its artifacts exist, its mandated plan file exists, or a later stage has already produced artifacts.
+- **Skipped stages are shown as skipped**, hatched rather than blank, instead of looking like a gap. A stage the workflow moved past without producing anything was skipped, not left pending — normal on greenfield projects and whenever the workflow decides a design stage adds nothing.
+- **Operations is treated as the v1 placeholder it is.** The rules state the workflow ends after Build and Test in Construction, so an unreached Operations stage is excluded from the count and a project that finished Build and Test now reads as complete.
+- **Unrecognised artifacts are reported, not guessed at.** An artifact that matches no known stage layout is listed at the bottom of the expanded strip.
+- **Purple is the progress colour**, matching the existing Construction badge. Green was avoided on purpose: it already marks unread `NEW` artifacts.
+- **Viewer guide rewritten** for the journey strip, in English and Korean.
+- **Test harness and CI** — 58 tests on `node:test` with no added dependencies, plus a GitHub Actions workflow that runs them on Node 20 and 22, builds the vsix, and fails if a runtime asset (`media/mermaid.min.js`, the bundled rules, the Persona Proxy extension) went missing from the package.
+
 ### 0.0.18
 
 - **Persona Proxy: position-bias mitigation** — persona recommendations were skewing toward option A (LLM position bias). Two rules added: (1) the persona must evaluate every option on its content before choosing, and the rationale must state why at least one non-chosen option was rejected — praising only the chosen option is a violation; (2) recommendations must be position-independent — option order carries no meaning, and a recommendation must hold if the options were presented in any other order.
