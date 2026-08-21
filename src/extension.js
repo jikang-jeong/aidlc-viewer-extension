@@ -1,5 +1,6 @@
 const vscode = require('vscode');
 const path = require('path');
+const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
 const OPENED_KEY = 'markdownWatchViewer.openedFiles';
@@ -90,6 +91,7 @@ class WatchController {
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       this.treeDataProvider.refresh();
+      this.broadcastJourney();
     }, 200);
   }
 
@@ -398,11 +400,60 @@ class WatchController {
   async updatePreview(panel, fileUri) {
     const bytes = await vscode.workspace.fs.readFile(fileUri);
     const content = Buffer.from(bytes).toString('utf8');
+    const journey = await this.getJourneyPayload(fileUri);
     panel.title = path.basename(fileUri.fsPath);
     if (!panel.webview.html) {
-      panel.webview.html = getWebviewHtml(panel.webview, fileUri, content, this.context.extensionUri);
+      panel.webview.html = getWebviewHtml(panel.webview, fileUri, content, this.context.extensionUri, journey);
     } else {
       panel.webview.postMessage({ type: 'setContent', content, path: fileUri.fsPath });
+      panel.webview.postMessage({ type: 'setJourney', journey });
+    }
+  }
+
+  // Journey model for the viewer's header strip, with the checkpoint of the file
+  // being viewed resolved on top of the cached project-wide model.
+  //
+  // Returns undefined whenever the journey cannot be determined (no watched
+  // folder, no artifacts, unreadable workspace). The webview then renders no strip
+  // at all and behaves exactly as it did before this feature existed.
+  async getJourneyPayload(fileUri) {
+    try {
+      const folder = this.context.workspaceState.get(STATE_KEY);
+      if (!folder) {
+        return undefined;
+      }
+      const summary = await this.treeDataProvider.getStageSummary(vscode.Uri.file(folder));
+      const journey = summary && summary.journey;
+      if (!journey || journey.currentIndex < 0) {
+        return undefined; // nothing has run yet; a strip would be noise
+      }
+
+      let openIndex = -1;
+      if (fileUri && summary.stageRoot) {
+        const relPath = toStageRootRelative(summary.stageRoot, fileUri);
+        if (!relPath.startsWith('..')) {
+          const id = checkpointIdForPath(relPath);
+          if (id) {
+            openIndex = CHECKPOINTS.findIndex((cp) => cp.id === id);
+          }
+        }
+      }
+
+      return { ...journey, openIndex };
+    } catch {
+      return undefined; // never let the strip break the viewer
+    }
+  }
+
+  // External changes can move the project forward while viewers are open, and each
+  // panel needs its own openIndex, so every panel is refreshed individually.
+  broadcastJourney() {
+    for (const [key, panel] of this.previewPanels) {
+      this.getJourneyPayload(vscode.Uri.parse(key))
+        .then((journey) => panel.webview.postMessage({ type: 'setJourney', journey }))
+        .catch(() => {
+          // a disposed panel or an unreadable workspace is not worth surfacing
+        });
     }
   }
 
@@ -718,6 +769,10 @@ class MarkdownTreeDataProvider {
       operations: 0
     };
     let latest = undefined;
+    // Artifact paths relative to the stage root, reused to build the journey model
+    // below. Collected inside the walk that already happens, so the journey costs
+    // no extra filesystem calls.
+    const artifacts = [];
 
     for (const stage of ['inception', 'construction', 'operations']) {
       const stageDir = vscode.Uri.joinPath(stageRoot, stage);
@@ -731,14 +786,17 @@ class MarkdownTreeDataProvider {
       counts[stage] = files.length;
 
       for (const fileUri of files) {
+        let mtime = 0;
         try {
           const stat = await vscode.workspace.fs.stat(fileUri);
+          mtime = stat.mtime;
           if (!latest || stat.mtime > latest.mtime) {
             latest = { stage, fileUri, mtime: stat.mtime };
           }
         } catch {
-          continue;
+          // keep the artifact; only its mtime is unknown
         }
+        artifacts.push({ relPath: toStageRootRelative(stageRoot, fileUri), mtime });
       }
     }
 
@@ -766,7 +824,14 @@ class MarkdownTreeDataProvider {
       inProgressLabel,
       latestFile: latest?.fileUri,
       latestModifiedLabel: latest?.fileUri ? path.basename(latest.fileUri.fsPath) : undefined,
-      latestMtime: latest?.mtime
+      latestMtime: latest?.mtime,
+      // For the viewer's journey strip. Derived from directory structure only, so
+      // it stays correct when aidlc-state.md is missing or in an unexpected format.
+      stageRoot,
+      journey: buildJourney({
+        artifacts,
+        rulesInstalled: await detectRulesInstalled(rootUri)
+      })
     };
 
     this.stageSummaryCache.set(cacheKey, summary);
@@ -1117,6 +1182,31 @@ async function resolveStageRoot(rootUri) {
     // no aidlc-docs folder
   }
   return rootUri;
+}
+
+// Journey artifacts are addressed by their path relative to the stage root, e.g.
+// 'construction/<unit>/code/code-summary.md'. Normalised to forward slashes so the
+// pure journey model never sees a platform-specific separator.
+function toStageRootRelative(stageRoot, fileUri) {
+  return path.relative(stageRoot.fsPath, fileUri.fsPath).split(path.sep).join('/');
+}
+
+// Whether AI-DLC rules are installed in the project, checked in the same order
+// core-workflow.md resolves the rule details directory. Only drives the journey's
+// first checkpoint, so a miss is cosmetic.
+async function detectRulesInstalled(rootUri) {
+  const candidates = [
+    ['.aidlc', 'aidlc-rules'],
+    ['.aidlc-rule-details'],
+    ['.kiro', 'aws-aidlc-rule-details'],
+    ['.amazonq', 'aws-aidlc-rule-details']
+  ];
+  for (const segments of candidates) {
+    if (await pathExists(vscode.Uri.joinPath(rootUri, ...segments))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function detectStageFromPath(filePath) {
@@ -1511,8 +1601,9 @@ function getNonce() {
   return text;
 }
 
-function getWebviewHtml(webview, fileUri, markdown, extensionUri) {
+function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
   const safeInitialValue = JSON.stringify(markdown);
+  const safeJourney = JSON.stringify(journey || null);
   const title = escapeHtml(fileUri.fsPath);
   const mermaidUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
   const nonce = getNonce();
@@ -1541,12 +1632,93 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri) {
         color: var(--text);
         background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 92%, #8fb8ff 8%), var(--bg));
         font-family: var(--vscode-font-family);
+        /* Column layout so the journey strip can sit above the split panes and
+           the panes take the remaining height. */
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
       }
 
       .shell {
         display: grid;
         grid-template-columns: var(--split-left, 33%) 6px 1fr;
-        height: 100vh;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      /* ---------- AI-DLC journey strip ----------
+         Always visible above the editor/preview split so the current position is
+         perceived passively while reading. Collapsed by default (phase-grouped
+         ticks); click to expand into numbered checkpoints. Hidden entirely when
+         no journey could be determined, leaving the viewer exactly as before. */
+      .journey {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 5px 12px;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in srgb, var(--panel) 94%, transparent);
+        font-size: 11px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .journey[hidden] { display: none; }
+      .journey:hover { background: color-mix(in srgb, var(--panel) 80%, transparent); }
+
+      .j-phase {
+        flex: none;
+        font-size: 9px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .j-ticks { display: flex; gap: 2px; flex: 1 1 auto; min-width: 24px; }
+      .j-tick {
+        height: 5px;
+        border-radius: 2px;
+        flex: 1 1 auto;
+        min-width: 4px;
+        background: var(--vscode-editorWidget-border, #3c3c3c);
+      }
+      .j-tick.done { background: var(--vscode-charts-green, #98c379); }
+      .j-tick.active { background: var(--vscode-charts-yellow, #e5c07b); }
+      .j-tick.skipped { background: transparent; border: 1px dashed var(--border); height: 3px; }
+      .j-tick.current { box-shadow: 0 0 0 1px var(--vscode-focusBorder, #569cd6); }
+      .j-tick.open { background-image: linear-gradient(90deg, transparent 35%, var(--vscode-focusBorder, #569cd6) 35% 65%, transparent 65%); }
+
+      .j-now { flex: none; font-weight: 600; color: var(--vscode-focusBorder, #569cd6); }
+      .j-counts { flex: none; color: var(--muted); }
+      .j-chevron { flex: none; color: var(--muted); font-size: 10px; }
+
+      /* expanded: numbered checkpoints */
+      .journey.expanded { flex-wrap: wrap; align-items: flex-start; padding-bottom: 8px; }
+      .journey.expanded .j-collapsed { display: none; }
+      .j-expanded { display: none; width: 100%; }
+      .journey.expanded .j-expanded { display: block; }
+      .j-collapsed { display: flex; align-items: center; gap: 10px; width: 100%; }
+
+      .j-steps { display: flex; align-items: flex-start; gap: 0; width: 100%; }
+      .j-step { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 0 0 auto; }
+      .j-dot {
+        width: 16px; height: 16px; border-radius: 50%;
+        border: 1.5px solid var(--border);
+        color: var(--muted);
+        font-size: 8px;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .j-dot.done { background: var(--vscode-charts-green, #98c379); border-color: var(--vscode-charts-green, #98c379); color: var(--bg); }
+      .j-dot.active { background: var(--vscode-charts-yellow, #e5c07b); border-color: var(--vscode-charts-yellow, #e5c07b); color: var(--bg); }
+      .j-dot.skipped { border-style: dashed; opacity: 0.45; }
+      .j-dot.current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-focusBorder, #569cd6) 45%, transparent); }
+      .j-dot.open { border-color: var(--vscode-focusBorder, #569cd6); border-width: 2px; }
+      .j-label { font-size: 9px; color: var(--muted); max-width: 70px; text-align: center; line-height: 1.25; }
+      .j-line { height: 1px; background: var(--border); flex: 1 1 auto; min-width: 4px; margin-top: 8px; }
+      .j-legend { margin-top: 6px; color: var(--muted); font-size: 10px; }
+      .j-warn { color: var(--vscode-charts-yellow, #e5c07b); }
+
+      @media (prefers-reduced-motion: reduce) {
+        .journey, .j-tick, .j-dot { transition: none; }
       }
 
       .pane {
@@ -1920,6 +2092,10 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri) {
     </style>
   </head>
   <body>
+    <div class="journey" id="journey" role="group" aria-label="AI-DLC journey" tabindex="0" hidden>
+      <div class="j-collapsed" id="jCollapsed"></div>
+      <div class="j-expanded" id="jExpanded"></div>
+    </div>
     <div class="shell">
       <section class="pane raw">
         <div class="header">
@@ -1976,6 +2152,163 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri) {
         renderTimer = setTimeout(() => renderMarkdown(text), 120);
       }
 
+      // ---------- AI-DLC journey strip ----------
+      // Collapsed by default: one tick per checkpoint, grouped by phase, with only
+      // the current checkpoint named. Click to expand into numbered checkpoints with
+      // labels. Renders nothing at all when the host could not determine a journey,
+      // so a non-AI-DLC file or an unreadable workspace leaves the viewer untouched.
+      let journey = ${safeJourney};
+      const journeyEl = document.getElementById('journey');
+      const jCollapsedEl = document.getElementById('jCollapsed');
+      const jExpandedEl = document.getElementById('jExpanded');
+      const PHASE_LABEL = { setup: 'Setup', inception: 'Inception', construction: 'Construction', operations: 'Operations' };
+
+      function statusClass(cp, index) {
+        const parts = [cp.status];
+        if (index === journey.currentIndex) parts.push('current');
+        if (index === journey.openIndex) parts.push('open');
+        return parts.join(' ');
+      }
+
+      function tooltipFor(cp, index) {
+        const bits = [(index + 1) + '. ' + cp.label, cp.status];
+        if (cp.unitProgress && cp.unitProgress.total > 0) {
+          bits.push(cp.unitProgress.done + '/' + cp.unitProgress.total + ' units');
+        }
+        if (cp.planned) bits.push('planned');
+        if (index === journey.currentIndex) bits.push('current position');
+        if (index === journey.openIndex) bits.push('this file');
+        return bits.join(' — ');
+      }
+
+      function renderCollapsed() {
+        const groups = [];
+        let last;
+        journey.checkpoints.forEach((cp, i) => {
+          if (!last || last.phase !== cp.phase) {
+            last = { phase: cp.phase, items: [] };
+            groups.push(last);
+          }
+          last.items.push({ cp: cp, i: i });
+        });
+
+        const frag = document.createDocumentFragment();
+        for (const group of groups) {
+          const label = document.createElement('span');
+          label.className = 'j-phase';
+          label.textContent = PHASE_LABEL[group.phase] || group.phase;
+          frag.appendChild(label);
+
+          const ticks = document.createElement('span');
+          ticks.className = 'j-ticks';
+          for (const entry of group.items) {
+            const tick = document.createElement('span');
+            tick.className = 'j-tick ' + statusClass(entry.cp, entry.i);
+            tick.title = tooltipFor(entry.cp, entry.i);
+            ticks.appendChild(tick);
+          }
+          frag.appendChild(ticks);
+        }
+
+        const now = document.createElement('span');
+        now.className = 'j-now';
+        const cur = journey.checkpoints[journey.currentIndex];
+        now.textContent = cur ? cur.label : '';
+        frag.appendChild(now);
+
+        const counts = document.createElement('span');
+        counts.className = 'j-counts';
+        const c = journey.counts || {};
+        const bits = [(c.done || 0) + ' done'];
+        if (c.active) bits.push(c.active + ' in progress');
+        if (c.skipped) bits.push(c.skipped + ' skipped');
+        if (c.pending) bits.push(c.pending + ' left');
+        counts.textContent = bits.join(' · ');
+        frag.appendChild(counts);
+
+        const chevron = document.createElement('span');
+        chevron.className = 'j-chevron';
+        chevron.textContent = journeyEl.classList.contains('expanded') ? '⌃' : '⌄';
+        frag.appendChild(chevron);
+
+        jCollapsedEl.replaceChildren(frag);
+      }
+
+      function renderExpanded() {
+        const steps = document.createElement('div');
+        steps.className = 'j-steps';
+
+        journey.checkpoints.forEach((cp, i) => {
+          if (i > 0) {
+            const line = document.createElement('div');
+            line.className = 'j-line';
+            steps.appendChild(line);
+          }
+          const step = document.createElement('div');
+          step.className = 'j-step';
+          step.title = tooltipFor(cp, i);
+
+          const dot = document.createElement('div');
+          dot.className = 'j-dot ' + statusClass(cp, i);
+          dot.textContent = String(i + 1);
+          step.appendChild(dot);
+
+          const label = document.createElement('div');
+          label.className = 'j-label';
+          label.textContent = cp.label;
+          if (cp.unitProgress && cp.unitProgress.total > 0) {
+            label.textContent += ' ' + cp.unitProgress.done + '/' + cp.unitProgress.total;
+          }
+          step.appendChild(label);
+          steps.appendChild(step);
+        });
+
+        const legend = document.createElement('div');
+        legend.className = 'j-legend';
+        const openCp = journey.checkpoints[journey.openIndex];
+        const legendBits = ['Filled = done', 'dashed = skipped by the adaptive workflow'];
+        if (openCp) legendBits.push('outlined = this file (' + openCp.label + ')');
+        if (journey.units && journey.units.length) {
+          legendBits.push(journey.units.length + ' unit' + (journey.units.length === 1 ? '' : 's') + ': ' + journey.units.join(', '));
+        }
+        legend.textContent = legendBits.join(' · ');
+
+        jExpandedEl.replaceChildren(steps, legend);
+
+        if (journey.unattributed && journey.unattributed.length) {
+          const warn = document.createElement('div');
+          warn.className = 'j-legend j-warn';
+          warn.textContent = journey.unattributed.length +
+            ' artifact' + (journey.unattributed.length === 1 ? '' : 's') +
+            ' could not be mapped to a checkpoint: ' + journey.unattributed.join(', ');
+          jExpandedEl.appendChild(warn);
+        }
+      }
+
+      function renderJourney() {
+        const usable = journey && Array.isArray(journey.checkpoints) && journey.checkpoints.length > 0;
+        journeyEl.hidden = !usable;
+        if (!usable) return;
+        renderCollapsed();
+        if (journeyEl.classList.contains('expanded')) renderExpanded();
+      }
+
+      function toggleJourney() {
+        if (journeyEl.hidden) return;
+        journeyEl.classList.toggle('expanded');
+        journeyEl.setAttribute('aria-expanded', journeyEl.classList.contains('expanded') ? 'true' : 'false');
+        renderJourney();
+      }
+
+      journeyEl.addEventListener('click', toggleJourney);
+      journeyEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleJourney();
+        }
+      });
+      renderJourney();
+
       editor.addEventListener('input', () => {
         scheduleRender(editor.value);
         status.textContent = isDirty() ? 'Unsaved changes' : 'Ready';
@@ -1987,6 +2320,11 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri) {
       window.addEventListener('message', (event) => {
         const msg = event.data;
         if (!msg) return;
+        if (msg.type === 'setJourney') {
+          journey = msg.journey || null;
+          renderJourney();
+          return;
+        }
         if (msg.type === 'setContent') {
           const incoming = msg.content || '';
           if (incoming === editor.value) return;
