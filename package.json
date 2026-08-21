@@ -140,6 +140,9 @@
     }
   },
   "scripts": {
+    "check": "node --check src/extension.js",
+    "test": "node --test \"tests/*.test.js\"",
+    "verify": "npm run check && npm test",
     "package": "vsce package"
   }
 }

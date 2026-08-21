@@ -3,6 +3,7 @@
 .vscode/**
 .claude/**
 .gitignore
+tests/**
 media/marketplace-icon.svg
 media/icon-drafts/**
 *.log

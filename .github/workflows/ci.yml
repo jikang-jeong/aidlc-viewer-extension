@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor bundled with VS Code 1.90; 22 is the current LTS.
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # No dependencies: the extension ships plain CommonJS and the tests use
+      # node:test. Nothing to install, so nothing to cache.
+      - name: Syntax check extension entry point
+        run: npm run check
+      - name: Run tests
+        run: npm test
+
+  package:
+    name: package (vsix smoke test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Catches .vscodeignore mistakes and manifest errors before a release,
+      # e.g. dropping media/mermaid.min.js which the webview loads at runtime.
+      - name: Build vsix
+        run: npx --yes @vscode/vsce package --out /tmp/aidlc-viewer.vsix
+      - name: Assert runtime assets are inside the vsix
+        run: |
+          npx --yes @vscode/vsce ls > /tmp/vsix-files.txt
+          cat /tmp/vsix-files.txt
+          for required in \
+            src/extension.js \
+            src/aidlc/journey.js \
+            media/mermaid.min.js \
+            media/activity-icon.svg \
+            rules/aidlc-rules/aws-aidlc-rules/core-workflow.md \
+            rules/aidlc-rules/aws-aidlc-rule-details/extensions/collaboration/persona-proxy/persona-proxy.md
+          do
+            grep -qxF "$required" /tmp/vsix-files.txt \
+              || { echo "::error::missing from vsix: $required"; exit 1; }
+          done
+      - name: Assert test assets are excluded from the vsix
+        run: |
+          if grep -q '^tests/' /tmp/vsix-files.txt; then
+            echo "::error::tests/ leaked into the vsix; add it to .vscodeignore"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: /tmp/aidlc-viewer.vsix
+          retention-days: 7
