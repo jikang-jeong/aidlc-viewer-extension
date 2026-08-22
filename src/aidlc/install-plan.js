@@ -42,6 +42,18 @@ const OP = {
   WRITE_RECEIPT: 'write-receipt'
 };
 
+// Paths inside the engine tree that belong to v1, not to v2.
+//
+// The two generations share `.kiro/`. v2 owns it wholesale except for these, which
+// v1's own installer put there and which a v2 install must carry through its
+// replacement of that tree. Without this, installing v2 into a project that had v1
+// silently deleted v1's rules -- while previewInstall told the user v1 files would
+// be left exactly as they are.
+//
+// Listed as top-level names under `.kiro/` rather than as full paths, because that
+// is the granularity the replace operation preserves at.
+const V1_PATHS_INSIDE_ENGINE = ['steering', 'aws-aidlc-rule-details'];
+
 // Top-level entries of the upstream payload, split by how each may be treated.
 //
 // Anything the payload carries that is not named here is copied as a plain file,
@@ -70,8 +82,13 @@ function planInstall({ payloadEntries, state, harness, upstreamCommit }) {
         from: entry.name,
         to: entry.name,
         // The receipt lives inside this tree and must survive its replacement,
-        // or removal loses the record of what to remove.
-        preserve: [path.join(...RECEIPT_PATH.slice(1))]
+        // or removal loses the record of what to remove. v1's rules live there
+        // too, and the preview promises they are left alone, so they are carried
+        // through as well.
+        preserve: [
+          path.join(...RECEIPT_PATH.slice(1)),
+          ...V1_PATHS_INSIDE_ENGINE
+        ]
       });
       continue;
     }
@@ -213,6 +230,7 @@ function planRemoval(state) {
 
 module.exports = {
   OP,
+  V1_PATHS_INSIDE_ENGINE,
   MARKER_BEGIN,
   MARKER_END,
   ENGINE_ENTRY,

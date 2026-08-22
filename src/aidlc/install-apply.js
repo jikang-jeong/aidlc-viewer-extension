@@ -18,6 +18,7 @@
 // Pure module: never import `vscode`. The caller owns all user interaction.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const { OP } = require('./install-plan');
@@ -65,24 +66,43 @@ function copyFile(from, to) {
   fs.copyFileSync(from, to);
 }
 
-// Replace a tree, keeping named files that live inside it.
+// Replace a tree, keeping named files and subtrees that live inside it.
 //
 // The receipt is inside `.kiro/` because that is the tree the installer owns, so
-// replacing that tree would destroy the record of what to remove. Preserved files
-// are read into memory first because they are small and few, and reading them
-// back from a directory that is about to be deleted is not an option.
+// replacing that tree would destroy the record of what to remove. v1's rules sit
+// in there too, under directories v2 knows nothing about, and the install preview
+// promises they are left alone -- so a preserve entry may name a whole subtree and
+// not only a file.
+//
+// Preserved content is moved aside rather than read into memory, because v1's rule
+// details run to dozens of files and buffering a subtree of unknown size to delete
+// its parent is the kind of thing that works until it does not.
 function replaceTree(payloadDir, root, op, written) {
   const target = resolveInside(root, op.to);
   const source = path.join(payloadDir, op.from);
   if (!target) return { ok: false, reason: 'escapes-root', text: op.to };
 
-  const preserved = new Map();
+  let holding;
+  const moved = [];
   for (const rel of op.preserve ?? []) {
-    const full = path.join(target, rel);
+    const from = path.join(target, rel);
+    if (!fs.existsSync(from)) continue; // absent is normal on a first install
+    holding = holding ?? fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-preserve-'));
+    const to = path.join(holding, rel);
     try {
-      preserved.set(rel, fs.readFileSync(full));
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.renameSync(from, to);
+      moved.push(rel);
     } catch {
-      // Absent is normal: a first install has no receipt to preserve.
+      // A rename can fail across devices. Falling back to a copy keeps the
+      // guarantee that preserved content survives, which matters more than speed.
+      try {
+        fs.cpSync(from, to, { recursive: true });
+        moved.push(rel);
+      } catch {
+        // Could not set it aside, so the replacement below would destroy it.
+        return { ok: false, reason: 'preserve-failed', text: rel };
+      }
     }
   }
 
@@ -96,10 +116,22 @@ function replaceTree(payloadDir, root, op, written) {
     copyFile(path.join(source, rel), path.join(target, rel));
     written.push(path.join(op.to, rel));
   }
-  for (const [rel, bytes] of preserved) {
-    const full = path.join(target, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, bytes);
+  for (const rel of moved) {
+    const from = path.join(holding, rel);
+    const to = path.join(target, rel);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    try {
+      fs.renameSync(from, to);
+    } catch {
+      fs.cpSync(from, to, { recursive: true });
+    }
+  }
+  if (holding) {
+    try {
+      fs.rmSync(holding, { recursive: true, force: true });
+    } catch {
+      // A leftover temp directory is not worth failing an install over.
+    }
   }
   return { ok: true };
 }

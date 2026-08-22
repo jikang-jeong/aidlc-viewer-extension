@@ -322,6 +322,77 @@ test('removal after a reinstall still removes everything, using the latest recei
   assert.equal(fs.existsSync(path.join(root, '.kiro')), false);
 });
 
+test('a v2 install into a project that has v1 keeps v1 rules that live inside .kiro/', () => {
+  // The two generations share .kiro/. v2 owns it wholesale except for the
+  // directories v1's own installer created there, and previewInstall tells the user
+  // v1 files are left exactly as they are. Before this was handled, installing v2
+  // over v1 deleted v1's steering rules and rule details -- silently, while the
+  // preview promised otherwise.
+  const src = makePayload();
+  const root = emptyProject();
+  const v1Files = [
+    '.kiro/steering/aws-aidlc-rules/core-workflow.md',
+    '.kiro/aws-aidlc-rule-details/common/x.md',
+    '.kiro/aws-aidlc-rule-details/inception/y.md',
+    '.aidlc-rule-details/z.md',
+    'CLAUDE.md'
+  ];
+  for (const rel of v1Files) {
+    const full = path.join(root, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, `v1:${rel}`);
+  }
+
+  const { result } = install(src, root);
+  assert.equal(result.ok, true);
+
+  for (const rel of v1Files) {
+    const full = path.join(root, rel);
+    assert.ok(fs.existsSync(full), `v2 install removed a v1 file: ${rel}`);
+    assert.equal(fs.readFileSync(full, 'utf8'), `v1:${rel}`, `v2 install modified ${rel}`);
+  }
+  // And v2 still landed.
+  assert.ok(fs.existsSync(path.join(root, '.kiro', 'agents', 'aidlc.json')));
+});
+
+test('preserved subtrees survive a reinstall as well as a first install', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  const rel = '.kiro/aws-aidlc-rule-details/common/x.md';
+  fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+  fs.writeFileSync(path.join(root, rel), 'v1 content');
+
+  install(src, root);
+  install(src, root);
+
+  assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), 'v1 content');
+  // The receipt is preserved by the same mechanism, so it must also still be there.
+  assert.ok(fs.existsSync(path.join(root, ...state.RECEIPT_PATH)));
+});
+
+test('a preserved path that does not exist is not an error', () => {
+  // A first install has no receipt and no v1 rules to carry through.
+  const src = makePayload();
+  const root = emptyProject();
+  const { result } = install(src, root);
+  assert.equal(result.ok, true);
+});
+
+test('removal never takes back a preserved v1 path', () => {
+  // Those files were not written by this extension, so they are not in the receipt
+  // and removal has no reason to touch them. Asserted because the preserve list and
+  // the removal list are maintained separately.
+  const src = makePayload();
+  const root = emptyProject();
+  const rel = '.kiro/steering/aws-aidlc-rules/core-workflow.md';
+  fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+  fs.writeFileSync(path.join(root, rel), 'v1 content');
+  install(src, root);
+
+  apply.applyRemoval({ root, ops: plan.planRemoval(state.readInstallState(root)).ops });
+  assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), 'v1 content');
+});
+
 // ---------------------------------------------------------------------------
 // Safety
 // ---------------------------------------------------------------------------
