@@ -73,6 +73,16 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
         : undefined,
       unitsInFlight: stage.forEach
         ? unitsInFlightFor(stage, status, unitsCompleted, unitsSeen)
+        : undefined,
+      // The same field name and shape v1 puts on a per-unit checkpoint. The
+      // viewer's journey strip already reads it to show "2/3" on a repeating
+      // stage, so producing it here makes the strip show unit progress on a v2
+      // project with no change to the strip at all.
+      unitProgress: stage.forEach
+        ? {
+            done: unitsDoneFor(stage, status, unitNames, unitsCompleted),
+            total: unitNames.length
+          }
         : undefined
     });
   }
@@ -227,4 +237,37 @@ function buildV2(root, options = {}) {
   };
 }
 
-module.exports = { V2_STATUS, buildFromStages, buildV2, unitsDoneFor, unitsInFlightFor };
+// Which checkpoint an artifact belongs to, for a v2 project.
+//
+// v1 needs a lookup table for this, because its directory names and its stage
+// names are different vocabularies. v2 does not: an artifact's path contains its
+// stage's slug as a directory component, so the answer is a set membership test
+// against the slugs the compiled graph already declared. No pattern, no parsing,
+// and a stage this build has never heard of still matches because the slug came
+// from the project rather than from here.
+//
+// `relPath` is relative to the project root, and the check runs from the deepest
+// component outward: a per-unit artifact sits under
+// `<phase>/<stage>/<unit>/file.md`, and the stage is the one nearer the file.
+function checkpointIndexForPath(journey, relPath) {
+  if (!journey || !Array.isArray(journey.checkpoints) || typeof relPath !== 'string') {
+    return -1;
+  }
+  const bySlug = new Map(journey.checkpoints.map((node, index) => [node.id, index]));
+  const segments = relPath.split(/[\\/]+/).filter(Boolean);
+  // Drop the filename; a stage never matches on it.
+  for (let i = segments.length - 2; i >= 0; i -= 1) {
+    const hit = bySlug.get(segments[i]);
+    if (hit !== undefined) return hit;
+  }
+  return -1;
+}
+
+module.exports = {
+  V2_STATUS,
+  buildFromStages,
+  buildV2,
+  unitsDoneFor,
+  unitsInFlightFor,
+  checkpointIndexForPath
+};

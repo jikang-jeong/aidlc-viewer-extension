@@ -3,6 +3,7 @@ const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
 const { SupervisionViewProvider, VIEW_ID: SUPERVISION_VIEW_ID } = require('./supervision-view');
 const { readProject } = require('./aidlc/index');
+const { checkpointIndexForPath } = require('./aidlc/journey-v2');
 const { detectGeneration } = require('./aidlc/detect');
 const installCommands = require('./install-commands');
 
@@ -503,12 +504,24 @@ class WatchController {
       }
 
       let openIndex = -1;
-      if (fileUri && summary.stageRoot) {
-        const relPath = toStageRootRelative(summary.stageRoot, fileUri);
-        if (!relPath.startsWith('..')) {
-          const id = checkpointIdForPath(relPath);
-          if (id) {
-            openIndex = CHECKPOINTS.findIndex((cp) => cp.id === id);
+      if (fileUri) {
+        // Which checkpoint the open file belongs to, resolved differently per
+        // generation because the two use different vocabularies for it. v1 maps
+        // directory names to stage names through a table; v2 puts the stage's own
+        // slug in the path, so membership against the compiled slug list answers
+        // it without a table to keep in step.
+        if (summary.generation === 'v2') {
+          const rel = path.relative(this.rootUri.fsPath, fileUri.fsPath);
+          if (rel && !rel.startsWith('..')) {
+            openIndex = checkpointIndexForPath(journey, rel);
+          }
+        } else if (summary.stageRoot) {
+          const relPath = toStageRootRelative(summary.stageRoot, fileUri);
+          if (!relPath.startsWith('..')) {
+            const id = checkpointIdForPath(relPath);
+            if (id) {
+              openIndex = CHECKPOINTS.findIndex((cp) => cp.id === id);
+            }
           }
         }
       }

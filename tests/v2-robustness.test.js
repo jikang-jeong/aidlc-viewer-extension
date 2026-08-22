@@ -26,7 +26,9 @@ const detect = require('../src/aidlc/detect');
 const graph = require('../src/aidlc/graph');
 const runtime = require('../src/aidlc/runtime');
 const audit = require('../src/aidlc/audit');
-const { buildV2, buildFromStages, V2_STATUS } = require('../src/aidlc/journey-v2');
+const {
+  buildV2, buildFromStages, V2_STATUS, checkpointIndexForPath
+} = require('../src/aidlc/journey-v2');
 
 // ---------------------------------------------------------------------------
 // Fixture builder: writes a minimal v2 project into a temp dir.
@@ -473,6 +475,85 @@ test('units: a run that never decomposed reports an empty unit list, not a fabri
   const journey = buildFromStages(stagesWith('unit-of-work'), runtimeStub);
   assert.deepEqual(journey.units, []);
   assert.equal(journey.checkpoints[0].unitsPlanned, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Locating the open file on the strip
+// ---------------------------------------------------------------------------
+
+test('the open artifact is located by the stage slug in its path', () => {
+  // v1 needs a lookup table because its directory names and stage names are
+  // different vocabularies. v2 puts the slug in the path, so this is a set
+  // membership test against slugs the project itself declared -- a stage this
+  // build has never heard of still matches.
+  const journey = {
+    checkpoints: [
+      { id: 'intent-capture', label: 'Intent Capture' },
+      { id: 'domain-design', label: 'Domain Design' },
+      { id: 'functional-design', label: 'Functional Design' }
+    ]
+  };
+  const base = 'aidlc/spaces/default/intents/260101-x';
+  assert.equal(
+    checkpointIndexForPath(journey, `${base}/inception/domain-design/components.md`),
+    1
+  );
+  assert.equal(
+    checkpointIndexForPath(journey, `${base}/ideation/intent-capture/intent-statement.md`),
+    0
+  );
+});
+
+test('a per-unit artifact resolves to its stage, not to the unit directory', () => {
+  // A repeating stage writes under <phase>/<stage>/<unit>/file.md, so the search
+  // runs from the deepest component outward and the stage nearer the file wins.
+  const journey = { checkpoints: [{ id: 'functional-design', label: 'FD' }] };
+  assert.equal(
+    checkpointIndexForPath(
+      journey,
+      'aidlc/spaces/default/intents/260101-x/construction/functional-design/u1-core/entities.md'
+    ),
+    0
+  );
+});
+
+test('a file that is not a stage artifact matches nothing', () => {
+  const journey = { checkpoints: [{ id: 'domain-design', label: 'DD' }] };
+  for (const rel of [
+    'aidlc/spaces/default/intents/260101-x/audit/shard.md',
+    'README.md',
+    'src/server.js',
+    'domain-design.md'
+  ]) {
+    assert.equal(checkpointIndexForPath(journey, rel), -1, `must not match ${rel}`);
+  }
+});
+
+test('locating an artifact never throws on a malformed journey or path', () => {
+  for (const journey of [undefined, null, {}, { checkpoints: 'no' }]) {
+    assert.equal(checkpointIndexForPath(journey, 'a/b/c.md'), -1);
+  }
+  const journey = { checkpoints: [{ id: 'x', label: 'X' }] };
+  for (const rel of [undefined, null, '', 'x', 42, {}]) {
+    assert.equal(checkpointIndexForPath(journey, rel), -1);
+  }
+});
+
+test('a repeating stage carries unitProgress in the shape the viewer strip reads', () => {
+  // The strip already renders "2/3" from this field on a v1 project. Producing the
+  // same field here is what makes it work on v2 with no change to the strip.
+  const runtimeStub = {
+    byStage: new Map([['c', { slug: 'c', outcome: 'approved', done: true }]]),
+    units: { units: [{ name: 'u1' }, { name: 'u2' }], batches: [['u1'], ['u2']] }
+  };
+  const node = buildFromStages(stagesWith('unit-of-work'), runtimeStub).checkpoints[0];
+  assert.deepEqual(node.unitProgress, { done: 2, total: 2 });
+});
+
+test('a stage that does not repeat carries no unitProgress', () => {
+  const runtimeStub = { byStage: new Map(), units: undefined };
+  const node = buildFromStages(stagesWith(undefined), runtimeStub).checkpoints[0];
+  assert.equal(node.unitProgress, undefined);
 });
 
 // ---------------------------------------------------------------------------
