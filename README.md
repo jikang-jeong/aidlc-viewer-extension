@@ -4,6 +4,20 @@
 
 ## What's New
 
+### 0.0.20
+
+**AI-DLC v2 support.** v2 replaces rule files your agent reads with an engine that drives the workflow itself — enforced gates, an audit ledger, and stages compiled from the project rather than described in prose. The viewer detects which generation a project uses and shows the matching view. **Nothing about v1 changes:** its journey module is byte-identical to 0.0.19, and v1 labels, tooltips, icons and counts were checked against the 0.0.19 build for equality rather than for looking right.
+
+- **Supervision panel (v2 only)** — in v2 the agent reads the artifacts and you approve a summary. A summary is useful because it leaves things out, so this panel surfaces what it left out: where the run was refused and the events either side of it, what the engine's own sensors flagged grouped per sensor, the units of work and their dependency chain, and the agent's self-report placed next to the engine's check of it. The two are never reconciled — a disagreement is the thing worth seeing.
+- **The journey strip works on v2**, including unit progress like `2/3` on stages that repeat per unit of work, and the position marker for the file you have open. Same strip, same shape, no v2-specific UI to learn.
+- **One setup button that asks which generation.** Two buttons were tried and immediately produced the wrong install, because pressing *Set up AI-DLC* had always meant v1 and nothing on screen said the other icon was for v2. v1 is listed first — most people are on it, and the first row is what Enter picks.
+- **v2 needs bun, and setup says so instead of working around it.** The engine is invoked as `bun <file>` throughout, so installing without it produces a project whose gates never fire and which reports no error. Setup stops and hands over the platform's official install command — plus what it needs (`unzip` on Linux, Windows 10 1809), and a second route (npm, brew, scoop) for a machine or a policy the one-liner cannot get past. It never runs the command itself.
+- **The upstream commit is pinned in source**, so an install matches what this build was verified against rather than tracking a moving branch.
+- **Removal takes back only what the installer wrote.** It refuses without an install receipt, never touches the workflow's own `aidlc/` content — which the workflow grows from 9 seed files to 140-odd, including one the workflow overwrites with learned rules — and preserves v1's rules where the two generations share `.kiro/`.
+- **Nothing is parsed out of Markdown, and nothing is enumerated.** Stage slugs, phase names, sensor ids, scope names, outcome values and event names are all read from the project, so a v2 build this extension has never seen still reads correctly, and anything unrecognised is reported rather than guessed at. Adversarial-input tests assert that no input throws.
+- **Viewer guide updated** for both generations, in English and Korean.
+- **213 tests** on `node:test` with no added dependencies.
+
 ### 0.0.19
 
 - **AI-DLC journey strip in the viewer** — opening a `.md` artifact now shows a strip across the top of the editor/preview split: the furthest stage reached, a continuous rail with one segment per stage, and how many stages are done. Click it to expand into the full stage list grouped by phase. The position stays visible while you read instead of having to go look for it.
@@ -62,15 +76,17 @@
 
 ## Key Features
 
-AI-DLC generates folders and Markdown artifacts across three lifecycle stages (Inception → Construction → Operations). This extension is purpose-built to track and consume those artifacts:
+AI-DLC generates Markdown artifacts as an agent works through the lifecycle. This extension is purpose-built to track and consume them, in **both generations**: v1's rule files with artifacts under `aidlc-docs/`, and v2's engine-driven workflow with its own compiled stage graph, gates and audit ledger. The generation is detected from the project; there is no setting to get wrong.
 
-- **Stage-aware artifact tracking** — only detects folders and `.md` files produced by the AI-DLC workflow (`inception/`, `construction/`, `operations/`), ignoring unrelated files and directories.
-- **Current stage indicator** — shows at a glance which AI-DLC stage the project is currently in, based on the most recently updated artifact.
-- **Overall progress bar** — visual progress bar summarizing how far the project has advanced across all three stages.
-- **Readable Markdown viewer** — opens each `.md` artifact in a split editor with a syntax-colored, prettier-styled preview (color-coded headings, tables, task lists, code blocks) for high readability.
-- **In-place editing** — edit and save changes back to the original `.md` file directly from the viewer, with a resizable splitter and zoom controls.
-- **Live change detection** — automatically picks up new files and folders created by Claude CLI (or any external process) via file watchers and focus-based refresh.
-- **Built-in AI-DLC guide** — a help panel explaining AI-DLC phases, rules, and generated artifacts, accessible from the view toolbar.
+- **Stage-aware artifact tracking** — only detects files produced by the AI-DLC workflow, ignoring unrelated files and directories. In v1 that is the `inception/`, `construction/` and `operations/` layout; in v2 the layout is read from the engine rather than assumed.
+- **Furthest stage reached, and how many are done** — shown at the top of the tree and in the journey strip across the viewer, with one segment per stage and skipped stages hatched rather than blank. There is deliberately **no percentage**: most stages are conditional and Construction repeats per unit of work, so a denominator would be guesswork. Stages that repeat per unit show their unit progress instead, like `2/3`.
+- **Supervision panel (v2)** — surfaces what the summary you approve left out: refusals with the events either side, the engine's own sensor findings grouped per sensor, the units of work and their dependency chain, and the agent's self-report next to the engine's check of it, never reconciled.
+- **One setup button that asks which generation** — v1 from a snapshot bundled with the extension (no network), or v2 from upstream at a commit pinned in source. v2 needs bun, and setup says so and stops rather than producing a project whose gates never fire.
+- **Readable Markdown viewer** — opens each `.md` artifact in a split editor with a syntax-colored, prettier-styled preview (color-coded headings, tables, task lists, code blocks) for high readability. Mermaid diagrams render inline.
+- **In-place editing** — edit and save changes back to the original `.md` file directly from the viewer, with a resizable splitter, synced scrolling and zoom controls.
+- **Live change detection** — automatically picks up new files and folders created by your agent (or any external process) via file watchers and focus-based refresh, marking them `NEW` until read.
+- **Nothing is parsed out of Markdown** — progress comes from structure, so an artifact or state file in an unexpected format cannot make the position wrong, and anything unrecognised is reported rather than guessed at.
+- **Built-in viewer guide** — a help panel covering both generations, in English and Korean, accessible from the view toolbar.
 
 ## How it works
 

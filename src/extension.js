@@ -3045,6 +3045,8 @@ function getHelpHtml() {
   .stage-card.inception { border-color: #4a9eff; }
   .stage-card.construction { border-color: #3ddc84; }
   .stage-card.operations { border-color: #f5a623; }
+  /* v2's tone throughout the extension. Not green: green marks unread NEW. */
+  .stage-card.supervision { border-color: #b180d7; }
   .stage-card h3 { margin-top: 0; }
   table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
   th, td { border: 1px solid var(--vscode-panel-border); padding: 8px 12px; text-align: left; vertical-align: top; }
@@ -3075,10 +3077,14 @@ function getHelpHtml() {
 <h1>AI-DLC Viewer Guide</h1>
 <p>AI-DLC Viewer watches your <strong>AI-DLC workflow folder</strong>, visualizes stage progress, and lets you read and edit the generated Markdown artifacts — all inside VS Code.</p>
 
+<div class="callout">
+  <strong>Two generations of AI-DLC.</strong> <strong>v1</strong> is rule files your agent reads, with artifacts under <code>aidlc-docs/</code>. <strong>v2</strong> is an engine that drives the workflow itself, with enforced gates and an audit ledger. The viewer detects which one a project uses and shows the matching view — everything below about the tree, the strip and the editor applies to both. Only the <em>Supervision</em> section is v2-specific.
+</div>
+
 <h2>Getting Started</h2>
 <ol>
-  <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root — the folder that contains (or will contain) <code>aidlc-docs/</code>.</li>
-  <li>Optionally click <strong>Set up AI-DLC Rules</strong> (cloud icon) to install the AI-DLC workflow rules for your AI agent in one click.</li>
+  <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root.</li>
+  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 is downloaded from the upstream repository at a pinned commit and needs <a href="https://bun.com/docs/installation">bun</a> — if bun is missing, setup stops and hands you the install command rather than leaving you a project whose gates never fire.</li>
   <li>Start your agent and say <code>"Using AI-DLC, ..."</code> — new artifacts appear in the tree automatically as they are generated.</li>
 </ol>
 
@@ -3089,10 +3095,10 @@ function getHelpHtml() {
   <p>The top of the tree names the <strong>furthest stage reached</strong> and how many stages are done, for example <code>Build and test</code> · <code>9/9</code>. Expand it for the same figure per phase.</p>
   <p>Opening a <code>.md</code> artifact also shows an <strong>AI-DLC journey strip</strong> across the top of the viewer, so the position stays visible while you read. Click the strip to expand it into the full stage list.</p>
   <ul>
-    <li>Everything is derived from the <strong>artifact tree</strong>: which folders exist under <code>aidlc-docs/</code>, plus the plan files under <code>plans/</code>. No file contents are parsed, so a state file in an unexpected format cannot make the position wrong.</li>
-    <li><strong>There is no percentage.</strong> AI-DLC is adaptive: most stages are conditional, and Construction repeats per unit of work with a unit count that does not exist until Units Generation has run. A denominator would be guesswork, so reached stages are counted instead.</li>
+    <li>Everything is derived from <strong>structure, not prose</strong>. In v1 that means which folders exist under <code>aidlc-docs/</code> plus the plan files under <code>plans/</code>; in v2 it means the engine's own compiled graph and runtime record. No file contents are parsed either way, so a state file in an unexpected format cannot make the position wrong.</li>
+    <li><strong>There is no percentage.</strong> AI-DLC is adaptive: most stages are conditional, and Construction repeats per unit of work with a unit count that does not exist until units have been generated. A denominator would be guesswork, so reached stages are counted instead. Stages that repeat per unit also show their unit progress, for example <code>2/3</code>.</li>
     <li>A stage with no artifacts that the workflow has already moved past is marked <strong>skipped</strong> (hatched), not pending. That is normal: Reverse Engineering is skipped on a greenfield project, and design stages are skipped whenever the workflow decides they add nothing.</li>
-    <li><strong>Operations is a placeholder in AI-DLC v1.</strong> The rules state that the workflow ends after Build and Test in Construction, so an unreached Operations stage is excluded from the count and a project that finished Build and Test reads as complete.</li>
+    <li><strong>Operations is a placeholder in AI-DLC v1.</strong> The v1 rules state that the workflow ends after Build and Test in Construction, so an unreached Operations stage is excluded from the count and a project that finished Build and Test reads as complete. v2 declares its own phases, and the viewer takes them from the project rather than from a list built into this extension.</li>
     <li>Stage folders and files keep their badges: <strong>I</strong> (blue), <strong>C</strong> (purple), <strong>O</strong> (green). Progress itself uses purple, because green already marks unread <code>NEW</code> artifacts.</li>
     <li>An artifact that matches no known stage layout is reported at the bottom of the expanded strip rather than guessed into a stage.</li>
   </ul>
@@ -3119,17 +3125,30 @@ function getHelpHtml() {
   </ul>
 </div>
 
+<div class="stage-card supervision">
+  <h3>🟣 Supervision — AI-DLC v2 only</h3>
+  <p>In v2 the agent reads the artifacts and you approve a summary. A summary is useful because it leaves things out; this panel surfaces <strong>what it left out</strong>. It appears in the sidebar only when a v2 project is open.</p>
+  <ul>
+    <li><strong>Where the run stopped, and why.</strong> Refusals are listed by what the engine would not let through, newest first, with the events either side so a refusal reads as a sequence rather than a verdict.</li>
+    <li><strong>What the engine's own sensors flagged</strong>, grouped per sensor with a count. These are the checks the workflow ran on itself; a link opens the finding.</li>
+    <li><strong>The agent's claim next to the engine's check of it</strong> — <em>agent says</em> against <em>engine found</em>, per stage. The two are shown side by side and never reconciled, because a disagreement is the thing worth seeing.</li>
+    <li><strong>Units of work</strong> and their dependency chain, including how many are still in flight.</li>
+    <li>Nothing is inferred from Markdown. Every figure comes from the engine's own compiled graph, its runtime record and its audit ledger — so a stage, phase or sensor this build has never heard of still shows up correctly, and anything unrecognised is <strong>reported rather than guessed at</strong>.</li>
+  </ul>
+</div>
+
 <h2>Toolbar Reference</h2>
 <table>
   <tr><th>Button</th><th>Action</th></tr>
   <tr><td>📂 Open Workspace</td><td>Select the AI-DLC root folder to watch</td></tr>
   <tr><td>🔄 Refresh</td><td>Re-scan the folder and rebuild the tree</td></tr>
-  <tr><td>☁️ Set up AI-DLC Rules</td><td>Install bundled AI-DLC workflow rules (Kiro, Claude Code, and your current editor's agent)</td></tr>
+  <tr><td>☁️ Set up AI-DLC</td><td>Asks which generation, then installs it. v1 from the bundled snapshot; v2 from upstream at a pinned commit</td></tr>
   <tr><td>❓ Help / Guide</td><td>Open this guide</td></tr>
 </table>
+<p>Two more commands are in the Command Palette for v2 projects: <strong>AI-DLC v2: Check setup</strong> reports what is present and what is missing, and <strong>AI-DLC v2: Remove</strong> takes back only what the installer wrote — it refuses without an install receipt, and never touches the workflow's own <code>aidlc/</code> content.</p>
 
 <div class="callout">
-  <strong>Tip</strong>: AI-DLC artifacts live under <code>aidlc-docs/</code> — <code>inception/</code> for requirements, stories and design; <code>construction/</code> for functional design and code docs; <code>operations/</code> for deployment and ops. The viewer detects these folders and tracks progress per stage.
+  <strong>Tip</strong>: v1 artifacts live under <code>aidlc-docs/</code> — <code>inception/</code> for requirements, stories and design; <code>construction/</code> for functional design and code docs; <code>operations/</code> for deployment and ops. v2 organises its own artifacts per intent and per unit of work, and the viewer reads that layout from the engine rather than assuming it.
 </div>
 
 <hr/>
@@ -3137,10 +3156,14 @@ function getHelpHtml() {
 <h1>AI-DLC 뷰어 가이드 (한국어)</h1>
 <p>AI-DLC Viewer는 <strong>AI-DLC 워크플로우 폴더</strong>를 감시하며 단계별 진행 상황을 시각화하고, 생성된 Markdown 산출물을 VS Code 안에서 바로 읽고 편집할 수 있게 해줍니다.</p>
 
+<div class="callout">
+  <strong>AI-DLC에는 두 세대가 있습니다.</strong> <strong>v1</strong>은 에이전트가 읽는 룰 파일이고 산출물은 <code>aidlc-docs/</code> 아래에 생깁니다. <strong>v2</strong>는 워크플로우 자체를 구동하는 엔진이며 게이트를 강제하고 감사 원장을 남깁니다. 뷰어는 프로젝트가 어느 쪽인지 감지해 그에 맞는 화면을 보여줍니다. 아래 트리·스트립·에디터 설명은 <strong>양쪽 모두에 적용</strong>되고, <em>감독</em> 섹션만 v2 전용입니다.
+</div>
+
 <h2>시작하기</h2>
 <ol>
-  <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트 — <code>aidlc-docs/</code>가 있거나 생성될 폴더 — 를 선택합니다.</li>
-  <li>필요하면 <strong>Set up AI-DLC Rules</strong>(클라우드 아이콘)로 AI 에이전트용 AI-DLC 워크플로우 룰을 원클릭 설치합니다.</li>
+  <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트를 선택합니다.</li>
+  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 고정된 커밋의 업스트림 저장소에서 내려받으며 <a href="https://bun.com/docs/installation">bun</a>이 필요합니다. bun이 없으면 설치를 진행하지 않고 설치 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
   <li>에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말하면 — 생성되는 산출물이 트리에 자동으로 나타납니다.</li>
 </ol>
 
@@ -3151,10 +3174,10 @@ function getHelpHtml() {
   <p>트리 상단은 <strong>도달한 최종 단계</strong>와 완료 단계 수를 보여줍니다. 예를 들어 <code>Build and test</code> · <code>9/9</code> 형태입니다. 펼치면 phase별로 같은 수치를 봅니다.</p>
   <p><code>.md</code> 산출물을 열면 뷰어 상단에 <strong>AI-DLC 여정 스트립</strong>이 함께 나오므로, 문서를 읽는 동안에도 현재 위치가 계속 보입니다. 스트립을 클릭하면 전체 단계 목록으로 펼쳐집니다.</p>
   <ul>
-    <li>모든 판정은 <strong>산출물 트리</strong>에서 나옵니다. <code>aidlc-docs/</code> 아래 어떤 폴더가 있는지와 <code>plans/</code>의 계획 파일이 근거이며, 파일 내용은 파싱하지 않습니다. 그래서 상태 파일 서식이 예상과 달라도 위치가 틀리지 않습니다.</li>
-    <li><strong>퍼센트는 없습니다.</strong> AI-DLC는 적응형 워크플로우라 대부분의 단계가 조건부이고, Construction은 유닛별로 반복되는데 그 유닛 수는 Units Generation이 끝나기 전에는 존재하지 않습니다. 분모를 정할 수 없으니 도달한 단계 수를 셉니다.</li>
+    <li>모든 판정은 <strong>서술이 아니라 구조</strong>에서 나옵니다. v1에서는 <code>aidlc-docs/</code> 아래 어떤 폴더가 있는지와 <code>plans/</code>의 계획 파일이 근거이고, v2에서는 엔진이 컴파일한 그래프와 런타임 기록이 근거입니다. 어느 쪽이든 파일 내용은 파싱하지 않으므로 상태 파일 서식이 예상과 달라도 위치가 틀리지 않습니다.</li>
+    <li><strong>퍼센트는 없습니다.</strong> AI-DLC는 적응형 워크플로우라 대부분의 단계가 조건부이고, Construction은 유닛별로 반복되는데 그 유닛 수는 유닛이 생성되기 전에는 존재하지 않습니다. 분모를 정할 수 없으니 도달한 단계 수를 셉니다. 유닛별로 반복되는 단계는 <code>2/3</code>처럼 유닛 진행도 함께 보여줍니다.</li>
     <li>산출물이 없는데 워크플로우가 이미 그 단계를 지나갔다면 <strong>skipped</strong>(빗살무늬)로 표시됩니다. 정상입니다. 그린필드에서는 Reverse Engineering이 생략되고, 설계 단계도 필요 없다고 판단되면 건너뜁니다.</li>
-    <li><strong>Operations는 AI-DLC v1에서 placeholder입니다.</strong> 규칙이 워크플로우가 Construction의 Build and Test에서 끝난다고 명시하므로, 도달하지 않은 Operations는 분모에서 제외되고 Build and Test를 마쳤다면 완료로 표시됩니다.</li>
+    <li><strong>Operations는 AI-DLC v1에서 placeholder입니다.</strong> v1 규칙이 워크플로우가 Construction의 Build and Test에서 끝난다고 명시하므로, 도달하지 않은 Operations는 분모에서 제외되고 Build and Test를 마쳤다면 완료로 표시됩니다. v2는 자기 phase를 스스로 선언하며, 뷰어는 그것을 익스텐션에 박아둔 목록이 아니라 프로젝트에서 읽어옵니다.</li>
     <li>단계 폴더와 파일의 배지는 그대로입니다: <strong>I</strong>(파랑), <strong>C</strong>(보라), <strong>O</strong>(초록). 진행 표시 자신은 보라를 씁니다. 초록은 아직 읽지 않은 <code>NEW</code> 산출물을 뜻하기 때문입니다.</li>
     <li>알려진 단계 구조에 맞지 않는 산출물은 짐작하지 않고 펼침 스트립 하단에 그대로 알려줍니다.</li>
   </ul>
@@ -3181,17 +3204,30 @@ function getHelpHtml() {
   </ul>
 </div>
 
+<div class="stage-card supervision">
+  <h3>🟣 감독(Supervision) — AI-DLC v2 전용</h3>
+  <p>v2에서는 에이전트가 산출물을 읽고 사람은 요약을 받아 승인합니다. 요약은 무언가를 버리기 때문에 쓸모가 있고, 이 패널은 <strong>요약이 버린 것</strong>을 드러냅니다. v2 프로젝트를 열었을 때만 사이드바에 나타납니다.</p>
+  <ul>
+    <li><strong>어디서 멈췄고 왜 멈췄는지.</strong> 엔진이 통과시키지 않은 것을 최신 순으로 보여주며, 앞뒤 이벤트를 함께 실어 거부가 판결이 아니라 순서로 읽히게 합니다.</li>
+    <li><strong>엔진의 센서가 무엇을 걸었는지</strong>를 센서별로 묶어 개수와 함께 보여줍니다. 워크플로우가 스스로를 검사한 결과이며, 링크를 누르면 해당 발견을 엽니다.</li>
+    <li><strong>에이전트의 기록과 엔진의 판정을 나란히</strong> — 단계별로 <em>agent says</em>와 <em>engine found</em>를 함께 놓습니다. 둘을 화해시키지 않습니다. 어긋남 자체가 봐야 할 것이기 때문입니다.</li>
+    <li><strong>작업 유닛</strong>과 의존 관계, 그리고 아직 진행 중인 유닛 수.</li>
+    <li>Markdown에서 추론하는 것은 하나도 없습니다. 모든 수치는 엔진이 컴파일한 그래프, 런타임 기록, 감사 원장에서 나옵니다. 그래서 이 빌드가 한 번도 본 적 없는 단계·phase·센서도 정확히 표시되고, 알아볼 수 없는 것은 <strong>짐작하지 않고 그대로 알려줍니다</strong>.</li>
+  </ul>
+</div>
+
 <h2>툴바 안내</h2>
 <table>
   <tr><th>버튼</th><th>동작</th></tr>
   <tr><td>📂 Open Workspace</td><td>감시할 AI-DLC 루트 폴더 선택</td></tr>
   <tr><td>🔄 Refresh</td><td>폴더 재스캔 및 트리 갱신</td></tr>
-  <tr><td>☁️ Set up AI-DLC Rules</td><td>번들된 AI-DLC 워크플로우 룰 설치 (Kiro, Claude Code 및 현재 에디터의 에이전트)</td></tr>
+  <tr><td>☁️ Set up AI-DLC</td><td>어느 세대인지 묻고 설치합니다. v1은 번들 스냅샷에서, v2는 고정 커밋의 업스트림에서</td></tr>
   <tr><td>❓ Help / Guide</td><td>이 가이드 열기</td></tr>
 </table>
+<p>v2 프로젝트에서는 명령 팔레트에 두 가지가 더 있습니다. <strong>AI-DLC v2: Check setup</strong>은 무엇이 있고 무엇이 없는지 알려주고, <strong>AI-DLC v2: Remove</strong>는 설치 프로그램이 쓴 것만 되돌립니다. 설치 영수증이 없으면 거부하며, 워크플로우가 만든 <code>aidlc/</code> 내용은 절대 지우지 않습니다.</p>
 
 <div class="callout">
-  <strong>팁</strong>: AI-DLC 산출물은 <code>aidlc-docs/</code> 아래에 생성됩니다 — 요구사항·스토리·설계는 <code>inception/</code>, 기능 설계와 코드 문서는 <code>construction/</code>, 배포·운영은 <code>operations/</code>. 뷰어가 이 폴더들을 감지해 단계별 진행률을 추적합니다.
+  <strong>팁</strong>: v1 산출물은 <code>aidlc-docs/</code> 아래에 생성됩니다 — 요구사항·스토리·설계는 <code>inception/</code>, 기능 설계와 코드 문서는 <code>construction/</code>, 배포·운영은 <code>operations/</code>. v2는 인텐트별·유닛별로 자기 구조를 만들고, 뷰어는 그 구조를 가정하지 않고 엔진에서 읽어옵니다.
 </div>
 </body>
 </html>`;
