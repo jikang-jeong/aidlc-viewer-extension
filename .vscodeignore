@@ -10,3 +10,4 @@ media/icon-drafts/**
 *.log
 *.vsix
 node_modules/**
+docs/**
