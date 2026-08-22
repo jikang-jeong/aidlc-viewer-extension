@@ -3,6 +3,7 @@ const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
 const { SupervisionViewProvider, VIEW_ID: SUPERVISION_VIEW_ID } = require('./supervision-view');
 const { readProject } = require('./aidlc/index');
+const installCommands = require('./install-commands');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
 const OPENED_KEY = 'markdownWatchViewer.openedFiles';
@@ -56,6 +57,24 @@ function activate(context) {
     vscode.commands.registerCommand('markdownWatchViewer.openInTextEditor', (item) => controller.openInTextEditor(item)),
     vscode.commands.registerCommand('markdownWatchViewer.showHelp', () => controller.showHelp()),
     vscode.commands.registerCommand('markdownWatchViewer.setupRules', () => controller.setupRules()),
+    // v2 setup and removal. Separate commands rather than one that guesses the
+    // generation: installing v2 into a project is a different decision from
+    // installing v1's rule files, and a single button that chose for the user
+    // would be choosing which product they are using.
+    vscode.commands.registerCommand('markdownWatchViewer.setupV2', async () => {
+      await installCommands.setupV2(controller.treeDataProvider.rootUri);
+      // A fresh install changes the generation, so the context key that gates the
+      // supervision panel has to be re-evaluated before the user looks for it.
+      controller.refresh();
+      controller.refreshSupervision();
+    }),
+    vscode.commands.registerCommand('markdownWatchViewer.removeV2', async () => {
+      await installCommands.removeV2(controller.treeDataProvider.rootUri);
+      // The removal changed what is on disk, so the panel and tree must re-read
+      // rather than keep showing an install that is gone.
+      controller.refresh();
+      controller.refreshSupervision();
+    }),
     // Auto-refresh when the editor window regains focus (catches external changes from Finder)
     vscode.window.onDidChangeWindowState((state) => {
       if (state.focused) {
