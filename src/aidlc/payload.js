@@ -34,6 +34,21 @@ const { execFile } = require('child_process');
 const REPO = 'awslabs/aidlc-workflows';
 const PAYLOAD_PREFIX = 'dist';
 
+// The commit this build installs.
+//
+// Pinned in source rather than resolved from the v2 branch at install time. v2 is
+// GA but still moving, and a floating ref would mean two people installing on
+// different days get engines that behave differently while both believe they
+// installed "v2" -- and neither could be told which one they have.
+//
+// This is the head of the v2 branch at the time this support was written and
+// verified: every observation the v2 reader relies on (the stage graph's fields,
+// the audit event shapes, bolt_dag, the per-unit recording differences between
+// inline and subagent stages) was made against a project installed from exactly
+// this commit. Moving it means re-verifying those, so it is a deliberate edit
+// paired with a run of the probe against a fresh sample, not a routine bump.
+const PINNED_COMMIT = '4d0968fc';
+
 // Only harnesses this extension has actually verified against a real run. A name
 // not on this list is refused rather than attempted, because a wrong path yields
 // an empty extraction that would look like a successful install of nothing.
@@ -182,10 +197,13 @@ function topLevelEntries(dir) {
 // rather than passed on: a plan built from an empty listing would install nothing
 // and call it done.
 async function fetchPayload({ commit, harness, workDir }) {
+  // Defaults to the pinned commit, so a caller that does not care gets the one
+  // this build was verified against rather than whatever is current.
+  const target = commit ?? PINNED_COMMIT;
   if (!HARNESSES[harness]) {
     return { ok: false, reason: 'unknown-harness', text: `No payload path known for "${harness}".` };
   }
-  if (typeof commit !== 'string' || !COMMIT_PATTERN.test(commit)) {
+  if (typeof target !== 'string' || !COMMIT_PATTERN.test(target)) {
     return {
       ok: false,
       reason: 'bad-commit',
@@ -198,7 +216,7 @@ async function fetchPayload({ commit, harness, workDir }) {
   const out = path.join(base, 'payload');
   fs.mkdirSync(out, { recursive: true });
 
-  const downloaded = await download(tarballUrl(commit), archive);
+  const downloaded = await download(tarballUrl(target), archive);
   if (!downloaded.ok) return { ...downloaded, workDir: base };
 
   const extracted = await extract(archive, out, harness);
@@ -209,7 +227,7 @@ async function fetchPayload({ commit, harness, workDir }) {
     return {
       ok: false,
       reason: 'empty-payload',
-      text: `The archive contained no ${PAYLOAD_PREFIX}/${HARNESSES[harness]} directory at ${commit}.`,
+      text: `The archive contained no ${PAYLOAD_PREFIX}/${HARNESSES[harness]} directory at ${target}.`,
       workDir: base
     };
   }
@@ -220,7 +238,7 @@ async function fetchPayload({ commit, harness, workDir }) {
     payloadDir: out,
     entries,
     bytes: downloaded.bytes,
-    commit,
+    commit: target,
     harness
   };
 }
@@ -228,6 +246,7 @@ async function fetchPayload({ commit, harness, workDir }) {
 module.exports = {
   REPO,
   PAYLOAD_PREFIX,
+  PINNED_COMMIT,
   HARNESSES,
   COMMIT_PATTERN,
   MAX_BYTES,

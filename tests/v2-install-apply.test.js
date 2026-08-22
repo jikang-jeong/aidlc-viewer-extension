@@ -326,6 +326,37 @@ test('removal after a reinstall still removes everything, using the latest recei
 // Safety
 // ---------------------------------------------------------------------------
 
+test('a destination equal to the project root is refused, so a tree replace cannot erase it', () => {
+  // REPLACE_TREE deletes its target recursively. A payload entry named '', '.' or
+  // './' resolves to the root, and the payload's top-level names become these
+  // destinations verbatim over the network -- so a single malformed entry would
+  // have erased the user's whole project. Refused strictly, not merely bounded.
+  const root = emptyProject();
+  for (const rel of ['', '.', './', ' ', undefined, null]) {
+    assert.equal(apply.resolveInside(root, rel), undefined, `must refuse ${JSON.stringify(rel)}`);
+  }
+  assert.ok(apply.resolveInside(root, '.kiro'));
+  assert.ok(apply.resolveInside(root, 'a/b/c.md'));
+  for (const rel of ['../x', '/etc/passwd', 'a/../..']) {
+    assert.equal(apply.resolveInside(root, rel), undefined, `must refuse ${rel}`);
+  }
+});
+
+test('a plan whose entry names the root leaves the project intact', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  fs.writeFileSync(path.join(root, 'important.txt'), 'do not lose me');
+
+  const result = apply.applyPlan({
+    payloadDir: src,
+    root,
+    ops: [{ type: plan.OP.REPLACE_TREE, from: '.kiro', to: '.', preserve: [] }]
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'escapes-root');
+  assert.equal(fs.readFileSync(path.join(root, 'important.txt'), 'utf8'), 'do not lose me');
+});
+
 test('a payload entry naming a path outside the project is refused', () => {
   // The payload arrives over the network, so a traversing name is a real input.
   const src = makePayload();
@@ -400,4 +431,13 @@ test('the tarball url is built from the pinned commit', () => {
     payload.tarballUrl('4d0968fc'),
     'https://codeload.github.com/awslabs/aidlc-workflows/tar.gz/4d0968fc'
   );
+});
+
+test('the pinned commit is a sha, and it is what a caller gets by default', () => {
+  // Pinned in source so two people installing on different days get the same
+  // engine. Every observation the v2 reader relies on was made against a project
+  // installed from this commit, so a change here is a deliberate edit paired with
+  // re-verification, not a routine bump.
+  assert.ok(payload.COMMIT_PATTERN.test(payload.PINNED_COMMIT));
+  assert.equal(payload.PINNED_COMMIT, '4d0968fc');
 });

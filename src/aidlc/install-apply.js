@@ -22,13 +22,21 @@ const path = require('path');
 
 const { OP } = require('./install-plan');
 
-// Every destination is resolved and then checked to be under the root. A payload
-// entry named `../something` would otherwise write outside the project, and the
-// payload is downloaded from the network.
+// Every destination is resolved and then checked to be strictly inside the root.
+//
+// "Strictly" is the whole point. An entry named `''`, `.` or `./` resolves to the
+// root itself, and REPLACE_TREE deletes its target recursively -- so accepting a
+// destination equal to the root would let one malformed payload entry erase the
+// user's entire project. The payload arrives over the network and its top-level
+// names become these destinations verbatim, so this is an input, not a hypothesis.
+//
+// `..` traversal is refused by the same check.
 function resolveInside(root, relative) {
-  const full = path.resolve(root, relative);
+  if (typeof relative !== 'string' || relative.trim() === '') return undefined;
   const bounded = path.resolve(root);
-  if (full !== bounded && !full.startsWith(bounded + path.sep)) return undefined;
+  const full = path.resolve(bounded, relative);
+  // Must be a proper descendant: equal to the root is refused, not allowed.
+  if (full === bounded || !full.startsWith(bounded + path.sep)) return undefined;
   return full;
 }
 
