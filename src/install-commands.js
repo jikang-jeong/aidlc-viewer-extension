@@ -22,6 +22,8 @@
 //   behind a confirmation dialog is not a thing an editor extension should do.
 
 const vscode = require('vscode');
+const fs = require('fs');
+const path = require('path');
 
 const { readInstallState, previewInstall, RECEIPT_PATH } = require('./aidlc/install-state');
 const { planInstall, planRemoval } = require('./aidlc/install-plan');
@@ -226,10 +228,40 @@ async function installV2(root, state) {
       const summary =
         `AI-DLC v2 installed for ${HARNESS_LABELS[harness] ?? harness} ` +
         `(${result.written.length} files, upstream ${fetched.commit}).`;
-      if (warned.length > 0) {
-        vscode.window.showInformationMessage(summary, { detail: warned.map((n) => n.text).join('\n\n') });
-      } else {
-        vscode.window.showInformationMessage(`${summary} Open the aidlc agent and run /aidlc.`);
+
+      // The step that is easy to miss and blocks everything after it. Kiro reads
+      // its agent definitions from the WORKSPACE ROOT's .kiro/agents/, and this
+      // install goes into the folder the extension watches, which is frequently
+      // not that root -- one observed case installed four levels down inside
+      // another project. Without Kiro having this exact folder open, /aidlc simply
+      // is not there, which reads as a failed install rather than a missing step.
+      const isWorkspaceRoot = (vscode.workspace.workspaceFolders ?? []).some(
+        (folder) => folder.uri.fsPath === root
+      );
+      const nextStep = isWorkspaceRoot
+        ? 'Type /aidlc to start. The agent is already available in this window.'
+        : 'Kiro reads /aidlc from .kiro/agents/ in the WORKSPACE ROOT, and this ' +
+          'folder is not the root of the current window. Open it with File > Open ' +
+          'Folder in a new window, then type /aidlc.';
+
+      const openLabel = 'Open folder in new window';
+      const choice = await vscode.window.showInformationMessage(
+        summary,
+        {
+          modal: false,
+          detail:
+            warned.length > 0
+              ? `${warned.map((n) => n.text).join('\n\n')}\n\n${nextStep}`
+              : nextStep
+        },
+        ...(isWorkspaceRoot ? [] : [openLabel])
+      );
+      if (choice === openLabel) {
+        await vscode.commands.executeCommand(
+          'vscode.openFolder',
+          vscode.Uri.file(root),
+          { forceNewWindow: true }
+        );
       }
     }
   );
@@ -288,4 +320,75 @@ function hasRemovableInstall(folderUri) {
   }
 }
 
-module.exports = { setup, removeV2, hasRemovableInstall, RECEIPT_PATH };
+// Answers "I installed it and /aidlc is not there".
+//
+// There are three separate reasons for that and they are indistinguishable from
+// the chat: the folder has v1 rather than v2, the engine files are there but Kiro
+// does not have the folder open as a workspace, or bun is missing so the hooks
+// cannot run. Each has a different fix, so the check names which one it is rather
+// than reporting a generic problem.
+async function checkV2(folderUri) {
+  if (!folderUri) {
+    vscode.window.showWarningMessage('Select a folder to watch first.');
+    return;
+  }
+  const root = folderUri.fsPath;
+  const state = readInstallState(root);
+  const lines = [];
+  const bun = detectBun();
+
+  const agentFile = path.join(root, '.kiro', 'agents', 'aidlc.json');
+  const hasAgent = fs.existsSync(agentFile);
+  const isWorkspace = (vscode.workspace.workspaceFolders ?? []).some(
+    (folder) => folder.uri.fsPath === root
+  );
+
+  lines.push(`Folder: ${root}`);
+  lines.push(`Generation detected: ${state.ok ? state.generation : 'unreadable'}`);
+  lines.push(`.kiro/agents/aidlc.json: ${hasAgent ? 'present' : 'MISSING'}`);
+  lines.push(`Open as a Kiro workspace: ${isWorkspace ? 'yes' : 'NO'}`);
+  lines.push(`bun: ${bun.found ? bun.path : 'not found'}`);
+  lines.push('');
+
+  if (!hasAgent) {
+    lines.push(
+      'The /aidlc agent comes from that file, so it cannot appear until v2 is ' +
+        'installed here. Use "Set up AI-DLC" and pick v2.'
+    );
+    if (state.generation === 'v1') {
+      lines.push(
+        'This folder currently has v1 rule files. They are left alone by a v2 ' +
+          'install, but the two generations are different products and mixing them ' +
+          'in one project is not something upstream supports.'
+      );
+    }
+  } else if (!isWorkspace) {
+    lines.push(
+      'The engine files are here, but Kiro reads agent definitions from the ' +
+        'workspace root. Open this folder with File > Open Folder, in a new ' +
+        'window, and /aidlc will be there.'
+    );
+  } else if (!bun.found) {
+    lines.push(
+      'Everything is in place except bun, which the engine runs its hooks and ' +
+        'tools through. /aidlc will appear but its gates will not fire.'
+    );
+    lines.push(bun.installCommand);
+  } else {
+    lines.push('Everything needed is in place. /aidlc should be available.');
+  }
+
+  const copyLabel = 'Copy this report';
+  const choice = await vscode.window.showInformationMessage(
+    hasAgent && isWorkspace && bun.found
+      ? 'AI-DLC v2 looks ready.'
+      : 'AI-DLC v2 is not ready yet.',
+    { modal: true, detail: lines.join('\n') },
+    copyLabel
+  );
+  if (choice === copyLabel) {
+    await vscode.env.clipboard.writeText(lines.join('\n'));
+  }
+}
+
+module.exports = { setup, removeV2, checkV2, hasRemovableInstall, RECEIPT_PATH };

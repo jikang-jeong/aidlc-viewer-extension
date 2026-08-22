@@ -63,6 +63,11 @@ function activate(context) {
     // other icon was the v2 one. Every other entry point routes through the same
     // question, so no path can pick a generation the user was not asked about.
     vscode.commands.registerCommand('markdownWatchViewer.setupRules', () => controller.setupRules()),
+    // Answers "I installed it and /aidlc is not there". Three separate causes are
+    // indistinguishable from the chat, and each has a different fix.
+    vscode.commands.registerCommand('markdownWatchViewer.checkV2', () =>
+      installCommands.checkV2(controller.treeDataProvider.rootUri)
+    ),
     vscode.commands.registerCommand('markdownWatchViewer.removeV2', async () => {
       await installCommands.removeV2(controller.treeDataProvider.rootUri);
       // The removal changed what is on disk, so the panel and tree must re-read

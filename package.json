@@ -63,6 +63,10 @@
         "icon": "$(cloud-download)"
       },
       {
+        "command": "markdownWatchViewer.checkV2",
+        "title": "AIDLC-VIEWER: Check AI-DLC v2 setup"
+      },
+      {
         "command": "markdownWatchViewer.removeV2",
         "title": "AIDLC-VIEWER: Remove AI-DLC v2"
       },
@@ -148,6 +152,9 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "markdownWatchViewer.checkV2"
+        },
         {
           "command": "markdownWatchViewer.removeV2",
           "when": "aidlcViewer.v2Detected"
