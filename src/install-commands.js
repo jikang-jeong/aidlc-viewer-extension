@@ -36,28 +36,50 @@ const HARNESS_LABELS = {
   'kiro-cli': 'Kiro CLI'
 };
 
-// Offer the platform's install command rather than running it. Returns true when
-// the caller should carry on regardless.
+// bun is missing, so the install stops here.
+//
+// There was a second button that installed AI-DLC anyway. It is gone. The engine is
+// invoked as `bun <file>` at hundreds of call sites, so a project installed without
+// bun is not a degraded project -- it is 284 files that do nothing, with gates that
+// never fire and no error to say why. Offering that as a choice dressed it up as a
+// trade-off when it was only a worse outcome reached in more steps.
+//
+// The label said "Install anyway" without naming what it installed, and it was read
+// as installing bun -- the opposite of what it did.
+//
+// So there is one action: take the command away and come back. Never installs
+// anything, and never runs the command it shows.
 async function handleMissingBun(bun) {
-  const copyLabel = 'Copy install command';
-  const continueLabel = 'Install anyway';
+  const copyLabel = 'Copy the bun command';
+  const docsLabel = "Open bun's install page";
+
+  const detail = [bun.installCommand];
+  if (bun.prerequisite) detail.push('', bun.prerequisite);
+  if (bun.alternatives && bun.alternatives.length > 0) {
+    // For a machine or a policy the one-liner cannot get past. A person who cannot
+    // run the first command needs a second one, not a reason the first should work.
+    detail.push('', `If that cannot run here: ${bun.alternatives.join('  or  ')}`);
+  }
+  detail.push('', bun.pathNote);
+  detail.push('', 'Then set up AI-DLC v2 again.');
+
   const choice = await vscode.window.showWarningMessage(
-    'bun was not found. AI-DLC v2 runs its engine through bun, so its gates and ' +
-      'hooks will not fire without it.',
-    { modal: true, detail: `${bun.installCommand}\n\n${bun.pathNote}` },
+    'AI-DLC v2 needs bun, and it was not found. Install bun first, then run this ' +
+      'setup again.',
+    { modal: true, detail: detail.join('\n') },
     copyLabel,
-    continueLabel
+    docsLabel
   );
   if (choice === copyLabel) {
     await vscode.env.clipboard.writeText(bun.installCommand);
     vscode.window.showInformationMessage(
       'Command copied. Run it in a terminal, then set up AI-DLC v2 again.'
     );
-    return false;
+  } else if (choice === docsLabel) {
+    // bun's own page covers what this extension deliberately does not reproduce:
+    // musl builds, CPU requirements, Docker, older versions.
+    await vscode.env.openExternal(vscode.Uri.parse(bun.docsUrl));
   }
-  // Proceeding without bun is a legitimate choice: a user may be installing now
-  // and setting up their runtime afterwards.
-  return choice === continueLabel;
 }
 
 // Which generation to set up.
@@ -187,7 +209,12 @@ async function installV2(root, state) {
   if (!harness) return;
 
   const bun = detectBun();
-  if (!bun.found && !(await handleMissingBun(bun))) return;
+  if (!bun.found) {
+    // No longer a question with a way past it: without bun there is nothing worth
+    // installing, so this reports and stops.
+    await handleMissingBun(bun);
+    return;
+  }
 
   if (!(await confirmInstall(state, harness, Boolean(state.receipt)))) return;
 

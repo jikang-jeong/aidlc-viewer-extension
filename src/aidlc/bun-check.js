@@ -43,12 +43,49 @@ function candidatePaths() {
 }
 
 // The command each platform's documentation gives. Shown for the user to run, so
-// it has to match what upstream and bun's own site publish rather than something
+// it has to match what bun's own site publishes rather than something
 // equivalent-but-different that would not match a search result.
+//
+// Note the domains differ between the two, and that is not a mistake: bun's
+// install page publishes the shell script under bun.com and the PowerShell script
+// under bun.sh. Copied as published.
+//
+// Windows never involves curl. `irm` is Invoke-RestMethod, built into PowerShell
+// since 3.0 and present on every supported Windows, so "what if there is no curl"
+// is not a case that arises there.
 function installCommand() {
-  if (process.platform === 'win32') return 'powershell -c "irm bun.sh/install.ps1 | iex"';
-  return 'curl -fsSL https://bun.sh/install | bash';
+  if (process.platform === 'win32') return 'powershell -c "irm bun.sh/install.ps1|iex"';
+  return 'curl -fsSL https://bun.com/install | bash';
 }
+
+// What the one-line install needs that the machine may not have. Named because a
+// failure here reads as "bun is broken" rather than as a missing package.
+function prerequisite() {
+  if (process.platform === 'win32') return 'Requires Windows 10 version 1809 or later.';
+  if (process.platform === 'linux') {
+    return 'Needs the unzip package (sudo apt install unzip), or the installer fails partway.';
+  }
+  return undefined; // macOS ships everything the script needs.
+}
+
+// Other ways in, for when the one-liner cannot run: a policy that blocks piping a
+// downloaded script into a shell, a machine without the prerequisite above, or no
+// route to bun's domain. Offered rather than argued with -- a person who cannot run
+// the first command needs a second one, not an explanation of why the first is fine.
+function alternatives() {
+  if (process.platform === 'win32') {
+    return ['npm install -g bun', 'scoop install bun'];
+  }
+  if (process.platform === 'darwin') {
+    return ['npm install -g bun', 'brew install oven-sh/bun/bun'];
+  }
+  return ['npm install -g bun'];
+}
+
+// Where to read the rest. The extension does not attempt to reproduce bun's
+// installation matrix -- musl builds, CPU requirements, Docker images, older
+// versions -- so the page that does is one click away.
+const DOCS_URL = 'https://bun.com/docs/installation';
 
 function detectBun() {
   const checked = candidatePaths();
@@ -64,6 +101,9 @@ function detectBun() {
     found: false,
     checked,
     installCommand: installCommand(),
+    prerequisite: prerequisite(),
+    alternatives: alternatives(),
+    docsUrl: DOCS_URL,
     // The trap worth naming, because it is what makes a present bun look absent
     // to anything that asks the shell.
     pathNote:
@@ -75,4 +115,11 @@ function detectBun() {
   };
 }
 
-module.exports = { candidatePaths, installCommand, detectBun };
+module.exports = {
+  candidatePaths,
+  installCommand,
+  prerequisite,
+  alternatives,
+  detectBun,
+  DOCS_URL
+};
