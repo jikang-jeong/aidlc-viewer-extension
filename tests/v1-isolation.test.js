@@ -183,6 +183,49 @@ test('the v1 phase vocabulary is still exactly what the colour map covers', () =
 });
 
 // ---------------------------------------------------------------------------
+// The tree's summary row must key on the generation, not on the journey
+// ---------------------------------------------------------------------------
+
+// The predicate extension.js uses to decide whether the summary row falls back to
+// the journey, lifted out so it can be tested without vscode. Kept identical.
+function usesJourney(summary) {
+  if (!summary || summary.generation !== 'v2') return false;
+  const journey = summary.journey;
+  if (!journey || !Array.isArray(journey.checkpoints)) return false;
+  const index = journey.currentIndex;
+  return typeof index === 'number' && index >= 0 && index < journey.checkpoints.length;
+}
+
+test('the summary row falls back to the journey only for v2', () => {
+  // A v1 journey answers too, so a first attempt keyed on "does the journey say
+  // anything" and rewrote the label, description and tooltip a v1 project shows.
+  // That is the regression this whole layer exists to avoid, so the gate is the
+  // generation.
+  const withArtifacts = buildJourney({
+    artifacts: [{ relPath: 'inception/requirements/requirements.md', mtime: 1 }],
+    rulesInstalled: true
+  });
+  assert.ok(withArtifacts.currentIndex >= 0, 'a v1 journey does report a position');
+
+  assert.equal(usesJourney({ generation: 'v1', journey: withArtifacts }), false);
+  assert.equal(usesJourney({ generation: 'none', journey: withArtifacts }), false);
+  assert.equal(usesJourney({ generation: undefined, journey: withArtifacts }), false);
+  assert.equal(usesJourney({ generation: 'v2', journey: withArtifacts }), true);
+});
+
+test('the summary row does not fall back when a v2 project has not started', () => {
+  const nothing = buildJourney({ artifacts: [], rulesInstalled: false });
+  assert.equal(nothing.currentIndex, -1);
+  assert.equal(usesJourney({ generation: 'v2', journey: nothing }), false);
+});
+
+test('the summary row survives a journey that is absent or malformed', () => {
+  for (const journey of [undefined, null, {}, { checkpoints: 'no' }, { checkpoints: [] }]) {
+    assert.equal(usesJourney({ generation: 'v2', journey }), false);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Reading must stay cheap enough to sit on the tree's refresh path
 // ---------------------------------------------------------------------------
 

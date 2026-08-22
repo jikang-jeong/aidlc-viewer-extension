@@ -912,7 +912,7 @@ class MarkdownTreeDataProvider {
       // v2 project it substitutes a journey read from the engine's own compiled
       // stage graph. Without this a v2 project showed every stage as pending,
       // because it has no aidlc-docs/ directory for the walk above to find.
-      journey: this.resolveJourney(rootUri, buildJourney({
+      ...this.resolveJourney(rootUri, buildJourney({
         artifacts,
         rulesInstalled: await detectRulesInstalled(rootUri)
       }))
@@ -928,14 +928,20 @@ class MarkdownTreeDataProvider {
   // a no-op on the path 3,000 existing users are on. For a v2 project it returns
   // a journey read from that project's compiled stage graph and runtime state.
   //
+  // The generation comes back too, because the tree's summary row has to know
+  // which one it is looking at: a v1 project's artifact counts are meaningful and
+  // a v2 project's are all zero, so a row that fell back on "the journey said
+  // something" would rewrite what v1 users see.
+  //
   // Any failure falls back to the v1 journey rather than propagating: a tree that
   // renders v1-shaped progress is wrong on a v2 project, but a tree that throws
   // is wrong on every project.
   resolveJourney(rootUri, v1Journey) {
     try {
-      return readProject(rootUri.fsPath, { v1Journey }).journey ?? v1Journey;
+      const project = readProject(rootUri.fsPath, { v1Journey });
+      return { journey: project.journey ?? v1Journey, generation: project.generation };
     } catch {
-      return v1Journey;
+      return { journey: v1Journey, generation: undefined };
     }
   }
 
@@ -1118,7 +1124,11 @@ class StageItem extends vscode.TreeItem {
       : formatStageDescription(summary);
     this.tooltip = buildStageTooltip(summary);
     this.contextValue = 'stageSummary';
-    this.iconPath = new vscode.ThemeIcon(getStageIcon(summary.currentStage), getStageColor(summary.currentStage));
+    // The journey's phase when there is one, so a v2 project gets its own phase's
+    // icon and tone rather than the grey question mark the v1 detection produces
+    // on a tree with no aidlc-docs/ to count.
+    const phase = currentPhaseFromJourney(summary) ?? summary.currentStage;
+    this.iconPath = new vscode.ThemeIcon(getStageIcon(phase), getStageColor(phase));
   }
 }
 
@@ -1539,7 +1549,33 @@ function buildProgressTooltip(summary) {
   return md;
 }
 
+// The phase of the furthest checkpoint with evidence, for a v2 project only.
+//
+// Gating on the generation rather than on "does the journey say anything" matters:
+// a v1 journey answers too. A first attempt keyed on the journey alone and changed
+// what a v1 project shows in its label, description and tooltip, which is exactly
+// the regression this whole layer is built to avoid. v1 keeps its artifact-count
+// summary; only v2, which has no artifacts under those directories to count, falls
+// back to the journey.
+function currentPhaseFromJourney(summary) {
+  if (!summary || summary.generation !== 'v2') return undefined;
+  const journey = summary.journey;
+  if (!journey || !Array.isArray(journey.checkpoints)) return undefined;
+  const index = journey.currentIndex;
+  if (typeof index !== 'number' || index < 0 || index >= journey.checkpoints.length) {
+    return undefined;
+  }
+  return journey.checkpoints[index].phase;
+}
+
 function formatStageLabel(summary) {
+  // v2 has no aidlc-docs/ to count artifacts in, so the v1 detection returns
+  // 'unknown' and every count is zero. The journey has already been resolved
+  // through the adapter by this point, so the phase of the furthest reached
+  // checkpoint is both available and more accurate than the artifact heuristic
+  // ever was.
+  const fromJourney = currentPhaseFromJourney(summary);
+  if (fromJourney) return capitalize(fromJourney);
   if (summary.currentStage === 'unknown') {
     return 'Unknown';
   }
@@ -1557,10 +1593,39 @@ function formatStageDescription(summary) {
   if (summary.counts.operations > 0) {
     parts.push(`O ${summary.counts.operations}`);
   }
-  return parts.join(' • ') || 'No stage files detected';
+  if (parts.length > 0) return parts.join(' • ');
+  // A v2 project has no artifacts under the v1 stage directories, so the counts
+  // above are all zero and "No stage files detected" would be a false negative on
+  // a project that is plainly running. A v1 project with no artifacts genuinely
+  // has none, and keeps the original wording.
+  if (currentPhaseFromJourney(summary)) {
+    const journey = summary.journey;
+    const done = journey.counts ? journey.counts.done : 0;
+    return `${done}/${journey.plannedTotal} stages`;
+  }
+  return 'No stage files detected';
 }
 
 function buildStageTooltip(summary) {
+  const phase = currentPhaseFromJourney(summary);
+  if (phase) {
+    // A v2 project. The v1 artifact counts below would all read zero, which says
+    // nothing true, so the journey's own numbers are reported instead.
+    const journey = summary.journey;
+    const at = journey.checkpoints[journey.currentIndex];
+    const lines = [
+      `Phase: ${capitalize(phase)}`,
+      `Furthest stage reached: ${at.label} (${at.status})`,
+      `In scope: ${journey.counts.done}/${journey.plannedTotal} done`
+    ];
+    if (journey.counts.skipped > 0) {
+      lines.push(`Skipped by scope: ${journey.counts.skipped}`);
+    }
+    if (journey.units.length > 0) {
+      lines.push(`Units of work: ${journey.units.join(', ')}`);
+    }
+    return lines.join('\n');
+  }
   return [
     `Detected stage: ${summary.currentStage === 'unknown' ? 'unknown' : capitalize(summary.currentStage)}`,
     `Inception files: ${summary.counts.inception}`,
@@ -1580,6 +1645,18 @@ function getStageIcon(stage) {
     return 'tools';
   }
   if (stage === 'operations') {
+    return 'pulse';
+  }
+  // v2 names two of its five phases differently, and a project can compile a
+  // phase list this build has never seen. The two that map onto an existing idea
+  // reuse its icon; anything else keeps the question mark, which is honest.
+  if (stage === 'ideation') {
+    return 'lightbulb';
+  }
+  if (stage === 'initialization') {
+    return 'rocket';
+  }
+  if (stage === 'operation') {
     return 'pulse';
   }
   return 'question';
