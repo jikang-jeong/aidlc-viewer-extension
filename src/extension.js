@@ -57,20 +57,12 @@ function activate(context) {
     vscode.commands.registerCommand('markdownWatchViewer.openFile', (item) => controller.openFile(item)),
     vscode.commands.registerCommand('markdownWatchViewer.openInTextEditor', (item) => controller.openInTextEditor(item)),
     vscode.commands.registerCommand('markdownWatchViewer.showHelp', () => controller.showHelp()),
-    // One setup button that asks which generation. It used to install v1
-    // unconditionally, and adding a second button for v2 beside it did not work:
-    // the report was that pressing "Set up AI-DLC" still installed v1, with
-    // nothing on screen saying the other icon was the v2 one.
-    vscode.commands.registerCommand('markdownWatchViewer.setupRules', async () => {
-      await installCommands.setup(
-        controller.treeDataProvider.rootUri,
-        () => controller.setupRules()
-      );
-      // An install changes the generation, and the context key that decides
-      // whether the supervision panel exists is derived from it.
-      controller.refresh();
-      controller.refreshSupervision();
-    }),
+    // One setup button. It asks which generation, because it used to install v1
+    // unconditionally and a second button for v2 beside it did not help: pressing
+    // "Set up AI-DLC" still did what it had always done, and nothing said the
+    // other icon was the v2 one. Every other entry point routes through the same
+    // question, so no path can pick a generation the user was not asked about.
+    vscode.commands.registerCommand('markdownWatchViewer.setupRules', () => controller.setupRules()),
     vscode.commands.registerCommand('markdownWatchViewer.removeV2', async () => {
       await installCommands.removeV2(controller.treeDataProvider.rootUri);
       // The removal changed what is on disk, so the panel and tree must re-read
@@ -204,21 +196,46 @@ class WatchController {
     await this.offerAidlcSetup(folderUri);
   }
 
+  // Offered once, when a folder is picked explicitly. The prompt exists because
+  // beginners were skipping the manual copy steps entirely, so it is worth asking.
+  //
+  // It routes through the same generation question the toolbar button asks. It used
+  // to call the v1 installer directly, which meant this prompt silently decided
+  // which AI-DLC generation the project would use -- and it always decided v1,
+  // because that is the only thing it knew how to install.
   async offerAidlcSetup(folderUri) {
     try {
       if (!(await aidlcSetupNeeded(folderUri, this.context.extensionUri))) {
         return; // already set up, or bundle missing — stay quiet here
       }
-      const yes = 'Set up AI-DLC';
+      const yes = 'Choose a version';
       const choice = await vscode.window.showInformationMessage(
         'Set up the AI-DLC workflow for this folder?',
         yes,
         'Not now'
       );
       if (choice === yes) {
-        // Consent already given by the prompt above — don't ask again.
-        await ensureAidlcRules(folderUri, this.context.extensionUri, { confirm: false });
+        await this.runSetup(folderUri);
       }
+    } catch (err) {
+      vscode.window.showErrorMessage(`AI-DLC setup failed: ${err && err.message ? err.message : err}`);
+    }
+  }
+
+  // The one place setup is decided. Every entry point goes through here so no path
+  // can install a generation the user was never asked about.
+  async runSetup(folderUri) {
+    const target = folderUri ?? this.treeDataProvider.rootUri;
+    await installCommands.setup(target, () => this.installV1(target));
+    this.refresh();
+    this.refreshSupervision();
+  }
+
+  // v1's installer, unchanged. Kept as a method so the generation chooser can call
+  // it without knowing about the extension's bundle layout.
+  async installV1(folderUri) {
+    try {
+      await ensureAidlcRules(folderUri, this.context.extensionUri);
     } catch (err) {
       vscode.window.showErrorMessage(`AI-DLC setup failed: ${err && err.message ? err.message : err}`);
     }
@@ -272,20 +289,17 @@ class WatchController {
     this.refresh();
   }
 
-  // AI-DLC rule setup is intentionally manual: triggered only from the
-  // "Set up AI-DLC Rules" toolbar button, never automatically on folder
-  // selection or watcher restore.
+  // Setup from the toolbar button. Asks which generation, then routes.
+  //
+  // The folder check happens here rather than inside the chooser, because there is
+  // nothing to ask about until a folder is being watched.
   async setupRules() {
     const folder = this.context.workspaceState.get(STATE_KEY);
     if (!folder) {
       await this.promptForFolder('Select an AI-DLC project folder first, then set up the rules.');
       return;
     }
-    try {
-      await ensureAidlcRules(vscode.Uri.file(folder), this.context.extensionUri);
-    } catch (err) {
-      vscode.window.showErrorMessage(`AI-DLC setup failed: ${err && err.message ? err.message : err}`);
-    }
+    await this.runSetup(vscode.Uri.file(folder));
   }
 
   // When no folder is watched but the open workspace already contains an
