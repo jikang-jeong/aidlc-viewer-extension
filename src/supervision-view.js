@@ -125,21 +125,63 @@ class SupervisionViewProvider {
        because it already means an unread NEW artifact in the tree. */
     color: var(--vscode-charts-purple, #b180d7);
   }
-  .rail { display: flex; gap: 2px; margin: 6px 0 4px; }
-  .seg { height: 8px; flex: 1 1 0; min-width: 4px; border-radius: 1px; background: var(--vscode-panel-border); }
+  /* The rail, matched to the viewer's journey strip so the two read the same.
+     Three things make a skipped stage legible, and all three were learned by
+     getting them wrong first:
+
+     Segments are 10px tall with a 9px floor. At 8px and a 4px floor the hatch on
+     a skipped stage had no room to repeat, so a 33-stage rail in a 300px sidebar
+     showed scattered purple blocks separated by what looked like gaps.
+
+     The unfilled track and the hatch are mixed from the foreground colour rather
+     than taken from panel-border, which is nearly invisible against a dark
+     sidebar background.
+
+     The band sits slightly lighter than the sidebar for the same reason: an
+     unfilled segment has to be visible as a segment, not as absence. */
+  .rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    align-items: center;
+    margin: 7px 0 6px;
+    padding: 5px 6px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-foreground) 14%);
+  }
+  /* Wrapping rather than shrinking. v2 declares 33 stages, which at the 9px floor
+     needs ~329px while a default sidebar offers ~268px. Shrinking below the floor
+     was the original mistake: the hatch stops repeating and a skipped stage turns
+     back into a gap. Two rows of legible segments beat one row of illegible ones,
+     and no stage is clipped out of sight. */
+  .seg {
+    height: 10px;
+    flex: 1 1 auto;
+    min-width: 9px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+  }
   .seg.done { background: var(--vscode-charts-purple, #b180d7); }
   .seg.active {
     background: color-mix(in srgb, var(--vscode-charts-purple, #b180d7) 55%, transparent);
     outline: 1px solid var(--vscode-charts-purple, #b180d7);
+    outline-offset: -1px;
   }
   /* Hatched, not blank: a stage the scope chose not to run is a decision, not a
      gap, and a blank segment reads as a missing tooth. */
   .seg.skipped {
     background: repeating-linear-gradient(
-      135deg,
-      var(--vscode-panel-border) 0 2px,
-      transparent 2px 4px
+      125deg,
+      color-mix(in srgb, var(--vscode-foreground) 34%, transparent) 0 2px,
+      transparent 2px 5px
     );
+  }
+  /* The furthest point reached, marked once. v1 established that highlighting the
+     current position rather than the file being read is what a reader wants, and
+     the ring is what makes it findable in a 33-segment rail. */
+  .seg.current {
+    background: var(--vscode-charts-purple, #b180d7);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-charts-purple, #b180d7) 40%, transparent);
   }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 1px 0; vertical-align: top; }
@@ -206,8 +248,21 @@ ${this.body()}
   position(project, intent) {
     const journey = intent.journey;
     const at = journey.currentIndex >= 0 ? journey.checkpoints[journey.currentIndex] : undefined;
+    // Every stage gets a segment so the rail is continuous and nothing reads as a
+    // missing tooth. The furthest reached is ringed, which is the only position
+    // marker: v1 established that where the reader's open file sits is not what
+    // they want to know.
     const rail = journey.checkpoints
-      .map((node) => `<span class="seg ${node.status}" title="${escapeHtml(node.label)} — ${node.status}"></span>`)
+      .map((node, index) => {
+        const classes = ['seg', node.status];
+        if (index === journey.currentIndex) classes.push('current');
+        const number = index + 1;
+        const unitPart =
+          node.forEach && node.unitsPlanned > 0 ? ` — ${node.unitsDone}/${node.unitsPlanned} units` : '';
+        return `<span class="${classes.join(' ')}" title="${escapeHtml(
+          `${number}. ${node.label} — ${node.status}${unitPart}`
+        )}"></span>`;
+      })
       .join('');
 
     const phaseRows = project.v2.phases
