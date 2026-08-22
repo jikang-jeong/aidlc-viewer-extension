@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
 const { SupervisionViewProvider, VIEW_ID: SUPERVISION_VIEW_ID } = require('./supervision-view');
+const { readProject } = require('./aidlc/index');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
 const OPENED_KEY = 'markdownWatchViewer.openedFiles';
@@ -700,6 +701,15 @@ class MarkdownTreeDataProvider {
       if (!journey || !Array.isArray(journey.checkpoints)) {
         return [];
       }
+      // Phase order comes from the order the checkpoints themselves are in,
+      // taking each phase at its first appearance. That is the workflow order by
+      // construction, so it needs no list to keep in step with the model.
+      //
+      // This replaces a hardcoded ['setup', 'inception', 'construction',
+      // 'operations']. For v1 the result is identical, because the v1 checkpoint
+      // list is already in exactly that order. For v2 it is the only thing that
+      // works: that project declares five phases whose names the extension does
+      // not know until it reads the project's own compiled stage graph.
       const byPhase = new Map();
       for (const cp of journey.checkpoints) {
         if (!byPhase.has(cp.phase)) {
@@ -707,9 +717,13 @@ class MarkdownTreeDataProvider {
         }
         byPhase.get(cp.phase).push(cp);
       }
-      return ['setup', 'inception', 'construction', 'operations']
-        .filter((phase) => byPhase.has(phase))
-        .map((phase) => new StageProgressChild(phase, byPhase.get(phase)));
+      return [...byPhase]
+        // A phase the scope skipped in full has nothing to report: a row reading
+        // "0/0, 7 skipped" invites the reader to wonder what is missing when the
+        // answer is that this project was never going to run it. v1 never hits
+        // this because it has no scope mechanism, so no v1 row disappears.
+        .filter(([, nodes]) => nodes.some((cp) => cp.status !== 'skipped'))
+        .map(([phase, nodes]) => new StageProgressChild(phase, nodes));
     }
 
     return this.getDirectoryEntries(element.resourceUri, element);
@@ -870,17 +884,40 @@ class MarkdownTreeDataProvider {
       latestFile: latest?.fileUri,
       latestModifiedLabel: latest?.fileUri ? path.basename(latest.fileUri.fsPath) : undefined,
       latestMtime: latest?.mtime,
-      // For the viewer's journey strip. Derived from directory structure only, so
-      // it stays correct when aidlc-state.md is missing or in an unexpected format.
       stageRoot,
-      journey: buildJourney({
+      // For the viewer's journey strip and the tree's progress rows.
+      //
+      // The v1 journey is built here from the artifact walk this method already
+      // did, then handed to the adapter. The adapter returns it unchanged for a
+      // v1 project, so that path cannot be altered by anything downstream; for a
+      // v2 project it substitutes a journey read from the engine's own compiled
+      // stage graph. Without this a v2 project showed every stage as pending,
+      // because it has no aidlc-docs/ directory for the walk above to find.
+      journey: this.resolveJourney(rootUri, buildJourney({
         artifacts,
         rulesInstalled: await detectRulesInstalled(rootUri)
-      })
+      }))
     };
 
     this.stageSummaryCache.set(cacheKey, summary);
     return summary;
+  }
+
+  // Routes a freshly built v1 journey through the generation adapter.
+  //
+  // For a v1 project the adapter hands back the very object passed in, so this is
+  // a no-op on the path 3,000 existing users are on. For a v2 project it returns
+  // a journey read from that project's compiled stage graph and runtime state.
+  //
+  // Any failure falls back to the v1 journey rather than propagating: a tree that
+  // renders v1-shaped progress is wrong on a v2 project, but a tree that throws
+  // is wrong on every project.
+  resolveJourney(rootUri, v1Journey) {
+    try {
+      return readProject(rootUri.fsPath, { v1Journey }).journey ?? v1Journey;
+    } catch {
+      return v1Journey;
+    }
   }
 
   async getMarkdownMetadata(resourceUri) {
@@ -1537,6 +1574,16 @@ function getStageColor(stage) {
     return new vscode.ThemeColor('charts.purple');
   }
   if (stage === 'operations') {
+    return new vscode.ThemeColor('charts.green');
+  }
+  // v2 names two of its five phases differently, and a project can compile a
+  // phase list this extension has never seen. Rather than leaving those grey,
+  // the two that map cleanly onto an existing tone reuse it, and anything else
+  // falls through to no colour -- which is honest, and never wrong.
+  if (stage === 'ideation') {
+    return new vscode.ThemeColor('charts.blue');
+  }
+  if (stage === 'operation') {
     return new vscode.ThemeColor('charts.green');
   }
   return undefined;

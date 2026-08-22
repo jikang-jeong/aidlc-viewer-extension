@@ -212,6 +212,8 @@ ${this.body()}
     const phaseRows = project.v2.phases
       .map((phase) => {
         const nodes = journey.checkpoints.filter((node) => node.phase === phase && node.planned);
+        // A phase the scope skipped in full is not progress the reader is waiting
+        // on, so it earns no row.
         if (nodes.length === 0) return '';
         const done = nodes.filter((node) => node.status === 'done').length;
         return `<tr><td class="k">${escapeHtml(phase)}</td><td class="n">${done}/${nodes.length}</td></tr>`;
