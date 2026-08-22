@@ -187,6 +187,7 @@ class SupervisionViewProvider {
   td { padding: 1px 0; vertical-align: top; }
   td.k { color: var(--vscode-descriptionForeground); padding-right: 8px; white-space: nowrap; }
   td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.indent { padding-left: 10px; }
   .warn { color: var(--vscode-charts-orange, #d18616); }
   /* Underway, in the product's purple rather than a warning colour: a stage being
      worked is progress, not a problem. Distinct from the plain done count so a
@@ -201,8 +202,15 @@ class SupervisionViewProvider {
   .seq { margin-top: 4px; font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; }
   .seq div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .seq .hit { color: var(--vscode-charts-orange, #d18616); font-weight: 600; }
-  a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  /* Links are underlined always, not only on hover. The panel is full of purple
+     text that is not clickable, so colour alone had stopped meaning "link". */
+  a {
+    color: var(--vscode-textLink-foreground);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  a:hover { color: var(--vscode-textLink-activeForeground); }
   code { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; }
 </style>
 </head>
@@ -236,15 +244,38 @@ ${this.body()}
     if (!intent) {
       return '<p class="quiet">v2 is installed; no intent has been started yet.</p>';
     }
+    // Order is by urgency, not by time. That is stated because the first reading
+    // of this panel assumed it was a timeline top to bottom, and nothing on screen
+    // said otherwise.
     return [
+      this.intro(intent),
       this.position(project, intent),
       this.blocking(intent),
-      this.contrast(intent),
       this.sensors(intent),
+      this.contrast(intent),
       this.gaps(project)
     ]
       .filter(Boolean)
       .join('\n');
+  }
+
+  // What this panel is for, in one sentence, because none of what follows is
+  // self-explanatory to someone who has not read the engine's source.
+  //
+  // The v2 workflow is run by an engine that checks its own output and records
+  // every check. The person approving a stage sees the agent's summary in chat and
+  // none of those records. So this panel exists to answer one question: is there
+  // anything in what the engine recorded that should change my mind before I
+  // approve.
+  intro(intent) {
+    const total =
+      intent.diagnosis.live.length +
+      intent.diagnosis.sensorFailureTotal +
+      intent.contrast.rows.length;
+    if (total === 0) {
+      return '<p class="quiet">The engine recorded no unresolved findings for this run. Sections below are ordered by urgency, not by time.</p>';
+    }
+    return `<p class="quiet">What AI-DLC's engine recorded and the chat did not show you. Ordered by urgency, not by time.</p>`;
   }
 
   // Where am I. The one thing v2 prints once into the chat and then loses to
@@ -333,13 +364,19 @@ ${
 }`;
   }
 
-  // What is blocking. Only refusals with nothing after them for their stage: a
-  // completed run logs dozens it recovered from, and listing those would make
-  // this section noise.
+  // What is stopping the workflow right now.
+  //
+  // Only refusals with nothing after them for their stage: a completed run logs
+  // dozens it recovered from within seconds, and listing those would make this
+  // section noise. The sequence is included because the engine's message states
+  // the remedy without stating how the workflow got there, and that is only
+  // visible as an ordering.
   blocking(intent) {
     const live = intent.diagnosis.live;
     if (live.length === 0) {
-      return `<h2>Blocked</h2><p class="quiet">Nothing. ${intent.diagnosis.refusals.length} engine refusal(s) were logged during this run and all were recovered from.</p>`;
+      return `<h2>Anything stuck</h2><p class="quiet">No. The engine refused an action ${
+        intent.diagnosis.refusals.length
+      } time(s) during this run &mdash; usually a step running out of order &mdash; and every one was resolved. Nothing is waiting on you here.</p>`;
     }
     const blocks = live
       .map((entry) => {
@@ -354,6 +391,7 @@ ${
         return `<div class="block">
   <div class="msg">${escapeHtml(entry.message)}</div>
   ${entry.command ? `<div class="quiet" style="margin-top:4px"><code>${escapeHtml(entry.command)}</code></div>` : ''}
+  <div class="quiet" style="margin-top:6px">What led here, oldest first:</div>
   <div class="seq">${sequence}</div>
 </div>`;
       })
@@ -361,7 +399,8 @@ ${
     // The sequence is the point. The engine's message states the remedy but not
     // how the workflow reached the state it refuses, and that is only visible as
     // an ordering of events.
-    return `<h2 class="warn">Blocked</h2>${blocks}`;
+    return `<h2 class="warn">Anything stuck</h2>
+<p class="quiet">The engine is refusing an action. Its own words are below, with the events that led to it.</p>${blocks}`;
   }
 
   // What the agent said about its own coverage, next to what the engine's sensor
@@ -388,16 +427,16 @@ ${
           .map(([status, count]) => `${count} ${escapeHtml(status)}`)
           .join(', ');
         const detail = row.detailPaths[0]
-          ? `<a data-path="${escapeHtml(this.absolute(row.detailPaths[0]))}">what the sensor found</a>`
-          : '';
+          ? `<a data-path="${escapeHtml(this.absolute(row.detailPaths[0]))}">read what the engine could not account for</a>`
+          : '<span class="quiet">no detail recorded</span>';
         return `<tr><td class="k">${escapeHtml(row.stage ?? '(stage unstated)')}</td><td class="n">${
           row.itemCount
-        } item(s)${row.recordCount > 1 ? ` in ${row.recordCount} records` : ''}</td></tr>
-<tr><td class="quiet" style="padding-left:8px">recorded</td><td class="n quiet">${claim || '—'}</td></tr>
-<tr><td class="quiet" style="padding-left:8px">sensor</td><td class="n warn">${
+        } requirement(s)${row.recordCount > 1 ? ` in ${row.recordCount} records` : ''}</td></tr>
+<tr><td class="quiet indent">agent says</td><td class="n quiet">${claim || '&mdash;'}</td></tr>
+<tr><td class="quiet indent">engine found</td><td class="n warn">${
           row.sensorFindings
-        } finding(s) over ${row.sensorFirings} pass(es)</td></tr>
-<tr><td colspan="2" class="quiet" style="padding-bottom:6px">${detail}</td></tr>`;
+        } unaccounted, over ${row.sensorFirings} check(s)</td></tr>
+<tr><td colspan="2" class="indent" style="padding-bottom:6px">${detail}</td></tr>`;
       })
       .join('');
 
@@ -407,37 +446,63 @@ ${
         )}.</p>`
       : '';
 
-    return `<h2 class="warn">Recorded vs checked</h2>
-<p class="quiet">The agent's own coverage record and the engine's reading of it. Both are on disk; only the first reached the chat.</p>
+    return `<h2 class="warn">The agent's claim, and the engine's check of it</h2>
+<p class="quiet">At some stages the agent writes a record of which requirements it covered. The engine then reads that same file and reports what it could not account for. The chat showed you the agent's version. Both numbers are below and neither is corrected against the other &mdash; they answer slightly different questions, so the judgement is yours.</p>
 <table>${body}</table>${orphans}`;
   }
 
-  // What the engine caught and nobody was told. Sensors are advisory, so the
-  // workflow continued and the chat said nothing.
+  // What the engine's own checks flagged and nobody was told.
+  //
+  // "Sensor" is the engine's word for an automatic check it runs over each
+  // artifact as it is written: whether the required sections are present, whether
+  // every upstream requirement is accounted for, whether the traceability record
+  // adds up, whether the code lints. They are advisory by design, so a failing one
+  // never stops the workflow and never appears in chat.
+  //
+  // Findings are counted per sensor rather than listed one per row. A first
+  // version repeated the sensor's name once per finding, so a stage with fifteen
+  // findings from one check printed that check's name fifteen times, and the six
+  // that fitted looked like an arbitrary subset.
   sensors(intent) {
     const byStage = intent.diagnosis.sensorFailures;
     if (byStage.size === 0) {
-      return '<h2>Sensor findings</h2><p class="quiet">None recorded.</p>';
+      return `<h2>Checks the engine ran</h2>
+<p class="quiet">Nothing was flagged. The engine checks each artifact as it is written and records the result; none of those checks failed in this run.</p>`;
     }
+
     const rows = [...byStage]
       .sort((a, b) => b[1].length - a[1].length)
       .map(([stage, failures]) => {
-        const links = failures
-          .slice(0, 6)
-          .map((failure, index) => {
-            const target = failure.detailPath ?? failure.outputPath;
-            const label = failure.sensorId ?? `finding ${index + 1}`;
-            return target
-              ? `<a data-path="${escapeHtml(this.absolute(target))}">${escapeHtml(label)}</a>`
-              : escapeHtml(label);
+        // Group by sensor so a name appears once with its count, and keep the
+        // first detail file per sensor as the thing to open.
+        const bySensor = new Map();
+        for (const failure of failures) {
+          const key = failure.sensorId ?? 'unnamed check';
+          if (!bySensor.has(key)) bySensor.set(key, { count: 0, detail: undefined });
+          const entry = bySensor.get(key);
+          entry.count += 1;
+          entry.detail = entry.detail ?? failure.detailPath ?? failure.outputPath;
+        }
+        const detailRows = [...bySensor]
+          .sort((a, b) => b[1].count - a[1].count)
+          .map(([name, entry]) => {
+            const label = `${escapeHtml(name)}${entry.count > 1 ? ` ×${entry.count}` : ''}`;
+            // Every finding observed so far had a detail file, so a name without a
+            // link means the engine did not record one — worth being able to tell
+            // apart at a glance rather than guessing.
+            const cell = entry.detail
+              ? `<a data-path="${escapeHtml(this.absolute(entry.detail))}">${label}</a>`
+              : `${label} <span class="quiet">(no detail recorded)</span>`;
+            return `<tr><td colspan="2" class="indent">${cell}</td></tr>`;
           })
-          .join(', ');
+          .join('');
         return `<tr><td class="k">${escapeHtml(stage)}</td><td class="n warn">${failures.length}</td></tr>
-<tr><td colspan="2" class="quiet" style="padding-bottom:4px">${links}</td></tr>`;
+${detailRows}`;
       })
       .join('');
-    return `<h2 class="warn">Sensor findings</h2>
-<p class="quiet">Advisory, so the workflow continued and no message was shown.</p>
+
+    return `<h2 class="warn">Checks the engine ran</h2>
+<p class="quiet">The engine checks each artifact as it is written &mdash; required sections, upstream coverage, traceability, linting. These are advisory, so the workflow continued and the chat said nothing. Click a check to read exactly what it found.</p>
 <table>${rows}</table>`;
   }
 
@@ -446,10 +511,10 @@ ${
   gaps(project) {
     const unknown = project.v2.gaps.unknownEvents;
     if (unknown.length === 0) return '';
-    return `<h2>Not understood</h2>
-<p class="quiet">${unknown.length} event type(s) in this project's ledger have no meaning in this build: ${escapeHtml(
+    return `<h2>Not understood by this extension</h2>
+<p class="quiet">The engine recorded ${unknown.length} kind(s) of event this version of the extension has no meaning for, so they are named rather than ignored: ${escapeHtml(
       unknown.join(', ')
-    )}. Progress above is unaffected.</p>`;
+    )}. Everything above is unaffected; this is only a note that the extension does not claim to understand the whole ledger.</p>`;
   }
 
   // Sensor paths in the ledger are relative to the project root.

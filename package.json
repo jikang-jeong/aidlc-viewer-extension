@@ -63,11 +63,6 @@
         "icon": "$(cloud-download)"
       },
       {
-        "command": "markdownWatchViewer.setupV2",
-        "title": "AIDLC-VIEWER: Set up AI-DLC v2",
-        "icon": "$(rocket)"
-      },
-      {
         "command": "markdownWatchViewer.removeV2",
         "title": "AIDLC-VIEWER: Remove AI-DLC v2"
       },
@@ -135,14 +130,9 @@
           "group": "navigation@3"
         },
         {
-          "command": "markdownWatchViewer.setupV2",
-          "when": "view == markdownWatchViewer.tree",
-          "group": "navigation@4"
-        },
-        {
           "command": "markdownWatchViewer.showHelp",
           "when": "view == markdownWatchViewer.tree",
-          "group": "navigation@5"
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [

@@ -3,6 +3,7 @@ const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
 const { SupervisionViewProvider, VIEW_ID: SUPERVISION_VIEW_ID } = require('./supervision-view');
 const { readProject } = require('./aidlc/index');
+const { detectGeneration } = require('./aidlc/detect');
 const installCommands = require('./install-commands');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
@@ -56,15 +57,17 @@ function activate(context) {
     vscode.commands.registerCommand('markdownWatchViewer.openFile', (item) => controller.openFile(item)),
     vscode.commands.registerCommand('markdownWatchViewer.openInTextEditor', (item) => controller.openInTextEditor(item)),
     vscode.commands.registerCommand('markdownWatchViewer.showHelp', () => controller.showHelp()),
-    vscode.commands.registerCommand('markdownWatchViewer.setupRules', () => controller.setupRules()),
-    // v2 setup and removal. Separate commands rather than one that guesses the
-    // generation: installing v2 into a project is a different decision from
-    // installing v1's rule files, and a single button that chose for the user
-    // would be choosing which product they are using.
-    vscode.commands.registerCommand('markdownWatchViewer.setupV2', async () => {
-      await installCommands.setupV2(controller.treeDataProvider.rootUri);
-      // A fresh install changes the generation, so the context key that gates the
-      // supervision panel has to be re-evaluated before the user looks for it.
+    // One setup button that asks which generation. It used to install v1
+    // unconditionally, and adding a second button for v2 beside it did not work:
+    // the report was that pressing "Set up AI-DLC" still installed v1, with
+    // nothing on screen saying the other icon was the v2 one.
+    vscode.commands.registerCommand('markdownWatchViewer.setupRules', async () => {
+      await installCommands.setup(
+        controller.treeDataProvider.rootUri,
+        () => controller.setupRules()
+      );
+      // An install changes the generation, and the context key that decides
+      // whether the supervision panel exists is derived from it.
       controller.refresh();
       controller.refreshSupervision();
     }),
@@ -3299,6 +3302,14 @@ async function aidlcSetupNeeded(folderUri, extensionUri) {
   const coreFile = vscode.Uri.joinPath(bundleRoot, 'aws-aidlc-rules', 'core-workflow.md');
   if (!(await pathExists(coreFile))) {
     return false; // no bundle — nothing to offer
+  }
+  // A project already running v2 must not be offered v1. Its v1 targets are all
+  // absent, which is exactly what the loop below reads as "needs setup", so
+  // without this guard opening a v2 project prompted to install the previous
+  // generation into it.
+  const { generation } = detectGeneration(folderUri.fsPath);
+  if (generation === 'v2' || generation === 'both') {
+    return false;
   }
   const targets = getAidlcTargets(detectHostTargetKey());
   for (const target of targets) {

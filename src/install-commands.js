@@ -58,6 +58,49 @@ async function handleMissingBun(bun) {
   return choice === continueLabel;
 }
 
+// Which generation to set up.
+//
+// One button that asks, rather than two buttons the user has to tell apart. Two
+// were tried and the report came back immediately: pressing "Set up AI-DLC"
+// installed v1, because that is what it has always done, and nothing on screen
+// said the other icon was the one for v2. A person deciding between two AI-DLC
+// generations needs the question asked, not a pair of similar icons to guess
+// between.
+//
+// The answer is not remembered, because it is a property of the project rather
+// than of the user.
+async function chooseGeneration(state) {
+  const isV2 = state && (state.generation === 'v2' || state.generation === 'both');
+  const isV1 = state && (state.generation === 'v1' || state.generation === 'both');
+
+  const picked = await vscode.window.showQuickPick(
+    [
+      {
+        key: 'v2',
+        label: isV2 ? 'AI-DLC v2 — reinstall' : 'AI-DLC v2',
+        description: 'current',
+        detail:
+          'Engine-driven: 33 stages, enforced gates, an audit ledger. Downloaded ' +
+          'from upstream at a pinned commit. Needs bun.'
+      },
+      {
+        key: 'v1',
+        label: isV1 ? 'AI-DLC v1 — already present' : 'AI-DLC v1',
+        description: 'bundled',
+        detail:
+          'Rule files your agent reads. Copied from the snapshot inside this ' +
+          'extension, so it needs no network and no bun.'
+      }
+    ],
+    {
+      title: 'Set up AI-DLC',
+      placeHolder: 'Which generation does this project use?',
+      ignoreFocusOut: true
+    }
+  );
+  return picked ? picked.key : undefined;
+}
+
 async function chooseHarness(existing) {
   if (existing) return existing;
   const picked = await vscode.window.showQuickPick(
@@ -106,8 +149,13 @@ async function confirmInstall(state, harness, reinstalling) {
   return choice === goLabel;
 }
 
-// The install command.
-async function setupV2(folderUri) {
+// The setup command. Asks which generation, then routes.
+//
+// `installV1` is passed in rather than imported, because the v1 installer lives in
+// extension.js and depends on the extension's own bundle path. Keeping the call
+// here means one button covers both generations without this file knowing how v1
+// works.
+async function setup(folderUri, installV1) {
   if (!folderUri) {
     vscode.window.showWarningMessage('Select a folder to watch first.');
     return;
@@ -119,6 +167,17 @@ async function setupV2(folderUri) {
     return;
   }
 
+  const generation = await chooseGeneration(state);
+  if (!generation) return;
+  if (generation === 'v1') {
+    // Unchanged from what it has always done, including its own confirmation.
+    await installV1();
+    return;
+  }
+  await installV2(root, state);
+}
+
+async function installV2(root, state) {
   // A harness already recorded is kept. Offering to switch would produce a
   // project carrying two mutually exclusive sets of agent definitions.
   const existing = state.receipt ? state.receipt.harness : undefined;
@@ -229,4 +288,4 @@ function hasRemovableInstall(folderUri) {
   }
 }
 
-module.exports = { setupV2, removeV2, hasRemovableInstall, RECEIPT_PATH };
+module.exports = { setup, removeV2, hasRemovableInstall, RECEIPT_PATH };
