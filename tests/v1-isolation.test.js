@@ -181,3 +181,80 @@ test('the v1 phase vocabulary is still exactly what the colour map covers', () =
     LEGACY_ORDER
   );
 });
+
+// ---------------------------------------------------------------------------
+// Reading must stay cheap enough to sit on the tree's refresh path
+// ---------------------------------------------------------------------------
+
+test('a repeat read of an unchanged project does not re-parse the ledger', () => {
+  // The uncached read measured 25-35ms on three real runs, dominated by parsing a
+  // ~330KB append-only ledger, and it is called on every tree refresh and panel
+  // update. Uncached that is 30ms of the extension host's only thread each time a
+  // file watcher fires while a workflow is running.
+  const root = tempDir((dir) => {
+    fs.mkdirSync(path.join(dir, '.kiro', 'tools', 'data'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, '.kiro', 'tools', 'data', 'stage-graph.json'),
+      JSON.stringify([{ slug: 'a', name: 'A', phase: 'p' }])
+    );
+    const intent = path.join(dir, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+    fs.mkdirSync(path.join(intent, 'audit'), { recursive: true });
+    fs.writeFileSync(
+      path.join(intent, 'runtime-graph.json'),
+      JSON.stringify({ scope: 's', stages: [] })
+    );
+    fs.writeFileSync(
+      path.join(intent, 'audit', 'shard.md'),
+      '**Event**: HUMAN_TURN\n**Timestamp**: 2026-01-01T00:00:00Z'
+    );
+  });
+
+  const first = readProject(root, {});
+  const second = readProject(root, {});
+  // Identity of the cached model proves the second call did no work, which a
+  // timing assertion could not do reliably on a loaded machine.
+  assert.strictEqual(first.v2, second.v2);
+});
+
+test('appending to the ledger invalidates the cache', () => {
+  // The signature covers each shard's size as well as its mtime, because a shard
+  // appended to within the same millisecond as the previous read would otherwise
+  // be missed. The ledger is append-only, so size always moves.
+  const root = tempDir((dir) => {
+    fs.mkdirSync(path.join(dir, '.kiro', 'tools', 'data'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, '.kiro', 'tools', 'data', 'stage-graph.json'),
+      JSON.stringify([{ slug: 'a', name: 'A', phase: 'p' }])
+    );
+    const intent = path.join(dir, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+    fs.mkdirSync(path.join(intent, 'audit'), { recursive: true });
+    fs.writeFileSync(
+      path.join(intent, 'runtime-graph.json'),
+      JSON.stringify({ scope: 's', stages: [] })
+    );
+    fs.writeFileSync(
+      path.join(intent, 'audit', 'shard.md'),
+      '**Event**: HUMAN_TURN\n**Timestamp**: 2026-01-01T00:00:00Z'
+    );
+  });
+  const shard = path.join(
+    root, 'aidlc', 'spaces', 'default', 'intents', '260101-x', 'audit', 'shard.md'
+  );
+
+  assert.equal(readProject(root, {}).v2.active.diagnosis.eventTotal, 1);
+  fs.appendFileSync(
+    shard,
+    '\n---\n**Event**: GATE_APPROVED\n**Timestamp**: 2026-01-01T00:00:01Z\n**Stage**: a'
+  );
+  assert.equal(readProject(root, {}).v2.active.diagnosis.eventTotal, 2);
+});
+
+test('a v1 project is never cached, because its journey is rebuilt by the caller', () => {
+  const root = tempDir((dir) => {
+    fs.mkdirSync(path.join(dir, 'aidlc-docs'), { recursive: true });
+  });
+  const a = buildJourney({ artifacts: [], rulesInstalled: true });
+  const b = buildJourney({ artifacts: [], rulesInstalled: true });
+  assert.strictEqual(readProject(root, { v1Journey: a }).journey, a);
+  assert.strictEqual(readProject(root, { v1Journey: b }).journey, b);
+});

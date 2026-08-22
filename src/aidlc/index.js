@@ -10,10 +10,79 @@
 //
 // Pure module: never import `vscode` here. Everything is filesystem reads.
 
+const fs = require('fs');
+const path = require('path');
 const { GENERATION, detectGeneration } = require('./detect');
 const { buildV2 } = require('./journey-v2');
 const { diagnose } = require('./diagnose');
 const { contested } = require('./contrast');
+
+// Reading a project is filesystem-only but not free: on three real runs it took
+// 25-35ms, dominated by parsing a ~330KB audit ledger, and it is called on every
+// tree refresh and every panel update. Left uncached that is 30ms of the
+// extension host's single thread every time a file watcher fires during an active
+// workflow, and the ledger only grows.
+//
+// So the result is memoised against a signature built from stat calls alone. The
+// signature deliberately covers only files whose change can alter the answer, and
+// never their contents: hashing the ledger to avoid parsing it would cost the same
+// read it is meant to save.
+const cache = new Map();
+const CACHE_LIMIT = 8;
+
+function mtimeOf(target) {
+  try {
+    const stat = fs.statSync(target);
+    return `${stat.mtimeMs}:${stat.size}`;
+  } catch {
+    return '-';
+  }
+}
+
+// Cheap enough to run on every call: a handful of stats regardless of ledger size.
+//
+// A shard appended to within the same millisecond as a previous read would be
+// missed by mtime alone, which is why size is part of each entry -- the ledger is
+// append-only, so any new record changes it.
+function signature(root) {
+  const parts = [mtimeOf(path.join(root, '.kiro', 'tools', 'data', 'stage-graph.json'))];
+  parts.push(mtimeOf(path.join(root, '.kiro', 'tools', 'data', 'scope-grid.json')));
+  const intentsRoot = path.join(root, 'aidlc', 'spaces');
+  let spaces;
+  try {
+    spaces = fs.readdirSync(intentsRoot, { withFileTypes: true });
+  } catch {
+    return parts.join('|');
+  }
+  for (const space of spaces) {
+    if (!space.isDirectory() || space.name.startsWith('.')) continue;
+    const intents = path.join(intentsRoot, space.name, 'intents');
+    let entries;
+    try {
+      entries = fs.readdirSync(intents, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const dir = path.join(intents, entry.name);
+      parts.push(entry.name, mtimeOf(path.join(dir, 'runtime-graph.json')));
+      // The ledger is sharded, so each shard is signed rather than the directory:
+      // a directory's own mtime does not change when a file inside it is appended
+      // to on every platform.
+      let shards;
+      try {
+        shards = fs.readdirSync(path.join(dir, 'audit'));
+      } catch {
+        continue;
+      }
+      for (const shard of shards.sort()) {
+        parts.push(mtimeOf(path.join(dir, 'audit', shard)));
+      }
+    }
+  }
+  return parts.join('|');
+}
 
 // Read a project.
 //
@@ -32,12 +101,32 @@ function readProject(root, options = {}) {
     return { generation, markers, v2: undefined, journey: options.v1Journey };
   }
 
+  // The v1 journey is not part of the cached value: the caller rebuilds it from
+  // its own artifact walk each time, and for a v2 project it is only a fallback.
+  const key = root;
+  const stamp = signature(root);
+  const hit = cache.get(key);
+  if (hit && hit.stamp === stamp) {
+    return { ...hit.value, journey: hit.value.journey ?? options.v1Journey };
+  }
+
+  const value = buildProject(root, generation, markers);
+  cache.set(key, { stamp, value });
+  // A user watches one project at a time; the cap exists so a long session that
+  // moved between several does not hold every ledger it ever read.
+  if (cache.size > CACHE_LIMIT) {
+    cache.delete(cache.keys().next().value);
+  }
+  return { ...value, journey: value.journey ?? options.v1Journey };
+}
+
+function buildProject(root, generation, markers) {
   const model = buildV2(root);
   if (!model.ok) {
     // A v2 install whose compiled graph cannot be read. Reported rather than
     // thrown: a half-finished install is a normal state to render, and the tree
     // must still work.
-    return { generation, markers, v2: { ok: false, reason: model.reason }, journey: options.v1Journey };
+    return { generation, markers, v2: { ok: false, reason: model.reason }, journey: undefined };
   }
 
   // Supervision facts per intent, attached alongside its journey.
@@ -62,8 +151,9 @@ function readProject(root, options = {}) {
     generation,
     markers,
     v2: { ...model, intents, active },
-    // So a caller that only knows about journeys keeps working.
-    journey: active ? active.journey : options.v1Journey
+    // So a caller that only knows about journeys keeps working. Left undefined
+    // when no intent has started, and the caller's v1 journey stands in.
+    journey: active ? active.journey : undefined
   };
 }
 
@@ -76,23 +166,4 @@ function pickActive(intents) {
   return pool[pool.length - 1];
 }
 
-// Whether a surface has anything worth interrupting the user about.
-//
-// Deliberately narrow. Across three observed runs 44 refusals were logged and
-// none were still in the way, so "there were problems" is not a signal -- "there
-// is a problem now" is. Sensor failures are the exception: they are advisory,
-// nothing ever resolves them, and nobody was told, so an unresolved count stays
-// worth showing.
-function hasSomethingToSay(project) {
-  if (!project || !project.v2 || project.v2.ok === false) return false;
-  const intent = project.v2.active;
-  if (!intent) return false;
-  return (
-    intent.diagnosis.live.length > 0 ||
-    intent.diagnosis.sensorFailureTotal > 0 ||
-    intent.contrast.rows.length > 0 ||
-    project.v2.gaps.unknownEvents.length > 0
-  );
-}
-
-module.exports = { GENERATION, readProject, hasSomethingToSay };
+module.exports = { GENERATION, readProject };

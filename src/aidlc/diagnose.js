@@ -76,14 +76,6 @@ function describeRefusals(summary, options = {}) {
   });
 }
 
-// Refusals with nothing after them for their stage: the ones actually in the way
-// right now. A run accumulates refusals it has long since recovered from -- 21
-// in one observed project, nearly all historical -- so presenting the raw count
-// as an alarm would train people to ignore the surface.
-function liveRefusals(summary, options) {
-  return describeRefusals(summary, options).filter((entry) => entry.settled === false);
-}
-
 // Sensor failures grouped by the stage that produced them, each keeping the
 // engine's own paths so a reader can open the artifact and the failure detail.
 //
@@ -105,15 +97,6 @@ function sensorFailuresByStage(summary) {
     });
   }
   return byStage;
-}
-
-// One number per stage, for a surface that has room for a count and not a list.
-function sensorFailureCounts(summary) {
-  const counts = new Map();
-  for (const [stage, failures] of sensorFailuresByStage(summary)) {
-    counts.set(stage, failures.length);
-  }
-  return counts;
 }
 
 // Everything the supervision surface needs from one intent's ledger.
@@ -155,9 +138,7 @@ function byTimestamp(events) {
 
 module.exports = {
   describeRefusals,
-  liveRefusals,
   sensorFailuresByStage,
-  sensorFailureCounts,
   diagnose,
   byTimestamp
 };
