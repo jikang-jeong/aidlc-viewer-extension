@@ -97,16 +97,14 @@ async function chooseGeneration(state) {
   const isV2 = state && (state.generation === 'v2' || state.generation === 'both');
   const isV1 = state && (state.generation === 'v1' || state.generation === 'both');
 
+  // v1 is listed first, deliberately. Three thousand people are on it, so it is
+  // the answer most people opening this list are looking for, and a list whose
+  // first row is the uncommon answer makes the common one feel like a fallback.
+  //
+  // Order carries no recommendation. Each row says what it is and the reader
+  // decides; nothing here nudges toward the newer one for being newer.
   const picked = await vscode.window.showQuickPick(
     [
-      {
-        key: 'v2',
-        label: isV2 ? 'AI-DLC v2 — reinstall' : 'AI-DLC v2',
-        description: 'current',
-        detail:
-          'Engine-driven: 33 stages, enforced gates, an audit ledger. Downloaded ' +
-          'from upstream at a pinned commit. Needs bun.'
-      },
       {
         key: 'v1',
         label: isV1 ? 'AI-DLC v1 — already present' : 'AI-DLC v1',
@@ -114,6 +112,14 @@ async function chooseGeneration(state) {
         detail:
           'Rule files your agent reads. Copied from the snapshot inside this ' +
           'extension, so it needs no network and no bun.'
+      },
+      {
+        key: 'v2',
+        label: isV2 ? 'AI-DLC v2 — reinstall' : 'AI-DLC v2',
+        description: 'current',
+        detail:
+          'Engine-driven: 33 stages, enforced gates, an audit ledger. Downloaded ' +
+          'from upstream at a pinned commit. Needs bun.'
       }
     ],
     {
