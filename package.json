@@ -2,7 +2,7 @@
   "name": "aidlc-viewer",
   "displayName": "AIDLC-VIEWER",
   "description": "Watch AIDLC workflow folders, visualize AI-DLC progress, and edit Markdown artifacts in a split editor/preview viewer with zoom.",
-  "version": "0.0.22",
+  "version": "0.0.20",
   "publisher": "jikjeong",
   "license": "MIT",
   "repository": {
