@@ -88,11 +88,16 @@ function readReceipt(root) {
       files: Array.isArray(raw.files) ? raw.files : [],
       // Sections appended to a file that already existed, removable by marker.
       appended: Array.isArray(raw.appended) ? raw.appended : [],
+      // Paths the installer seeded and removal must never take back. A seeded
+      // path is the same path the workflow later writes the project's own rules
+      // to, so it is recorded for honesty and excluded from removal by design.
+      seeded: Array.isArray(raw.seeded) ? raw.seeded : [],
       // Anything else the receipt carries that this build does not read.
       unknownFields: Object.keys(raw).filter(
         (key) =>
           ![
-            'schemaVersion', 'harness', 'upstreamCommit', 'installedAt', 'files', 'appended'
+            'schemaVersion', 'harness', 'upstreamCommit', 'installedAt',
+            'files', 'appended', 'seeded'
           ].includes(key)
       )
     };

@@ -162,7 +162,23 @@ function planRemoval(state) {
     };
   }
 
-  const ops = state.receipt.files.map((file) => ({ type: 'delete-file', to: file }));
+  // A receipt from an older build, or one hand-edited, could name a path under the
+  // seed directory. Filtered here rather than trusted, because the consequence of
+  // getting it wrong is deleting the rules a project accumulated: the seeded
+  // `aidlc/spaces/default/memory/project.md` is the very file the workflow appends
+  // every learned correction to, and no backup covers it.
+  const seedPrefix = `${SEED_ENTRY}${path.sep}`;
+  const protectedPaths = [];
+  const removable = state.receipt.files.filter((file) => {
+    const normalised = file.split('/').join(path.sep);
+    if (normalised === SEED_ENTRY || normalised.startsWith(seedPrefix)) {
+      protectedPaths.push(file);
+      return false;
+    }
+    return true;
+  });
+
+  const ops = removable.map((file) => ({ type: 'delete-file', to: file }));
   for (const file of state.receipt.appended) {
     ops.push({
       type: 'remove-section',
@@ -174,6 +190,15 @@ function planRemoval(state) {
   ops.push({ type: 'delete-file', to: path.join(...RECEIPT_PATH) });
 
   const notes = [];
+  if (protectedPaths.length > 0) {
+    notes.push({
+      level: 'info',
+      text:
+        `${protectedPaths.length} path(s) the installer seeded under ${SEED_ENTRY}/ ` +
+        'are left in place, because the workflow writes the project\'s own rules to ' +
+        'those same paths.'
+    });
+  }
   if (state.memory && state.memory.beyondSeed) {
     notes.push({
       level: 'warn',
@@ -183,7 +208,7 @@ function planRemoval(state) {
         'either -- delete it yourself only if you mean to lose that history.'
     });
   }
-  return { blocked: false, ops, notes };
+  return { blocked: false, ops, notes, protectedPaths };
 }
 
 module.exports = {

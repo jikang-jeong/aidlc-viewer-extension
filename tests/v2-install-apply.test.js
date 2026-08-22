@@ -1,0 +1,403 @@
+'use strict';
+
+// End-to-end contract for the install executor: install, reinstall, remove.
+//
+// These tests write to disk, unlike the planner tests, because what they protect
+// only exists once files move. They build their own payload rather than fetching
+// one, so the suite stays offline and deterministic; a fetched payload is exercised
+// separately by hand against the pinned commit.
+//
+// Two properties matter above the rest, and both are unrecoverable if broken:
+//
+//   A reinstall must not touch aidlc/. Nine files are seeded there and the
+//   workflow turns them into the project's own rules -- three observed projects
+//   grew theirs to 138-146 files with learned corrections in project.md that exist
+//   nowhere else.
+//
+//   Removal must take back only what the receipt records. The receipt lives inside
+//   the tree the installer replaces, so a reinstall that lost it would leave a
+//   project with no record of what to remove.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const state = require('../src/aidlc/install-state');
+const plan = require('../src/aidlc/install-plan');
+const apply = require('../src/aidlc/install-apply');
+const payload = require('../src/aidlc/payload');
+
+// A payload shaped like the real one: dist/kiro-ide is .kiro (the engine), aidlc
+// (the seed), AGENTS.md and .gitignore.
+function makePayload() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-fake-payload-'));
+  const write = (rel, contents) => {
+    const full = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, contents);
+  };
+  write('.kiro/agents/aidlc.json', '{"name":"aidlc"}');
+  write('.kiro/tools/aidlc-utility.ts', '// engine tool');
+  write('.kiro/tools/data/stage-graph.json', '[]');
+  write('aidlc/spaces/default/memory/org.md', '# org seed');
+  write('aidlc/spaces/default/memory/team.md', '# team seed');
+  write('aidlc/spaces/default/memory/project.md', '# project seed');
+  write('aidlc/active-space', 'default');
+  write('AGENTS.md', '# upstream agent instructions');
+  write('.gitignore', 'aidlc/.aidlc-sessions/\n');
+  return dir;
+}
+
+function emptyProject() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-proj-'));
+}
+
+function install(payloadDir, root, commit = 'abc1234') {
+  const entries = payload.topLevelEntries(payloadDir);
+  const current = state.readInstallState(root);
+  const planned = plan.planInstall({
+    payloadEntries: entries,
+    state: current,
+    harness: 'kiro-ide',
+    upstreamCommit: commit
+  });
+  return {
+    planned,
+    result: apply.applyPlan({ payloadDir, root, ops: planned.ops })
+  };
+}
+
+function readReceipt(root) {
+  return JSON.parse(fs.readFileSync(path.join(root, ...state.RECEIPT_PATH), 'utf8'));
+}
+
+function countFiles(dir) {
+  return apply.listFilesRelative(dir).length;
+}
+
+// Simulates a run: the workflow rewrites a seeded memory file and produces an
+// intent record.
+function simulateRun(root) {
+  const memory = path.join(root, 'aidlc', 'spaces', 'default', 'memory');
+  fs.writeFileSync(
+    path.join(memory, 'project.md'),
+    '## Corrections\n- ALWAYS something this project learned (learned 2026-08-22)\n'
+  );
+  const intent = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260822-x', 'ideation');
+  fs.mkdirSync(intent, { recursive: true });
+  for (let i = 0; i < 12; i += 1) {
+    fs.writeFileSync(path.join(intent, `a${i}.md`), '# artifact');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Install
+// ---------------------------------------------------------------------------
+
+test('a first install writes the engine, seeds the memory, and records what it wrote', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  const { result } = install(src, root);
+
+  assert.equal(result.ok, true);
+  assert.ok(fs.existsSync(path.join(root, '.kiro', 'agents', 'aidlc.json')));
+  assert.ok(fs.existsSync(path.join(root, 'aidlc', 'spaces', 'default', 'memory', 'org.md')));
+
+  const receipt = readReceipt(root);
+  assert.equal(receipt.harness, 'kiro-ide');
+  assert.equal(receipt.upstreamCommit, 'abc1234');
+  // Every path in the receipt exists, because it records what was written rather
+  // than what the plan intended.
+  for (const rel of receipt.files) {
+    assert.ok(fs.existsSync(path.join(root, rel)), `receipt names a missing file: ${rel}`);
+  }
+});
+
+test('a shared file the project already had keeps its own content', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '# my own notes\nkeep me\n');
+  install(src, root);
+
+  const after = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
+  assert.match(after, /keep me/);
+  assert.match(after, /upstream agent instructions/);
+  // Recorded as appended, not written, so removal takes back the section rather
+  // than the file.
+  assert.deepEqual(readReceipt(root).appended, ['AGENTS.md']);
+});
+
+test('a shared file the project did not have becomes ours outright', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  install(src, root);
+  const receipt = readReceipt(root);
+  // .gitignore did not exist, so removal should delete it rather than edit it.
+  assert.ok(receipt.files.includes('.gitignore'));
+  assert.ok(!receipt.appended.includes('.gitignore'));
+});
+
+// ---------------------------------------------------------------------------
+// Reinstall: the property that must never regress
+// ---------------------------------------------------------------------------
+
+test('a reinstall leaves every file under aidlc/ exactly as the run left it', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  install(src, root);
+  simulateRun(root);
+
+  const memoryDir = path.join(root, 'aidlc');
+  const before = new Map(
+    apply.listFilesRelative(memoryDir).map((rel) => [rel, fs.readFileSync(path.join(memoryDir, rel))])
+  );
+
+  const { planned, result } = install(src, root);
+  assert.equal(result.ok, true);
+
+  // No operation named the seed directory.
+  assert.deepEqual(planned.ops.filter((op) => op.to === plan.SEED_ENTRY), []);
+  assert.ok(planned.notes.some((note) => note.level === 'warn' && /left untouched/.test(note.text)));
+
+  const after = new Map(
+    apply.listFilesRelative(memoryDir).map((rel) => [rel, fs.readFileSync(path.join(memoryDir, rel))])
+  );
+  assert.equal(after.size, before.size);
+  for (const [rel, bytes] of before) {
+    assert.ok(after.has(rel), `reinstall lost ${rel}`);
+    assert.ok(bytes.equals(after.get(rel)), `reinstall modified ${rel}`);
+  }
+});
+
+test('a reinstall replaces the engine and carries the receipt through it', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  install(src, root);
+
+  // A stale engine file from a previous version must not survive the replacement.
+  fs.writeFileSync(path.join(root, '.kiro', 'tools', 'gone-upstream.ts'), '// old');
+  const { result } = install(src, root, 'def5678');
+
+  assert.equal(result.ok, true);
+  assert.equal(fs.existsSync(path.join(root, '.kiro', 'tools', 'gone-upstream.ts')), false);
+  // The receipt lives inside the replaced tree, so this is the test that proves
+  // removal is still possible after a reinstall.
+  assert.equal(readReceipt(root).upstreamCommit, 'def5678');
+});
+
+test('reinstalling twice does not accumulate copies in a shared file', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '# mine\n');
+  install(src, root);
+  install(src, root);
+
+  const after = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
+  const occurrences = after.split(plan.MARKER_BEGIN).length - 1;
+  assert.equal(occurrences, 1);
+  assert.match(after, /# mine/);
+});
+
+// ---------------------------------------------------------------------------
+// Removal
+// ---------------------------------------------------------------------------
+
+test('removal takes back the engine and leaves the project memory', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  install(src, root);
+  simulateRun(root);
+  const memoryCount = countFiles(path.join(root, 'aidlc'));
+
+  const removal = plan.planRemoval(state.readInstallState(root));
+  assert.equal(removal.blocked, false);
+  const applied = apply.applyRemoval({ root, ops: removal.ops });
+
+  assert.deepEqual(applied.kept, []);
+  assert.equal(fs.existsSync(path.join(root, '.kiro')), false);
+  assert.equal(countFiles(path.join(root, 'aidlc')), memoryCount);
+});
+
+test('the seed is recorded apart from what removal may delete', () => {
+  // The first version of this recorded seeded paths in the receipt's `files`
+  // list, so removal deleted four files under aidlc/ -- including the project.md
+  // the workflow had rewritten with the rules it learned. The seed and the
+  // project's own rules are the same path, so they are recorded separately and
+  // removal reads only one of the two lists.
+  const src = makePayload();
+  const root = emptyProject();
+  install(src, root);
+
+  const receipt = readReceipt(root);
+  assert.ok(receipt.seeded.length > 0, 'seeded paths must be recorded');
+  assert.ok(
+    receipt.seeded.some((rel) => rel.includes('project.md')),
+    'the file the workflow accumulates rules in must be among them'
+  );
+  for (const rel of receipt.files) {
+    assert.ok(
+      !rel.startsWith('aidlc/') && !rel.startsWith(`aidlc${path.sep}`),
+      `removal list must not name a seeded path: ${rel}`
+    );
+  }
+});
+
+test('a receipt naming a seeded path anyway is refused that deletion', () => {
+  // A receipt from an older build, or one edited by hand, could still list a path
+  // under the seed. The planner filters rather than trusts, because the cost of
+  // being wrong is a project's accumulated rules.
+  const root = emptyProject();
+  fs.mkdirSync(path.join(root, '.kiro'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, ...state.RECEIPT_PATH),
+    JSON.stringify({
+      schemaVersion: 1,
+      files: [
+        '.kiro/agents/aidlc.json',
+        'aidlc/spaces/default/memory/project.md',
+        'aidlc'
+      ],
+      appended: []
+    })
+  );
+  const removal = plan.planRemoval(state.readInstallState(root));
+  const targets = removal.ops.map((op) => op.to);
+  assert.ok(targets.includes('.kiro/agents/aidlc.json'));
+  assert.ok(!targets.some((target) => target.startsWith('aidlc')));
+  assert.equal(removal.protectedPaths.length, 2);
+});
+
+test('removal restores a shared file to what the project had before', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  const original = '# my own notes\nkeep me\n';
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), original);
+  install(src, root);
+
+  const removal = plan.planRemoval(state.readInstallState(root));
+  apply.applyRemoval({ root, ops: removal.ops });
+
+  const after = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
+  assert.match(after, /keep me/);
+  assert.ok(!after.includes(plan.MARKER_BEGIN));
+  assert.ok(!after.includes('upstream agent instructions'));
+});
+
+test('removal deletes a shared file it created entirely', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  install(src, root);
+  apply.applyRemoval({ root, ops: plan.planRemoval(state.readInstallState(root)).ops });
+  assert.equal(fs.existsSync(path.join(root, '.gitignore')), false);
+});
+
+test('removal leaves a marked section alone when someone edited the markers away', () => {
+  // Removing a guessed range would take their edit with it.
+  const src = makePayload();
+  const root = emptyProject();
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '# mine\n');
+  install(src, root);
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '# mine\nsomeone rewrote this by hand\n');
+
+  const applied = apply.applyRemoval({
+    root,
+    ops: plan.planRemoval(state.readInstallState(root)).ops
+  });
+  assert.ok(applied.kept.some((entry) => entry.reason === 'markers-not-found'));
+  assert.match(fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8'), /by hand/);
+});
+
+test('removal after a reinstall still removes everything, using the latest receipt', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  install(src, root);
+  install(src, root);
+  const applied = apply.applyRemoval({
+    root,
+    ops: plan.planRemoval(state.readInstallState(root)).ops
+  });
+  assert.deepEqual(applied.kept, []);
+  assert.equal(fs.existsSync(path.join(root, '.kiro')), false);
+});
+
+// ---------------------------------------------------------------------------
+// Safety
+// ---------------------------------------------------------------------------
+
+test('a payload entry naming a path outside the project is refused', () => {
+  // The payload arrives over the network, so a traversing name is a real input.
+  const src = makePayload();
+  const root = emptyProject();
+  const result = apply.applyPlan({
+    payloadDir: src,
+    root,
+    ops: [{ type: plan.OP.COPY_FILE, from: 'AGENTS.md', to: '../escaped.md' }]
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'escapes-root');
+  assert.equal(fs.existsSync(path.join(path.dirname(root), 'escaped.md')), false);
+});
+
+test('a failure part way through still reports everything that was written', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  const ops = [
+    { type: plan.OP.SEED_TREE, from: 'aidlc', to: 'aidlc' },
+    { type: plan.OP.COPY_FILE, from: 'AGENTS.md', to: '../escaped.md' }
+  ];
+  const result = apply.applyPlan({ payloadDir: src, root, ops });
+  assert.equal(result.ok, false);
+  // Seeded paths land in their own list, not in the removal list, so a partial
+  // install is reported through both and the caller can undo what is safe to undo.
+  assert.ok(result.seeded.length > 0);
+  assert.ok(result.seeded.every((rel) => fs.existsSync(path.join(root, rel))));
+  assert.deepEqual(result.written, []);
+});
+
+test('seeding never replaces a file that is already there', () => {
+  const src = makePayload();
+  const root = emptyProject();
+  const target = path.join(root, 'aidlc', 'spaces', 'default', 'memory', 'org.md');
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, '# edited before the first run\n');
+
+  apply.applyPlan({
+    payloadDir: src,
+    root,
+    ops: [{ type: plan.OP.SEED_TREE, from: 'aidlc', to: 'aidlc' }]
+  });
+  assert.match(fs.readFileSync(target, 'utf8'), /edited before the first run/);
+});
+
+// ---------------------------------------------------------------------------
+// Payload fetch: argument handling, offline
+// ---------------------------------------------------------------------------
+
+test('a branch or tag is refused, because a floating ref installs different engines', () => {
+  for (const ref of ['v2', 'main', 'HEAD', '', 'not a sha', '../etc']) {
+    assert.equal(payload.COMMIT_PATTERN.test(ref), false, `"${ref}" must not pass as a commit`);
+  }
+  assert.ok(payload.COMMIT_PATTERN.test('4d0968fc'));
+  assert.ok(payload.COMMIT_PATTERN.test('4d0968fc'.repeat(5).slice(0, 40)));
+});
+
+test('an unknown harness is refused rather than attempted', async () => {
+  const result = await payload.fetchPayload({ commit: '4d0968fc', harness: 'emacs' });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'unknown-harness');
+});
+
+test('a bad commit is refused before any network call', async () => {
+  const result = await payload.fetchPayload({ commit: 'v2', harness: 'kiro-ide' });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'bad-commit');
+});
+
+test('the tarball url is built from the pinned commit', () => {
+  assert.equal(
+    payload.tarballUrl('4d0968fc'),
+    'https://codeload.github.com/awslabs/aidlc-workflows/tar.gz/4d0968fc'
+  );
+});
