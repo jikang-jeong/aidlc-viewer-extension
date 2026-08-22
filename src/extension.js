@@ -1,6 +1,7 @@
 const vscode = require('vscode');
 const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
+const { SupervisionViewProvider, VIEW_ID: SUPERVISION_VIEW_ID } = require('./supervision-view');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
 const OPENED_KEY = 'markdownWatchViewer.openedFiles';
@@ -23,11 +24,22 @@ function activate(context) {
   controller.treeView = treeView;
   controller.updateBadge();
 
+  // v2 supervision panel. It renders above the tree and only for a project that
+  // has AI-DLC v2 installed: the view's `when` clause is driven by a context key
+  // this provider sets, so a v1 project shows no new UI whatsoever.
+  const supervision = new SupervisionViewProvider();
+  controller.supervisionView = supervision;
+
   context.subscriptions.push(
     // Ensure watchers/timers are cleaned up when the extension is deactivated
     // (disposeWatcher was previously only called on folder re-selection).
     controller,
     treeView,
+    vscode.window.registerWebviewViewProvider(SUPERVISION_VIEW_ID, supervision, {
+      // The panel is cheap to rebuild from disk and holds no unsaved state, so
+      // there is nothing to retain while it is hidden.
+      webviewOptions: { retainContextWhenHidden: false }
+    }),
     // Show the one-time "new setup feature" notice only when the user actually
     // opens the AI-DLC view, not on editor startup.
     treeView.onDidChangeVisibility((e) => {
@@ -92,7 +104,24 @@ class WatchController {
       this.refreshTimer = undefined;
       this.treeDataProvider.refresh();
       this.broadcastJourney();
+      // Same debounce as the tree. Reading the v2 ledger is filesystem-only but
+      // grows with the run (one observed project reached 1,182 events), so it
+      // must not run per file-watcher event.
+      this.refreshSupervision();
     }, 200);
+  }
+
+  // Hands the current watched folder to the v2 panel, which decides for itself
+  // whether this is a v2 project and hides itself when it is not. Failures are
+  // swallowed on purpose: nothing about the tree, the viewer or the v1 path may
+  // depend on this succeeding.
+  refreshSupervision() {
+    if (!this.supervisionView) return;
+    try {
+      this.supervisionView.update(this.treeDataProvider.rootUri);
+    } catch {
+      // A panel that cannot render is a missing panel, not a broken extension.
+    }
   }
 
   async restoreWatcher() {
@@ -101,6 +130,7 @@ class WatchController {
       // No popup on startup — the tree's viewsWelcome shows the "Select AI-DLC
       // Folder" call to action only when the user actually opens the view.
       this.treeDataProvider.setRootUri(undefined);
+      this.refreshSupervision();
       // Except: if the open workspace already contains AI-DLC artifacts
       // (an aidlc-docs folder), offer to watch it — one prompt, once.
       await this.offerWorkspaceAutoDetect();
@@ -115,6 +145,7 @@ class WatchController {
       // Stored folder is gone — reset to the welcome view without a popup.
       this.context.workspaceState.update(STATE_KEY, undefined);
       this.treeDataProvider.setRootUri(undefined);
+      this.refreshSupervision();
     }
   }
 
@@ -173,6 +204,7 @@ class WatchController {
   async setWatchedFolder(folderUri, options = { showMessage: true }) {
     this.disposeWatcher();
     this.treeDataProvider.setRootUri(folderUri);
+    this.refreshSupervision();
     await this.context.workspaceState.update(STATE_KEY, folderUri.fsPath);
     await this.primeKnownFiles(folderUri);
 
