@@ -510,8 +510,13 @@ class WatchController {
         // directory names to stage names through a table; v2 puts the stage's own
         // slug in the path, so membership against the compiled slug list answers
         // it without a table to keep in step.
+        //
+        // The root comes from `folder` above rather than from a `this.rootUri`
+        // that does not exist on this class -- reaching for it threw, and the
+        // catch below turned that into "no strip at all" rather than into a
+        // missing position marker.
         if (summary.generation === 'v2') {
-          const rel = path.relative(this.rootUri.fsPath, fileUri.fsPath);
+          const rel = path.relative(folder, fileUri.fsPath);
           if (rel && !rel.startsWith('..')) {
             openIndex = checkpointIndexForPath(journey, rel);
           }
@@ -527,8 +532,13 @@ class WatchController {
       }
 
       return { ...journey, openIndex };
-    } catch {
-      return undefined; // never let the strip break the viewer
+    } catch (err) {
+      // The strip must never break the viewer, but a silent catch here hid a real
+      // bug: a reference to a property that does not exist on this class threw, and
+      // the strip vanished entirely rather than losing only its position marker.
+      // So the reason goes to the log while the viewer still degrades quietly.
+      console.error('[aidlc-viewer] journey strip payload failed:', err);
+      return undefined;
     }
   }
 
