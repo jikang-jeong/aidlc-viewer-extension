@@ -400,6 +400,34 @@ test('units: an in-flight stage counts only units the ledger explicitly closed',
   assert.deepEqual(node.unitsInFlight, ['u2']);
 });
 
+test('units: a completed stage reports nothing in flight, even with no closure rows', () => {
+  // A `subagent` stage emits no UNIT_COMPLETED, so on a completed one the ledger
+  // shows every unit as seen and none as closed. Reporting those as in flight
+  // contradicted the count beside them, which read 1/1 done.
+  const runtimeStub = {
+    byStage: new Map([['c', { slug: 'c', outcome: 'approved', done: true }]]),
+    units: { units: [{ name: 'u1' }], batches: [['u1']] }
+  };
+  const seen = new Map([['c', new Set(['u1'])]]);
+  const node = buildFromStages(
+    stagesWith('unit-of-work'), runtimeStub, new Map(), seen
+  ).checkpoints[0];
+  assert.equal(node.unitsDone, 1);
+  assert.deepEqual(node.unitsInFlight, []);
+});
+
+test('units: a stage the scope skipped reports nothing in flight', () => {
+  const runtimeStub = {
+    byStage: new Map(),
+    units: { units: [{ name: 'u1' }], batches: [['u1']] }
+  };
+  const stages = [{ ...stagesWith('unit-of-work')[0], inScope: false }];
+  const seen = new Map([['c', new Set(['u1'])]]);
+  const node = buildFromStages(stages, runtimeStub, new Map(), seen).checkpoints[0];
+  assert.equal(node.status, V2_STATUS.SKIPPED);
+  assert.deepEqual(node.unitsInFlight, []);
+});
+
 test('units: the same unit closed twice counts once', () => {
   // A unit can be re-reviewed after its completion row, which was observed on a
   // real project. Counting rows would then claim more units than exist.

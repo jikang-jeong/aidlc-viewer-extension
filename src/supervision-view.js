@@ -188,6 +188,10 @@ class SupervisionViewProvider {
   td.k { color: var(--vscode-descriptionForeground); padding-right: 8px; white-space: nowrap; }
   td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .warn { color: var(--vscode-charts-orange, #d18616); }
+  /* Underway, in the product's purple rather than a warning colour: a stage being
+     worked is progress, not a problem. Distinct from the plain done count so a
+     phase in flight cannot read as untouched. */
+  .live { color: var(--vscode-charts-purple, #b180d7); }
   .block {
     border-left: 2px solid var(--vscode-charts-orange, #d18616);
     padding: 4px 0 4px 8px;
@@ -265,6 +269,12 @@ ${this.body()}
       })
       .join('');
 
+    // Per phase, done out of planned, and separately how many are underway.
+    //
+    // Counting only `done` made a phase that is actively being worked read as
+    // untouched: on a real project the construction row said 0/3 while its first
+    // stage had both units finished and was sitting at its gate. The count is
+    // right and the impression is wrong, so the in-flight ones are named.
     const phaseRows = project.v2.phases
       .map((phase) => {
         const nodes = journey.checkpoints.filter((node) => node.phase === phase && node.planned);
@@ -272,7 +282,9 @@ ${this.body()}
         // on, so it earns no row.
         if (nodes.length === 0) return '';
         const done = nodes.filter((node) => node.status === 'done').length;
-        return `<tr><td class="k">${escapeHtml(phase)}</td><td class="n">${done}/${nodes.length}</td></tr>`;
+        const active = nodes.filter((node) => node.status === 'active').length;
+        const suffix = active > 0 ? ` <span class="live">+${active} underway</span>` : '';
+        return `<tr><td class="k">${escapeHtml(phase)}</td><td class="n">${done}/${nodes.length}${suffix}</td></tr>`;
       })
       .join('');
 
@@ -290,11 +302,27 @@ ${this.body()}
       })
       .join('');
 
+    // Stages underway, named rather than counted. On a 33-stage workflow the
+    // question a reader has is which stage is being worked, and the rail's ring
+    // answers it only for the furthest one.
+    const underway = journey.checkpoints.filter(
+      (node) => node.planned && node.status === 'active'
+    );
+
     return `<h2>Position</h2>
 <div class="stage">${escapeHtml(at ? at.label : 'Not started')}</div>
 <div class="rail">${rail}</div>
 <table>
-  <tr><td class="k">in scope</td><td class="n">${journey.counts.done}/${journey.plannedTotal} done</td></tr>
+  <tr><td class="k">in scope</td><td class="n">${journey.counts.done}/${journey.plannedTotal} done${
+    underway.length > 0 ? ` <span class="live">+${underway.length} underway</span>` : ''
+  }</td></tr>
+  ${
+    underway.length > 0
+      ? `<tr><td class="k">underway</td><td class="n live">${escapeHtml(
+          underway.map((node) => node.label).join(', ')
+        )}</td></tr>`
+      : ''
+  }
   <tr><td class="k">scope</td><td class="n">${escapeHtml(intent.scope ?? 'unrecorded')}</td></tr>
   ${phaseRows}
 </table>

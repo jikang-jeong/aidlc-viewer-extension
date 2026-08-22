@@ -72,7 +72,7 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
         ? unitsDoneFor(stage, status, unitNames, unitsCompleted)
         : undefined,
       unitsInFlight: stage.forEach
-        ? unitsInFlightFor(stage, unitsCompleted, unitsSeen)
+        ? unitsInFlightFor(stage, status, unitsCompleted, unitsSeen)
         : undefined
     });
   }
@@ -125,7 +125,13 @@ function unitsDoneFor(stage, status, unitNames, unitsCompleted) {
 
 // Units the ledger shows a stage touching but not closing, so a caller can say
 // which unit an in-flight stage is on.
-function unitsInFlightFor(stage, unitsCompleted, unitsSeen) {
+//
+// Takes the stage's status for the same reason unitsDoneFor does: a `subagent`
+// stage emits no UNIT_COMPLETED at all, so on a completed one the ledger shows
+// every unit as seen and none as closed. Reporting those as in flight contradicted
+// the count right beside it, which read 1/1 done.
+function unitsInFlightFor(stage, status, unitsCompleted, unitsSeen) {
+  if (status === V2_STATUS.DONE || status === V2_STATUS.SKIPPED) return [];
   const seen = unitsSeen.get(stage.slug);
   if (!seen) return [];
   const closed = unitsCompleted.get(stage.slug) ?? new Set();
