@@ -4,6 +4,7 @@
 .claude/**
 .gitignore
 tests/**
+tools/**
 media/marketplace-icon.svg
 media/icon-drafts/**
 *.log

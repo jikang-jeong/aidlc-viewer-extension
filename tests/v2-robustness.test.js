@@ -1,0 +1,503 @@
+'use strict';
+
+// Robustness contract for the v2 readers.
+//
+// The requirement these tests encode is not "parse correctly". It is: NO INPUT
+// MAY THROW. A reader that crashes on an unfamiliar file takes the whole tree
+// view down with it, and the whole point of this layer is that a project which
+// exercises an unfamiliar corner of the engine still renders -- reporting the
+// corner as a gap instead of failing.
+//
+// So every case below feeds something deliberately hostile: a truncated file, a
+// value of the wrong type, an unknown enum, a field renamed, a shape the engine
+// has never actually produced. The assertion is always the same two parts: it
+// returned, and it told us what it did not understand.
+//
+// Fixtures are SYNTHESISED here, never copied from a real project. This is a
+// public repository and real runs contain customer intent.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const detect = require('../src/aidlc/detect');
+const graph = require('../src/aidlc/graph');
+const runtime = require('../src/aidlc/runtime');
+const audit = require('../src/aidlc/audit');
+const { buildV2, buildFromStages, V2_STATUS } = require('../src/aidlc/journey-v2');
+
+// ---------------------------------------------------------------------------
+// Fixture builder: writes a minimal v2 project into a temp dir.
+// ---------------------------------------------------------------------------
+
+function makeProject(spec = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-robust-'));
+  const write = (relPath, contents) => {
+    const full = path.join(root, relPath);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, typeof contents === 'string' ? contents : JSON.stringify(contents));
+  };
+
+  fs.mkdirSync(path.join(root, 'aidlc', 'spaces'), { recursive: true });
+  write(path.join('.kiro', 'agents', 'aidlc.json'), { name: 'aidlc' });
+
+  if ('stageGraph' in spec) write(path.join('.kiro', 'tools', 'data', 'stage-graph.json'), spec.stageGraph);
+  if ('scopeGrid' in spec) write(path.join('.kiro', 'tools', 'data', 'scope-grid.json'), spec.scopeGrid);
+
+  const intents = path.join('aidlc', 'spaces', 'default', 'intents');
+  if ('manifest' in spec) write(path.join(intents, 'intents.json'), spec.manifest);
+  if ('intentDir' in spec) {
+    const dir = path.join(intents, spec.intentDir);
+    fs.mkdirSync(path.join(root, dir), { recursive: true });
+    if ('runtimeGraph' in spec) write(path.join(dir, 'runtime-graph.json'), spec.runtimeGraph);
+    if ('auditShard' in spec) write(path.join(dir, 'audit', 'shard.md'), spec.auditShard);
+  }
+  return root;
+}
+
+// A well-formed baseline, so a failure elsewhere is provably about the hostile
+// part of a case and not about the scaffolding.
+const GOOD_GRAPH = [
+  { slug: 'a', name: 'A', phase: 'p1', execution: 'ALWAYS' },
+  { slug: 'b', name: 'B', phase: 'p1', execution: 'CONDITIONAL' },
+  { slug: 'c', name: 'C', phase: 'p2', execution: 'ALWAYS', for_each: 'unit-of-work' }
+];
+const GOOD_GRID = {
+  wide: { stages: { a: 'EXECUTE', b: 'EXECUTE', c: 'EXECUTE' } },
+  narrow: { stages: { a: 'EXECUTE', b: 'SKIP', c: 'SKIP' } }
+};
+
+function record(fields) {
+  return Object.entries(fields).map(([k, v]) => `**${k}**: ${v}`).join('\n');
+}
+function shard(records) {
+  return records.map(record).join('\n---\n');
+}
+
+// ---------------------------------------------------------------------------
+// Nothing throws, whatever is on disk
+// ---------------------------------------------------------------------------
+
+test('detect: a path that does not exist is a verdict, not an error', () => {
+  const result = detect.detectGeneration('/nonexistent/nowhere-at-all');
+  assert.equal(result.generation, detect.GENERATION.NONE);
+});
+
+test('detect: a missing root argument is a verdict, not an error', () => {
+  assert.equal(detect.detectGeneration(undefined).generation, detect.GENERATION.NONE);
+  assert.equal(detect.detectGeneration('').generation, detect.GENERATION.NONE);
+});
+
+test('detect: v1 and v2 markers together report both rather than picking one', () => {
+  const root = makeProject({});
+  fs.mkdirSync(path.join(root, 'aidlc-docs'), { recursive: true });
+  assert.equal(detect.detectGeneration(root).generation, detect.GENERATION.BOTH);
+});
+
+for (const [label, contents] of [
+  ['truncated mid-object', '{"stages": [{"slug": "a"'],
+  ['empty file', ''],
+  ['an object where an array belongs', '{"stages": []}'],
+  ['an array of nulls', '[null, null]'],
+  ['an array of strings', '["a", "b"]'],
+  ['deeply wrong types', '[{"slug": 42, "phase": ["p"], "produces": "not-an-array"}]']
+]) {
+  test(`graph: stage-graph.json ${label} yields undefined, never a throw`, () => {
+    const root = makeProject({ stageGraph: contents });
+    const result = graph.readStageGraph(root);
+    // Either it found no usable stage (undefined) or it found some and dropped
+    // the unusable ones. Both are acceptable; throwing is not.
+    if (result) assert.ok(Array.isArray(result.stages));
+  });
+}
+
+test('graph: a stage field the model has never seen is reported, not dropped silently', () => {
+  const root = makeProject({
+    stageGraph: [{ slug: 'a', phase: 'p1', some_field_from_the_future: true }]
+  });
+  const result = graph.readStageGraph(root);
+  assert.ok(result.unknownStageFields.includes('some_field_from_the_future'));
+});
+
+test('graph: a scope decision that is neither EXECUTE nor SKIP is reported and treated as out of scope', () => {
+  const root = makeProject({
+    stageGraph: GOOD_GRAPH,
+    scopeGrid: { s: { stages: { a: 'EXECUTE', b: 'DEFERRED_SOMEHOW' } } }
+  });
+  const grid = graph.readScopeGrid(root);
+  assert.ok(grid.unknownDecisions.includes('DEFERRED_SOMEHOW'));
+  const stages = graph.stagesForScope(graph.readStageGraph(root), grid, 's');
+  assert.equal(stages.find((s) => s.slug === 'b').inScope, false);
+});
+
+test('graph: an unknown scope name leaves every stage in scope rather than claiming they were skipped', () => {
+  const root = makeProject({ stageGraph: GOOD_GRAPH, scopeGrid: GOOD_GRID });
+  const stages = graph.stagesForScope(
+    graph.readStageGraph(root),
+    graph.readScopeGrid(root),
+    'a-scope-nobody-has-heard-of'
+  );
+  assert.ok(stages.every((s) => s.inScope));
+});
+
+for (const [label, contents] of [
+  ['not an object', '"just a string"'],
+  ['stages missing', '{"scope": "x"}'],
+  ['stages of the wrong type', '{"stages": {"a": 1}}'],
+  ['truncated', '{"scope": "x", "stages": [{'],
+  ['stage rows missing their slug', '{"stages": [{"outcome": "approved"}]}']
+]) {
+  test(`runtime: runtime-graph.json ${label} yields undefined, never a throw`, () => {
+    const root = makeProject({ intentDir: '260101-x', runtimeGraph: contents });
+    const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+    const result = runtime.readRuntime(dir);
+    if (result) assert.ok(result.byStage instanceof Map);
+  });
+}
+
+test('runtime: a runtime-graph key the model does not read is reported', () => {
+  const root = makeProject({
+    intentDir: '260101-x',
+    runtimeGraph: { scope: 's', stages: [], something_new: { a: 1 } }
+  });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  assert.deepEqual(runtime.readRuntime(dir).unknownFields, ['something_new']);
+});
+
+test('runtime: an outcome value beyond approved/pending is reported and counts as unfinished', () => {
+  const root = makeProject({
+    intentDir: '260101-x',
+    runtimeGraph: { scope: 's', stages: [{ stage_slug: 'a', outcome: 'quarantined' }] }
+  });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  const result = runtime.readRuntime(dir);
+  assert.deepEqual(result.unknownOutcomes, ['quarantined']);
+  assert.equal(result.byStage.get('a').done, false);
+});
+
+for (const boltDag of [
+  null,
+  'a string',
+  {},
+  { units: 'not an array' },
+  { units: [null, { noName: true }] },
+  { units: [{ name: 'u1' }], batches: 'not an array' },
+  { units: [{ name: 'u1', depends_on: 'not an array' }] }
+]) {
+  test(`runtime: bolt_dag shaped as ${JSON.stringify(boltDag)} does not throw`, () => {
+    const result = runtime.readUnits(boltDag);
+    if (result) {
+      assert.ok(Array.isArray(result.units));
+      assert.ok(Array.isArray(result.batches));
+    }
+  });
+}
+
+test('runtime: a manifest whose entries name a directory that is absent reports the mismatch', () => {
+  const root = makeProject({
+    manifest: [{ slug: 'gone', dirName: '260101-gone' }],
+    intentDir: '260101-here'
+  });
+  const listing = runtime.listIntents(root, 'default');
+  assert.deepEqual(listing.missingOnDisk, ['260101-gone']);
+  // With no manifest match it must still find what IS on disk.
+  assert.deepEqual(listing.intents.map((i) => i.id), ['260101-here']);
+});
+
+test('runtime: a directory absent from the manifest is reported, not hidden', () => {
+  const root = makeProject({
+    manifest: [{ slug: 'a', dirName: '260101-a' }],
+    intentDir: '260101-a'
+  });
+  const extra = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-unlisted');
+  fs.mkdirSync(extra, { recursive: true });
+  const listing = runtime.listIntents(root, 'default');
+  assert.deepEqual(listing.missingFromManifest, ['260101-unlisted']);
+});
+
+for (const [label, manifest] of [
+  ['not an array or object', '"nope"'],
+  ['array of numbers', '[1, 2, 3]'],
+  ['entries with no directory name', '[{"slug": "only-a-slug"}]'],
+  ['truncated', '[{"dirName": "260101-a"']
+]) {
+  test(`runtime: a manifest that is ${label} falls back to the directory walk`, () => {
+    const root = makeProject({ manifest, intentDir: '260101-a' });
+    const listing = runtime.listIntents(root, 'default');
+    assert.deepEqual(listing.intents.map((i) => i.id), ['260101-a']);
+  });
+}
+
+test('audit: a missing audit directory yields no events rather than an error', () => {
+  const root = makeProject({ intentDir: '260101-x' });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  const summary = audit.summarise(dir);
+  assert.equal(summary.total, 0);
+  assert.deepEqual(summary.unknownEvents, []);
+});
+
+test('audit: records with no Event line are skipped without disturbing the rest', () => {
+  const root = makeProject({
+    intentDir: '260101-x',
+    auditShard: [
+      '**Timestamp**: 2026-01-01T00:00:00Z',
+      '---',
+      record({ Event: 'HUMAN_TURN', Timestamp: '2026-01-01T00:00:01Z' }),
+      '---',
+      'free prose that is not a record at all'
+    ].join('\n')
+  });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  assert.equal(audit.summarise(dir).total, 1);
+});
+
+test('audit: the stage field is read under either spelling', () => {
+  // Sensor rows use `Stage slug`; other rows use `Stage`. Reading one name only
+  // silently produced an empty per-stage tally, so both are pinned here.
+  const root = makeProject({
+    intentDir: '260101-x',
+    auditShard: shard([
+      { Event: 'SENSOR_FAILED', 'Stage slug': 'alpha', Timestamp: '2026-01-01T00:00:00Z' },
+      { Event: 'SENSOR_FAILED', Stage: 'beta', Timestamp: '2026-01-01T00:00:01Z' }
+    ])
+  });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  const summary = audit.summarise(dir);
+  assert.equal(summary.failuresByStage.get('alpha'), 1);
+  assert.equal(summary.failuresByStage.get('beta'), 1);
+});
+
+test('audit: an event name the model has never seen is counted and reported', () => {
+  const root = makeProject({
+    intentDir: '260101-x',
+    auditShard: shard([{ Event: 'SOMETHING_NOBODY_HAS_SEEN', Timestamp: '2026-01-01T00:00:00Z' }])
+  });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  const summary = audit.summarise(dir);
+  assert.equal(summary.total, 1);
+  assert.deepEqual(summary.unknownEvents, ['SOMETHING_NOBODY_HAS_SEEN']);
+});
+
+test('audit: a record with no timestamp still orders and does not throw', () => {
+  const root = makeProject({
+    intentDir: '260101-x',
+    auditShard: shard([
+      { Event: 'ERROR_LOGGED', Stage: 'a', Error: 'Refusing something' },
+      { Event: 'HUMAN_TURN' }
+    ])
+  });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  const summary = audit.summarise(dir);
+  assert.equal(summary.refusals.length, 1);
+  assert.ok(Array.isArray(audit.refusalContext(summary, 0)));
+});
+
+test('audit: asking for context on a refusal that does not exist yields nothing', () => {
+  const root = makeProject({ intentDir: '260101-x', auditShard: '' });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  const summary = audit.summarise(dir);
+  assert.deepEqual(audit.refusalContext(summary, 99), []);
+  assert.deepEqual(audit.refusalContext(summary, undefined), []);
+});
+
+// ---------------------------------------------------------------------------
+// The whole model, end to end, on inputs that should not be survivable
+// ---------------------------------------------------------------------------
+
+test('buildV2: a project with no stage graph reports why instead of throwing', () => {
+  const root = makeProject({});
+  const model = buildV2(root);
+  assert.equal(model.ok, false);
+  assert.equal(model.reason, 'stage-graph-unreadable');
+});
+
+test('buildV2: a graph with no scope grid still builds and flags the gap', () => {
+  const root = makeProject({ stageGraph: GOOD_GRAPH, intentDir: '260101-x' });
+  const model = buildV2(root);
+  assert.equal(model.ok, true);
+  assert.equal(model.gaps.scopeGridMissing, true);
+});
+
+test('buildV2: an intent with no runtime graph reads as nothing started', () => {
+  const root = makeProject({ stageGraph: GOOD_GRAPH, scopeGrid: GOOD_GRID, intentDir: '260101-x' });
+  const model = buildV2(root);
+  const intent = model.intents[0];
+  assert.equal(intent.journey.currentIndex, -1);
+  assert.deepEqual(model.gaps.intentsWithoutRuntime, ['260101-x']);
+});
+
+test('buildV2: a manifest scope disagreeing with the runtime scope is reported, not resolved', () => {
+  const root = makeProject({
+    stageGraph: GOOD_GRAPH,
+    scopeGrid: GOOD_GRID,
+    manifest: [{ dirName: '260101-x', scope: 'narrow' }],
+    intentDir: '260101-x',
+    runtimeGraph: { scope: 'wide', stages: [] }
+  });
+  const model = buildV2(root);
+  assert.deepEqual(model.gaps.scopeDisagreements, ['260101-x']);
+});
+
+test('buildV2: no phase is hardcoded, so a graph with invented phase names works', () => {
+  const root = makeProject({
+    stageGraph: [
+      { slug: 'x', name: 'X', phase: 'brand-new-phase' },
+      { slug: 'y', name: 'Y', phase: 'another-one' }
+    ],
+    intentDir: '260101-x'
+  });
+  const model = buildV2(root);
+  assert.deepEqual(model.phases, ['brand-new-phase', 'another-one']);
+});
+
+test('buildV2: a directory inside the intent that is not a phase is reported', () => {
+  const root = makeProject({ stageGraph: GOOD_GRAPH, intentDir: '260101-x' });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  fs.mkdirSync(path.join(dir, 'audit'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'p1'), { recursive: true });
+  const model = buildV2(root);
+  assert.ok(model.gaps.nonPhaseDirs.includes('audit'));
+  assert.ok(!model.gaps.nonPhaseDirs.includes('p1'));
+});
+
+// ---------------------------------------------------------------------------
+// Unit accounting. Three real projects each recorded units differently, so the
+// rules that survived all three are pinned as behaviour.
+// ---------------------------------------------------------------------------
+
+function stagesWith(forEach) {
+  return [
+    { slug: 'c', name: 'C', phase: 'p2', inScope: true, forEach, execution: 'ALWAYS' }
+  ];
+}
+
+test('units: a stage marked done counts every unit done even with no unit rows in the ledger', () => {
+  // A `subagent` stage was observed finishing all its units while emitting no
+  // UNIT_COMPLETED at all. Counting the ledger alone reported 0 of 1 on a
+  // completed stage, so stage status has to outrank the ledger.
+  const runtimeStub = {
+    byStage: new Map([['c', { slug: 'c', outcome: 'approved', done: true }]]),
+    units: { units: [{ name: 'u1' }, { name: 'u2' }], batches: [['u1'], ['u2']] }
+  };
+  const journey = buildFromStages(stagesWith('unit-of-work'), runtimeStub, new Map(), new Map());
+  const node = journey.checkpoints[0];
+  assert.equal(node.status, V2_STATUS.DONE);
+  assert.equal(node.unitsDone, 2);
+  assert.equal(node.unitsPlanned, 2);
+});
+
+test('units: an in-flight stage counts only units the ledger explicitly closed', () => {
+  const runtimeStub = {
+    byStage: new Map([['c', { slug: 'c', outcome: 'pending', done: false }]]),
+    units: { units: [{ name: 'u1' }, { name: 'u2' }], batches: [['u1'], ['u2']] }
+  };
+  const closed = new Map([['c', new Set(['u1'])]]);
+  const seen = new Map([['c', new Set(['u1', 'u2'])]]);
+  const node = buildFromStages(stagesWith('unit-of-work'), runtimeStub, closed, seen).checkpoints[0];
+  assert.equal(node.unitsDone, 1);
+  assert.deepEqual(node.unitsInFlight, ['u2']);
+});
+
+test('units: the same unit closed twice counts once', () => {
+  // A unit can be re-reviewed after its completion row, which was observed on a
+  // real project. Counting rows would then claim more units than exist.
+  const root = makeProject({
+    intentDir: '260101-x',
+    auditShard: shard([
+      { Event: 'UNIT_COMPLETED', Stage: 'c', Unit: 'u1', Timestamp: '2026-01-01T00:00:00Z' },
+      { Event: 'REVIEW_COMPLETED', Stage: 'c', Unit: 'u1', Timestamp: '2026-01-01T00:00:01Z' },
+      { Event: 'UNIT_COMPLETED', Stage: 'c', Unit: 'u1', Timestamp: '2026-01-01T00:00:02Z' }
+    ])
+  });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  assert.equal(audit.summarise(dir).unitsCompleted.get('c').size, 1);
+});
+
+test('units: the Unit field is collected off whatever event carries it', () => {
+  // Which events carry it depends on the stage's execution mode, so keying on
+  // one event name is what produced a zero count on a finished stage.
+  const root = makeProject({
+    intentDir: '260101-x',
+    auditShard: shard([
+      { Event: 'REVIEW_REQUESTED', Stage: 'c', Unit: 'u9', Timestamp: '2026-01-01T00:00:00Z' }
+    ])
+  });
+  const dir = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
+  const summary = audit.summarise(dir);
+  assert.deepEqual([...summary.unitsSeen.get('c')], ['u9']);
+  assert.equal(summary.unitsCompleted.has('c'), false);
+});
+
+test('units: a stage that does not repeat reports no unit numbers at all', () => {
+  const runtimeStub = {
+    byStage: new Map(),
+    units: { units: [{ name: 'u1' }], batches: [['u1']] }
+  };
+  const node = buildFromStages(stagesWith(undefined), runtimeStub).checkpoints[0];
+  assert.equal(node.unitsDone, undefined);
+  assert.equal(node.unitsPlanned, undefined);
+});
+
+test('units: a run that never decomposed reports an empty unit list, not a fabricated one', () => {
+  const runtimeStub = { byStage: new Map(), units: undefined };
+  const journey = buildFromStages(stagesWith('unit-of-work'), runtimeStub);
+  assert.deepEqual(journey.units, []);
+  assert.equal(journey.checkpoints[0].unitsPlanned, 0);
+});
+
+// ---------------------------------------------------------------------------
+// The denominator, which is what v1 got wrong
+// ---------------------------------------------------------------------------
+
+test('denominator: stages the scope skipped leave the denominator', () => {
+  const root = makeProject({
+    stageGraph: GOOD_GRAPH,
+    scopeGrid: GOOD_GRID,
+    intentDir: '260101-x',
+    runtimeGraph: { scope: 'narrow', stages: [{ stage_slug: 'a', outcome: 'approved' }] }
+  });
+  const journey = buildV2(root).intents[0].journey;
+  assert.equal(journey.plannedTotal, 1);
+  assert.equal(journey.counts.done, 1);
+  assert.equal(journey.counts.skipped, 2);
+});
+
+test('denominator: the scope comes from the intent, so two intents can differ in the same project', () => {
+  const root = makeProject({
+    stageGraph: GOOD_GRAPH,
+    scopeGrid: GOOD_GRID,
+    intentDir: '260101-wide',
+    runtimeGraph: { scope: 'wide', stages: [] }
+  });
+  const second = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-narrow');
+  fs.mkdirSync(second, { recursive: true });
+  fs.writeFileSync(
+    path.join(second, 'runtime-graph.json'),
+    JSON.stringify({ scope: 'narrow', stages: [] })
+  );
+  const model = buildV2(root);
+  const totals = Object.fromEntries(model.intents.map((i) => [i.id, i.journey.plannedTotal]));
+  assert.equal(totals['260101-wide'], 3);
+  assert.equal(totals['260101-narrow'], 1);
+});
+
+test('position: the furthest evidenced stage wins, so a late edit cannot move it backwards', () => {
+  // An mtime cursor was observed jumping back when an early artifact was edited
+  // days later. Position is therefore derived from evidence order, not recency.
+  const root = makeProject({
+    stageGraph: GOOD_GRAPH,
+    scopeGrid: GOOD_GRID,
+    intentDir: '260101-x',
+    runtimeGraph: {
+      scope: 'wide',
+      stages: [
+        { stage_slug: 'a', outcome: 'approved', completed_at: '2026-03-01T00:00:00Z' },
+        { stage_slug: 'c', outcome: 'approved', completed_at: '2026-01-01T00:00:00Z' }
+      ]
+    }
+  });
+  const journey = buildV2(root).intents[0].journey;
+  assert.equal(journey.checkpoints[journey.currentIndex].id, 'c');
+});
