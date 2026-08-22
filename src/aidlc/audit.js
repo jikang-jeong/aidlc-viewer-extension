@@ -113,6 +113,9 @@ function readEvents(intentDir) {
         // in the ledger.
         unit: field(record, 'Unit'),
         sensorId: field(record, 'Sensor ID'),
+        // How many findings the sensor counted. A ledger field, so it is read
+        // rather than inferred from the finding list.
+        findingsCount: field(record, 'Findings count'),
         outputPath: field(record, 'Output path'),
         detailPath: field(record, 'Detail path'),
         error: field(record, 'Error'),

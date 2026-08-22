@@ -13,6 +13,7 @@
 const { GENERATION, detectGeneration } = require('./detect');
 const { buildV2 } = require('./journey-v2');
 const { diagnose } = require('./diagnose');
+const { contested } = require('./contrast');
 
 // Read a project.
 //
@@ -40,10 +41,17 @@ function readProject(root, options = {}) {
   }
 
   // Supervision facts per intent, attached alongside its journey.
-  const intents = model.intents.map((intent) => ({
-    ...intent,
-    diagnosis: diagnose(intent.dir)
-  }));
+  const intents = model.intents.map((intent) => {
+    const diagnosis = diagnose(intent.dir);
+    return {
+      ...intent,
+      diagnosis,
+      // What the agent recorded about its own coverage, set beside what the
+      // engine's sensor found in the same file. Reuses the diagnosis summary so
+      // the ledger is read once per intent.
+      contrast: contested(intent.dir, diagnosis.summary)
+    };
+  });
 
   // The intent to show when a surface has room for one. The most recently
   // started wins; without a start time, file order. No attempt is made to guess
@@ -82,6 +90,7 @@ function hasSomethingToSay(project) {
   return (
     intent.diagnosis.live.length > 0 ||
     intent.diagnosis.sensorFailureTotal > 0 ||
+    intent.contrast.rows.length > 0 ||
     project.v2.gaps.unknownEvents.length > 0
   );
 }

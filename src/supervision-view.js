@@ -193,6 +193,7 @@ ${this.body()}
     return [
       this.position(project, intent),
       this.blocking(intent),
+      this.contrast(intent),
       this.sensors(intent),
       this.gaps(project)
     ]
@@ -278,6 +279,54 @@ ${
     // how the workflow reached the state it refuses, and that is only visible as
     // an ordering of events.
     return `<h2 class="warn">Blocked</h2>${blocks}`;
+  }
+
+  // What the agent said about its own coverage, next to what the engine's sensor
+  // found in the same file. Two numbers, no verdict.
+  //
+  // The pairing is worth surfacing because only one side of it ever reached the
+  // user: an agent recorded 45 of 46 requirements covered while the sensor
+  // reported 89 findings in that same record, and the summary shown in chat was
+  // the agent's. Which is right is not decided here -- the two answer slightly
+  // different questions, and a computed difference would look authoritative
+  // without being true.
+  contrast(intent) {
+    const { rows, faultedWithoutRecord } = intent.contrast;
+    if (rows.length === 0 && faultedWithoutRecord.length === 0) return '';
+
+    const body = rows
+      .map((row) => {
+        if (!row.readable) {
+          return `<tr><td class="k">${escapeHtml(
+            row.filePath.split('/').slice(-2).join('/')
+          )}</td><td class="n warn">unreadable</td></tr>`;
+        }
+        const claim = [...row.byStatus]
+          .map(([status, count]) => `${count} ${escapeHtml(status)}`)
+          .join(', ');
+        const detail = row.detailPaths[0]
+          ? `<a data-path="${escapeHtml(this.absolute(row.detailPaths[0]))}">what the sensor found</a>`
+          : '';
+        return `<tr><td class="k">${escapeHtml(row.stage ?? '(stage unstated)')}</td><td class="n">${
+          row.itemCount
+        } item(s)${row.recordCount > 1 ? ` in ${row.recordCount} records` : ''}</td></tr>
+<tr><td class="quiet" style="padding-left:8px">recorded</td><td class="n quiet">${claim || '—'}</td></tr>
+<tr><td class="quiet" style="padding-left:8px">sensor</td><td class="n warn">${
+          row.sensorFindings
+        } finding(s) over ${row.sensorFirings} pass(es)</td></tr>
+<tr><td colspan="2" class="quiet" style="padding-bottom:6px">${detail}</td></tr>`;
+      })
+      .join('');
+
+    const orphans = faultedWithoutRecord.length
+      ? `<p class="quiet">Sensor faulted with no record found: ${escapeHtml(
+          faultedWithoutRecord.join(', ')
+        )}.</p>`
+      : '';
+
+    return `<h2 class="warn">Recorded vs checked</h2>
+<p class="quiet">The agent's own coverage record and the engine's reading of it. Both are on disk; only the first reached the chat.</p>
+<table>${body}</table>${orphans}`;
   }
 
   // What the engine caught and nobody was told. Sensors are advisory, so the
