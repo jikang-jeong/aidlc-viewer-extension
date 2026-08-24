@@ -322,8 +322,8 @@ test('v1 files are reported as left alone, never as something to replace', () =>
   }
 });
 
-test('the confirm dialog stays short enough to be read', () => {
-  // It ran to eleven lines of prose on a real project, which is long enough that
+test('the notices stay short enough to be read', () => {
+  // They ran to eleven lines of prose on a real project, which is long enough that
   // the one line that matters gets skipped. Notes are now one line each and say
   // what happens to a named thing.
   //
@@ -385,6 +385,58 @@ test('counts of one are not written as plurals', () => {
   assert.ok(engine);
   assert.match(engine.text, /1 file:/);
   assert.doesNotMatch(engine.text, /1 files/);
+});
+
+test('every note says whether it outlives the install', () => {
+  // The install is no longer gated on a confirmation, so these notes are read after
+  // the fact. A note describing what was found beforehand is noise by then; a note
+  // about something the user should still fix is not. Marked at the source because
+  // only previewInstall knows which of its own statements outlive the operation,
+  // and the alternative was the caller matching on note text.
+  const root = project(({ dir, file }) => {
+    dir('.kiro/steering/aws-aidlc-rules');
+    file('.kiro/steering/aws-aidlc-rules/core.md', 'x');
+    file(
+      '.kiro/aidlc-viewer-install.json',
+      JSON.stringify({
+        version: 1,
+        harness: 'kiro-ide',
+        upstreamCommit: 'abc1234',
+        files: ['.kiro/x'],
+        appended: [],
+        seeded: ['aidlc/spaces/default/memory/project.md']
+      })
+    );
+    dir('aidlc/spaces/default/memory');
+    for (let i = 0; i < 146; i += 1) {
+      file(`aidlc/spaces/default/memory/f${i}.md`, 'x');
+    }
+    file('AGENTS.md', 'x');
+    file('.gitignore', 'x');
+  });
+
+  const notes = state.previewInstall(state.readInstallState(root)).notes;
+  for (const note of notes) {
+    assert.equal(typeof note.lasting, 'boolean', `note has no lasting flag: ${note.text}`);
+  }
+  // A missing git repository is the user's to fix, and is still missing afterwards.
+  const git = notes.find((note) => /No git repository/.test(note.text));
+  assert.ok(git);
+  assert.equal(git.lasting, true);
+  // "Already installed" describes the state this install has just replaced.
+  const already = notes.find((note) => /already installed/i.test(note.text));
+  assert.ok(already);
+  assert.equal(already.lasting, false);
+});
+
+test('a project with git has nothing lasting to report', () => {
+  // Which is what makes a clean install quiet: the completion message carries the
+  // result and no notices at all.
+  const root = project(({ dir }) => {
+    dir('.git');
+  });
+  const notes = state.previewInstall(state.readInstallState(root)).notes;
+  assert.equal(notes.filter((note) => note.lasting).length, 0);
 });
 
 test('reading a path that does not exist is a verdict, not an error', () => {

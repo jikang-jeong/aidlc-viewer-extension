@@ -165,10 +165,17 @@ function readInstallState(root) {
 // What an install would do to what is already here.
 //
 // Each note is one line and says what happens to a named thing, because this is
-// read by someone deciding whether to press Install rather than by someone
-// learning how the installer works. An earlier version explained itself in prose
-// and ran to eleven lines on a real project, which is long enough that the one
-// line that matters gets skipped.
+// read by someone who has already asked for the install rather than by someone
+// deciding whether to allow it. An earlier version explained itself in prose and
+// ran to eleven lines, which is long enough that the one line that matters gets
+// skipped.
+//
+// `lasting` marks a note that is still true once the install has finished. There
+// is now only one consumer and it reports after the fact, so a note describing
+// what was found beforehand ("v2 is already installed here") is noise by then,
+// while a note about something the user should still act on is not. Marked here
+// rather than inferred at the call site, because only this function knows which
+// of its own statements outlive the operation.
 function previewInstall(state) {
   if (!state || !state.ok) return { blocked: true, reason: 'no-state' };
   const notes = [];
@@ -179,6 +186,7 @@ function previewInstall(state) {
   if (state.generation === GENERATION.V2 || state.generation === GENERATION.BOTH) {
     notes.push({
       level: 'warn',
+      lasting: false,
       text: 'AI-DLC v2 is already installed here.'
     });
   }
@@ -186,14 +194,21 @@ function previewInstall(state) {
     // The one note worth reading. The workflow grows this directory from 9 seed
     // files into its own rules and records, including a file it overwrites with
     // what it has learned, and none of it is the installer's to replace.
+    //
+    // Not lasting, because the planner says the same thing about the same
+    // directory in terms of what the install actually did, and the reader should
+    // hear it once.
     notes.push({
       level: 'warn',
+      lasting: false,
       text: `aidlc/ — ${files(state.memory.fileCount)} the workflow wrote: left alone.`
     });
   }
   if (!state.hasGitRepo) {
+    // Still true afterwards, and still the user's to fix.
     notes.push({
       level: 'warn',
+      lasting: true,
       text:
         'No git repository. Run git init first, or the workflow will commit to ' +
         'trunk-based practices it cannot follow.'
@@ -202,12 +217,14 @@ function previewInstall(state) {
   if (state.engine.present) {
     notes.push({
       level: 'info',
+      lasting: false,
       text: `.kiro/ — ${files(state.engine.fileCount)}: replaced.`
     });
   }
   if (state.generation === GENERATION.V1 || state.generation === GENERATION.BOTH) {
     notes.push({
       level: 'info',
+      lasting: false,
       text: "AI-DLC v1's rules: left alone."
     });
   }
@@ -216,6 +233,7 @@ function previewInstall(state) {
     // sentences differing only in a filename.
     notes.push({
       level: 'info',
+      lasting: false,
       text: `${state.sharedFiles.join(', ')}: a section appended, not replaced.`
     });
   }

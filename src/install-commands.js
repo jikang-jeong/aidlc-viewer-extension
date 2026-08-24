@@ -153,32 +153,19 @@ async function chooseHarness(existing) {
 }
 
 // Show the consequences and get a decision. Returns true to proceed.
-// Confirm, with what a person needs to decide and nothing else.
+// What this install is about to do, as one line for the progress notification.
 //
-// A paragraph used to sit at the end explaining why the install follows a branch
-// instead of a pinned commit. It is gone. It was design rationale addressed to
-// someone whose next act is pressing Install, and nothing in it could change that
-// decision -- `@ v2 (current head)` already carries the only part that can, which
-// is that this is not a fixed version. The rest belongs in the docs and in the
-// receipt.
-async function confirmInstall(state, harness, reinstalling) {
-  const preview = previewInstall(state);
-  const lines = preview.notes.map(
-    (note) => `${note.level === 'warn' ? '! ' : '  '}${note.text}`
-  );
-  if (lines.length > 0) lines.push('');
-  lines.push(`Harness: ${HARNESS_LABELS[harness] ?? harness}`);
-  lines.push(`Upstream: ${REPO} @ ${UPSTREAM_REF} (current head)`);
-
-  const goLabel = reinstalling ? 'Reinstall' : 'Install';
-  const choice = await vscode.window.showInformationMessage(
-    reinstalling
-      ? 'Reinstall AI-DLC v2 in this project?'
-      : 'Set up AI-DLC v2 in this project?',
-    { modal: true, detail: lines.join('\n') },
-    goLabel
-  );
-  return choice === goLabel;
+// Not a confirmation. Picking v2 and picking a harness were the decisions; asking
+// again after both is friction, and a modal that only ever has one button is a
+// dialog pretending to be a question. So this says what is being installed while
+// it happens, and the completion message says what was installed.
+//
+// The notes previewInstall produced are not dropped. The ones that matter after
+// the fact -- the workflow's own directory left alone, a missing git repository --
+// are carried by the completion message, where they can be read without standing
+// between the user and the thing they asked for.
+function installHeadline(harness) {
+  return `installing for ${HARNESS_LABELS[harness] ?? harness} from ${REPO}@${UPSTREAM_REF}`;
 }
 
 // The setup command. Asks which generation, then routes.
@@ -224,12 +211,19 @@ async function installV2(root, state) {
     return;
   }
 
-  if (!(await confirmInstall(state, harness, Boolean(state.receipt)))) return;
+  // Read before anything is written, because the install changes what this
+  // reports: aidlc/ file counts and the presence of a git repository are facts
+  // about the project as the user left it.
+  const before = previewInstall(state);
 
   await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'AI-DLC v2', cancellable: false },
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: state.receipt ? 'Reinstalling AI-DLC v2' : 'Setting up AI-DLC v2',
+      cancellable: false
+    },
     async (progress) => {
-      progress.report({ message: `downloading upstream ${REPO}@${UPSTREAM_REF}…` });
+      progress.report({ message: installHeadline(harness) });
       const fetched = await fetchPayload({ harness });
       if (!fetched.ok) {
         vscode.window.showErrorMessage(
@@ -257,9 +251,24 @@ async function installV2(root, state) {
         return;
       }
 
-      // Notes the planner produced are worth surfacing after the fact too: the
-      // most important one says the project's accumulated rules were left alone.
-      const warned = planned.notes.filter((note) => note.level === 'warn');
+      // Everything worth saying, said once, after the fact.
+      //
+      // The planner reports what this install did. previewInstall reported what was
+      // here beforehand, and only its `lasting` notes are still true now -- the
+      // rest described a state the install has just changed, or duplicated the
+      // planner in different words.
+      //
+      // Both used to sit in a dialog the user dismissed before installing. Same
+      // information, now delivered at a moment when nothing is waiting on the
+      // reader.
+      const seen = new Set();
+      const notices = [
+        ...planned.notes.filter((note) => note.level === 'warn'),
+        ...(before.notes ?? []).filter((note) => note.level === 'warn' && note.lasting)
+      ]
+        .map((note) => note.text)
+        .filter((text) => (seen.has(text) ? false : seen.add(text)));
+
       // The full sha is in the receipt; the message shows enough to recognise it.
       // Falls back to whatever was recorded when a ref was used instead of a sha.
       const shortCommit = /^[0-9a-f]{7,40}$/.test(fetched.commit)
@@ -290,8 +299,8 @@ async function installV2(root, state) {
         {
           modal: false,
           detail:
-            warned.length > 0
-              ? `${warned.map((n) => n.text).join('\n\n')}\n\n${nextStep}`
+            notices.length > 0
+              ? `${notices.join('\n\n')}\n\n${nextStep}`
               : nextStep
         },
         ...(isWorkspaceRoot ? [] : [openLabel])
