@@ -216,7 +216,18 @@ async function installV2(root, state) {
   // about the project as the user left it.
   const before = previewInstall(state);
 
-  await vscode.window.withProgress(
+  // The progress notification covers the work and nothing else.
+  //
+  // It used to also contain the completion message, and awaiting that message meant
+  // awaiting the user: showInformationMessage resolves when the toast is dismissed
+  // or clicked, so the callback never returned and "Setting up AI-DLC v2: writing
+  // files…" sat on screen after the install had finished. Reported from a
+  // screenshot, and the giveaway is that it said "writing files" -- a stage already
+  // over.
+  //
+  // So this returns what happened and reports afterwards. Nothing that waits on a
+  // person may run inside a progress scope.
+  const outcome = await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
       title: state.receipt ? 'Reinstalling AI-DLC v2' : 'Setting up AI-DLC v2',
@@ -226,10 +237,7 @@ async function installV2(root, state) {
       progress.report({ message: installHeadline(harness) });
       const fetched = await fetchPayload({ harness });
       if (!fetched.ok) {
-        vscode.window.showErrorMessage(
-          `Could not fetch the AI-DLC v2 payload: ${fetched.text ?? fetched.reason}`
-        );
-        return;
+        return { failed: `Could not fetch the AI-DLC v2 payload: ${fetched.text ?? fetched.reason}` };
       }
 
       progress.report({ message: 'writing files…' });
@@ -244,76 +252,75 @@ async function installV2(root, state) {
       if (!result.ok) {
         // A partial install is reported with its own count, because the receipt
         // records what was written and removal can take exactly that back.
-        vscode.window.showErrorMessage(
-          `AI-DLC v2 setup failed after writing ${result.written.length} file(s): ` +
+        return {
+          failed:
+            `AI-DLC v2 setup failed after writing ${result.written.length} file(s): ` +
             `${result.text ?? result.reason}. Use "Remove AI-DLC v2" to undo it.`
-        );
-        return;
+        };
       }
 
-      // Everything worth saying, said once, after the fact.
-      //
-      // The planner reports what this install did. previewInstall reported what was
-      // here beforehand, and only its `lasting` notes are still true now -- the
-      // rest described a state the install has just changed, or duplicated the
-      // planner in different words.
-      //
-      // Both used to sit in a dialog the user dismissed before installing. Same
-      // information, now delivered at a moment when nothing is waiting on the
-      // reader.
-      const seen = new Set();
-      const notices = [
-        ...planned.notes.filter((note) => note.level === 'warn'),
-        ...(before.notes ?? []).filter((note) => note.level === 'warn' && note.lasting)
-      ]
-        .map((note) => note.text)
-        .filter((text) => (seen.has(text) ? false : seen.add(text)));
-
-      // The full sha is in the receipt; the message shows enough to recognise it.
-      // Falls back to whatever was recorded when a ref was used instead of a sha.
-      const shortCommit = /^[0-9a-f]{7,40}$/.test(fetched.commit)
-        ? fetched.commit.slice(0, 8)
-        : fetched.commit;
-      const summary =
-        `AI-DLC v2 installed for ${HARNESS_LABELS[harness] ?? harness} ` +
-        `(${result.written.length} files, upstream ${shortCommit}).`;
-
-      // The step that is easy to miss and blocks everything after it. Kiro reads
-      // its agent definitions from the WORKSPACE ROOT's .kiro/agents/, and this
-      // install goes into the folder the extension watches, which is frequently
-      // not that root -- one observed case installed four levels down inside
-      // another project. Without Kiro having this exact folder open, /aidlc simply
-      // is not there, which reads as a failed install rather than a missing step.
-      const isWorkspaceRoot = (vscode.workspace.workspaceFolders ?? []).some(
-        (folder) => folder.uri.fsPath === root
-      );
-      const nextStep = isWorkspaceRoot
-        ? 'Type /aidlc to start. The agent is already available in this window.'
-        : 'Kiro reads /aidlc from .kiro/agents/ in the WORKSPACE ROOT, and this ' +
-          'folder is not the root of the current window. Open it with File > Open ' +
-          'Folder in a new window, then type /aidlc.';
-
-      const openLabel = 'Open folder in new window';
-      const choice = await vscode.window.showInformationMessage(
-        summary,
-        {
-          modal: false,
-          detail:
-            notices.length > 0
-              ? `${notices.join('\n\n')}\n\n${nextStep}`
-              : nextStep
-        },
-        ...(isWorkspaceRoot ? [] : [openLabel])
-      );
-      if (choice === openLabel) {
-        await vscode.commands.executeCommand(
-          'vscode.openFolder',
-          vscode.Uri.file(root),
-          { forceNewWindow: true }
-        );
-      }
+      return { planned, result, commit: fetched.commit };
     }
   );
+
+  if (outcome.failed) {
+    vscode.window.showErrorMessage(outcome.failed);
+    return;
+  }
+  const { planned, result, commit } = outcome;
+
+  // Everything worth saying, said once, after the fact.
+  //
+  // The planner reports what this install did. previewInstall reported what was
+  // here beforehand, and only its `lasting` notes are still true now -- the rest
+  // described a state the install has just changed, or duplicated the planner in
+  // different words.
+  const seen = new Set();
+  const notices = [
+    ...planned.notes.filter((note) => note.level === 'warn'),
+    ...(before.notes ?? []).filter((note) => note.level === 'warn' && note.lasting)
+  ]
+    .map((note) => note.text)
+    .filter((text) => (seen.has(text) ? false : seen.add(text)));
+
+  // The full sha is in the receipt; the message shows enough to recognise it.
+  // Falls back to whatever was recorded when a ref was used instead of a sha.
+  const shortCommit = /^[0-9a-f]{7,40}$/.test(commit) ? commit.slice(0, 8) : commit;
+  const summary =
+    `AI-DLC v2 installed for ${HARNESS_LABELS[harness] ?? harness} ` +
+    `(${result.written.length} files, upstream ${shortCommit}).`;
+
+  // The step that is easy to miss and blocks everything after it. Kiro reads its
+  // agent definitions from the WORKSPACE ROOT's .kiro/agents/, and this install goes
+  // into the folder the extension watches, which is frequently not that root -- one
+  // observed case installed four levels down inside another project. Without Kiro
+  // having this exact folder open, /aidlc simply is not there, which reads as a
+  // failed install rather than a missing step.
+  const isWorkspaceRoot = (vscode.workspace.workspaceFolders ?? []).some(
+    (folder) => folder.uri.fsPath === root
+  );
+  const nextStep = isWorkspaceRoot
+    ? 'Type /aidlc to start. The agent is already available in this window.'
+    : 'Kiro reads /aidlc from .kiro/agents/ in the WORKSPACE ROOT, and this ' +
+      'folder is not the root of the current window. Open it with File > Open ' +
+      'Folder in a new window, then type /aidlc.';
+
+  const openLabel = 'Open folder in new window';
+  const choice = await vscode.window.showInformationMessage(
+    summary,
+    {
+      modal: false,
+      detail: notices.length > 0 ? `${notices.join('\n\n')}\n\n${nextStep}` : nextStep
+    },
+    ...(isWorkspaceRoot ? [] : [openLabel])
+  );
+  if (choice === openLabel) {
+    await vscode.commands.executeCommand(
+      'vscode.openFolder',
+      vscode.Uri.file(root),
+      { forceNewWindow: true }
+    );
+  }
 }
 
 // The removal command.

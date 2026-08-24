@@ -12,6 +12,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const Module = require('module');
 
@@ -19,10 +20,15 @@ const TARGET = path.join(__dirname, '..', 'src', 'install-commands.js');
 
 // Load install-commands with `vscode` replaced, and capture what it tries to show.
 // Reloaded per call so no state leaks between assertions.
-function loadWithStub({ onQuickPick, onModal } = {}) {
+function loadWithStub({ onQuickPick, onModal, onToast, onProgressStart, onProgressEnd, modules, root } = {}) {
   const shown = { quickPicks: [], modals: [], toasts: [], opened: [], copied: [] };
   const realLoad = Module._load;
   Module._load = function stubbed(request, ...rest) {
+    // Lets a test replace the network and the bun probe without a second code path
+    // in the module under test.
+    if (modules && Object.prototype.hasOwnProperty.call(modules, request)) {
+      return modules[request];
+    }
     if (request !== 'vscode') return realLoad.call(this, request, ...rest);
     return {
       window: {
@@ -41,13 +47,22 @@ function loadWithStub({ onQuickPick, onModal } = {}) {
           const record = { message, options, actions, modal };
           if (modal) shown.modals.push(record);
           else shown.toasts.push(record);
+          if (!modal && onToast) return onToast(record);
           return Promise.resolve(onModal ? onModal(record) : undefined);
         },
         showErrorMessage: (message) => {
           shown.toasts.push({ message, error: true, actions: [] });
           return Promise.resolve(undefined);
         },
-        withProgress: (options, run) => run({ report: () => {} }, {})
+        // Reports when the scope opens and when it closes, because the bug this
+        // guards was the scope staying open.
+        withProgress: (options, run) => {
+          if (onProgressStart) onProgressStart(options);
+          return Promise.resolve(run({ report: () => {} }, {})).then((value) => {
+            if (onProgressEnd) onProgressEnd(options);
+            return value;
+          });
+        }
       },
       env: {
         clipboard: {
@@ -67,7 +82,12 @@ function loadWithStub({ onQuickPick, onModal } = {}) {
         joinPath: (u, ...rest) => ({ fsPath: path.join(u.fsPath, ...rest) })
       },
       commands: { executeCommand: () => Promise.resolve() },
-      workspace: { fs: {} },
+      workspace: {
+        fs: {},
+        // installV2 checks whether the install folder is the workspace root, which
+        // decides which next step the completion message names.
+        workspaceFolders: root ? [{ uri: { fsPath: root } }] : []
+      },
       ProgressLocation: { Notification: 15 }
     };
   };
@@ -166,6 +186,111 @@ test('a malformed install state does not break the list', async () => {
     const { api, shown } = loadWithStub();
     await assert.doesNotReject(() => api.chooseGeneration(state));
     assert.equal(shown.quickPicks[0].items[0].key, 'v1');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The progress notification
+// ---------------------------------------------------------------------------
+
+test('the progress notification ends before the completion message appears', async () => {
+  // Reported from a screenshot: "Setting up AI-DLC v2: writing files…" stayed on
+  // screen after the install had finished. The completion message was awaited inside
+  // the progress callback, and showInformationMessage resolves when the user
+  // dismisses the toast -- so the progress scope was waiting on a person.
+  //
+  // Driven through the real setup(), with the network and bun replaced. Asserted on
+  // ordering because the ordering is what the user sees. The completion toast here
+  // never resolves, which is exactly the state in the screenshot: a message still on
+  // screen with nobody having touched it.
+  const payloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prog-payload-'));
+  fs.mkdirSync(path.join(payloadDir, '.kiro', 'agents'), { recursive: true });
+  fs.writeFileSync(path.join(payloadDir, '.kiro', 'agents', 'aidlc.json'), '{}');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prog-root-'));
+  fs.mkdirSync(path.join(root, '.git'));
+
+  const order = [];
+  let progressEnded = false;
+
+  const { api } = loadWithStub({
+    root,
+    onQuickPick: (items) => items.find((item) => item.key === 'v2') ?? items[0],
+    onProgressStart: (options) => order.push(`start:${options.title}`),
+    onProgressEnd: () => {
+      progressEnded = true;
+      order.push('end');
+    },
+    onToast: () => {
+      order.push(progressEnded ? 'toast-after-end' : 'TOAST-WHILE-RUNNING');
+      // Never resolves. A test that resolved it would pass either way.
+      return new Promise(() => {});
+    },
+    modules: {
+      './aidlc/bun-check': { detectBun: () => ({ found: true, path: '/fake/bun' }) },
+      './aidlc/payload': {
+        UPSTREAM_REF: 'v2',
+        REPO: 'awslabs/aidlc-workflows',
+        HARNESSES: { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro-cli' },
+        fetchPayload: async () => ({
+          ok: true,
+          payloadDir,
+          entries: [{ name: '.kiro', isDirectory: true }],
+          commit: 'abcdef1234567890abcdef1234567890abcdef12',
+          harness: 'kiro-ide'
+        })
+      }
+    }
+  });
+
+  // setup() does not resolve, because the toast it is awaiting never does. That is
+  // the point: the progress scope must already have closed by then.
+  api.setup({ fsPath: root }, async () => order.push('V1-INSTALLED'));
+  // Let the microtasks and the one awaited fetch settle.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.deepEqual(order, ['start:Setting up AI-DLC v2', 'end', 'toast-after-end']);
+});
+
+test('nothing that waits on a person runs inside a progress scope', () => {
+  // A structural check, to catch the next instance rather than only this one: the
+  // ordering test above can cover only the path it drives. Every withProgress
+  // callback in the extension is scanned for a call that resolves on user
+  // interaction.
+  const waiters = [
+    'showInformationMessage',
+    'showWarningMessage',
+    'showErrorMessage',
+    'showQuickPick',
+    'showInputBox',
+    'showOpenDialog'
+  ];
+
+  for (const file of ['install-commands.js', 'extension.js', 'supervision-view.js']) {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'src', file), 'utf8');
+    let from = 0;
+    for (;;) {
+      const start = source.indexOf('withProgress(', from);
+      if (start === -1) break;
+      // Walk to the matching close paren so the scanned region is exactly the call.
+      let depth = 0;
+      let i = source.indexOf('(', start);
+      for (; i < source.length; i += 1) {
+        if (source[i] === '(') depth += 1;
+        else if (source[i] === ')') {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+      }
+      const body = source.slice(start, i);
+      for (const waiter of waiters) {
+        assert.ok(
+          !body.includes(`await vscode.window.${waiter}`),
+          `${file}: a withProgress callback awaits ${waiter}, which waits on the user ` +
+            'and so keeps the progress notification on screen after the work is done'
+        );
+      }
+      from = i;
+    }
   }
 });
 
