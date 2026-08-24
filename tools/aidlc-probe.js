@@ -146,6 +146,16 @@ function main() {
     }
     // A run accumulates refusals it recovered from. Only the ones with nothing
     // after them for their stage are actually in the way.
+    // The gate figure sits beside the refusal figure because they answer the same
+    // shape of question: the ledger records every one a run ever reached, and only
+    // the unresolved ones are anyone's problem now.
+    line(
+      'approval gates',
+      `${diag.approvalWaits.length} reached, ${diag.waitingOnYou.length} still waiting on a person`
+    );
+    for (const entry of diag.waitingOnYou) {
+      line('', `  ${entry.stage ?? '(stage not recorded)'} since ${entry.timestamp ?? '(no time)'}`);
+    }
     line('engine refusals', `${diag.refusals.length} total, ${diag.live.length} still blocking`);
     for (const entry of diag.live) printRefusal(entry, '    ');
     if (showAllRefusals) {

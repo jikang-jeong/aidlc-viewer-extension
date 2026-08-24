@@ -57,7 +57,18 @@ const EVENT = {
   WORKFLOW_COMPLETED: 'WORKFLOW_COMPLETED',
   PHASE_STARTED: 'PHASE_STARTED',
   PHASE_COMPLETED: 'PHASE_COMPLETED',
-  PHASE_SKIPPED: 'PHASE_SKIPPED'
+  PHASE_SKIPPED: 'PHASE_SKIPPED',
+  // The engine has finished a stage's work and is waiting for a person. This is
+  // the one event the whole supervision surface exists for, and it was sitting in
+  // the "not understood" list -- a panel about delegation that could not say when
+  // the delegation was waiting on you.
+  //
+  // It carries `Stage` rather than `Stage slug`, like the other stage-lifecycle
+  // events and unlike the sensor rows.
+  STAGE_AWAITING_APPROVAL: 'STAGE_AWAITING_APPROVAL',
+  // A person confirmed a summary. Read as the resolution of the above, alongside
+  // the gate and completion events.
+  SUMMARY_CONFIRMATION_RECORDED: 'SUMMARY_CONFIRMATION_RECORDED'
 };
 
 const KNOWN_EVENTS = new Set(Object.values(EVENT));
@@ -149,6 +160,10 @@ function summarise(intentDir) {
   const sensorFailures = [];
   const failuresByStage = new Map();
   const refusals = [];
+  // Stages the engine parked for a person, in ledger order. Whether one is STILL
+  // waiting is not decidable here -- it depends on what came after, which is
+  // diagnose's job.
+  const awaitingApproval = [];
   const unitsCompleted = new Map();
   const unitsSeen = new Map();
   for (const entry of events) {
@@ -158,6 +173,8 @@ function summarise(intentDir) {
       failuresByStage.set(key, (failuresByStage.get(key) ?? 0) + 1);
     } else if (entry.event === EVENT.ERROR_LOGGED) {
       refusals.push(entry);
+    } else if (entry.event === EVENT.STAGE_AWAITING_APPROVAL) {
+      awaitingApproval.push(entry);
     }
     // The `Unit` field rides on WHICHEVER events a stage happens to emit, and
     // which those are depends on the stage's execution mode: an `inline` stage
@@ -187,6 +204,7 @@ function summarise(intentDir) {
     sensorFailures,
     failuresByStage,
     refusals,
+    awaitingApproval,
     unitsCompleted,
     unitsSeen,
     unknownEvents,

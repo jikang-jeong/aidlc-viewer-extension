@@ -26,6 +26,7 @@ const detect = require('../src/aidlc/detect');
 const graph = require('../src/aidlc/graph');
 const runtime = require('../src/aidlc/runtime');
 const audit = require('../src/aidlc/audit');
+const { diagnose } = require('../src/aidlc/diagnose');
 const {
   buildV2, buildFromStages, V2_STATUS, checkpointIndexForPath
 } = require('../src/aidlc/journey-v2');
@@ -773,4 +774,130 @@ test('a conditional stage that already ran is done, not conditional-looking', ()
   // on the status as well as on the flag.
   assert.equal(cp.conditional, true);
   assert.equal(cp.mayNotRun, true);
+});
+
+// ---------------------------------------------------------------------------
+// Gates waiting on a person
+// ---------------------------------------------------------------------------
+//
+// STAGE_AWAITING_APPROVAL was in the panel's "not understood" list -- a tool for
+// supervising delegation announcing it had no meaning for the event that says the
+// delegation is waiting on you. These pin the semantics rather than the wording.
+
+function ledger(records) {
+  // A shard in the format the engine writes: records separated by a rule, fields as
+  // bold labels. Built here rather than fixtured so each case states its own shape.
+  return records
+    .map((fields) =>
+      Object.entries(fields)
+        .map(([key, value]) => `**${key}**: ${value}`)
+        .join('\n')
+    )
+    .join('\n\n---\n\n');
+}
+
+function intentWith(records) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-'));
+  fs.mkdirSync(path.join(dir, 'audit'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'audit', 'shard.md'), ledger(records));
+  return dir;
+}
+
+test('a gate nothing resolved is reported as waiting on a person', () => {
+  const dir = intentWith([
+    { Timestamp: '2026-01-01T00:00:00Z', Event: 'STAGE_STARTED', Stage: 'domain-design' },
+    { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 'domain-design' }
+  ]);
+  const result = diagnose(dir);
+  assert.equal(result.approvalWaits.length, 1);
+  assert.equal(result.waitingOnYou.length, 1);
+  assert.equal(result.waitingOnYou[0].stage, 'domain-design');
+});
+
+test('a gate the stage moved past is history, not a warning', () => {
+  // The reason the raw count cannot be shown: a finished run reached a gate at every
+  // stage, so listing them all would be thirteen warnings about approved work.
+  const dir = intentWith([
+    { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 'domain-design' },
+    { Timestamp: '2026-01-01T00:02:00Z', Event: 'GATE_APPROVED', Stage: 'domain-design' },
+    { Timestamp: '2026-01-01T00:03:00Z', Event: 'STAGE_COMPLETED', Stage: 'domain-design' }
+  ]);
+  const result = diagnose(dir);
+  assert.equal(result.approvalWaits.length, 1);
+  assert.equal(result.waitingOnYou.length, 0);
+});
+
+test('resolution is not a fixed list of event names', () => {
+  // Any later activity on that stage settles the gate. Enumerating which events count
+  // as approval would break the first time upstream renames one, and the question
+  // being answered is only "did this stage move".
+  for (const resolver of [
+    'SUMMARY_CONFIRMATION_RECORDED',
+    'STAGE_COMPLETED',
+    'STAGE_SKIPPED',
+    'STAGE_REVISING',
+    'SOMETHING_THIS_BUILD_HAS_NEVER_SEEN'
+  ]) {
+    const dir = intentWith([
+      { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 's' },
+      { Timestamp: '2026-01-01T00:02:00Z', Event: resolver, Stage: 's' }
+    ]);
+    assert.equal(diagnose(dir).waitingOnYou.length, 0, `${resolver} did not settle the gate`);
+  }
+});
+
+test('a stage parked twice is reported once', () => {
+  // A stage re-entered after a rejection parks again. Counting both would claim two
+  // open gates where there is one.
+  const dir = intentWith([
+    { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 's' },
+    { Timestamp: '2026-01-01T00:02:00Z', Event: 'GATE_REJECTED', Stage: 's' },
+    { Timestamp: '2026-01-01T00:03:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 's' }
+  ]);
+  const result = diagnose(dir);
+  assert.equal(result.approvalWaits.length, 1);
+  assert.equal(result.waitingOnYou.length, 1);
+  // The later of the two, so the timestamp shown is the wait actually in force.
+  assert.equal(result.waitingOnYou[0].timestamp, '2026-01-01T00:03:00Z');
+});
+
+test('gates on different stages are reported separately', () => {
+  const dir = intentWith([
+    { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 'a' },
+    { Timestamp: '2026-01-01T00:02:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 'b' },
+    { Timestamp: '2026-01-01T00:03:00Z', Event: 'STAGE_COMPLETED', Stage: 'a' }
+  ]);
+  const result = diagnose(dir);
+  assert.equal(result.approvalWaits.length, 2);
+  assert.deepEqual(result.waitingOnYou.map((entry) => entry.stage), ['b']);
+});
+
+test('a gate the ledger cannot place is undecided, not assumed clear', () => {
+  // Silently omitting it would turn an unknown into a clean bill of health.
+  const dir = intentWith([
+    { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL' }
+  ]);
+  const result = diagnose(dir);
+  assert.equal(result.approvalWaits.length, 1);
+  assert.equal(result.approvalWaits[0].settled, undefined);
+  assert.equal(result.waitingOnYou.length, 0, 'undecided is not counted as waiting');
+});
+
+test('a ledger with no gates reports none, and does not throw', () => {
+  const dir = intentWith([{ Timestamp: '2026-01-01T00:00:00Z', Event: 'HUMAN_TURN' }]);
+  const result = diagnose(dir);
+  assert.deepEqual(result.approvalWaits, []);
+  assert.deepEqual(result.waitingOnYou, []);
+});
+
+test('the gate events are no longer reported as unrecognised', () => {
+  // The point of the change. If either name returns to the unknown list, the panel is
+  // back to advertising that it does not understand its own subject.
+  const dir = intentWith([
+    { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 's' },
+    { Timestamp: '2026-01-01T00:02:00Z', Event: 'SUMMARY_CONFIRMATION_RECORDED', Stage: 's' }
+  ]);
+  const unknown = diagnose(dir).unknownEvents;
+  assert.ok(!unknown.includes('STAGE_AWAITING_APPROVAL'), unknown.join(', '));
+  assert.ok(!unknown.includes('SUMMARY_CONFIRMATION_RECORDED'), unknown.join(', '));
 });

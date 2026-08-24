@@ -99,10 +99,61 @@ function sensorFailuresByStage(summary) {
   return byStage;
 }
 
-// Everything the supervision surface needs from one intent's ledger.
+// Which stages are waiting for a person right now.
+//
+// This is the question the whole supervision surface exists to answer, and until
+// now the event that states it was in the "not understood" list. In v2 the agent
+// reads and you approve, so a stage parked at its gate is not slow -- it is
+// stopped, on you, and the chat said so once and scrolled away.
+//
+// Same live-versus-settled shape as the refusals above, and for the same reason:
+// a ledger accumulates every gate a run ever reached, so the raw count is history.
+// A wait is still live when nothing after it resolved that stage. Resolution is not
+// enumerated as one event: an approval, a summary confirmation, a completion or a
+// skip all mean the same thing here, which is that the stage moved. So any later
+// activity on that stage settles the wait, and a stage the ledger cannot place is
+// reported as undecided rather than guessed either way.
+function describeApprovalWaits(summary) {
+  const waits = summary.awaitingApproval ?? [];
+  if (waits.length === 0) return [];
+
+  const ordered = byTimestamp(summary.events);
+  const positions = new Map(ordered.map((entry, index) => [entry, index]));
+  // The last position each stage did anything at all.
+  const lastActivity = new Map();
+  ordered.forEach((entry, index) => {
+    if (entry.stage) lastActivity.set(entry.stage, index);
+  });
+
+  // Only the most recent wait per stage matters. A stage re-entered after a
+  // rejection parks twice, and reporting both would double-count one gate.
+  const latest = new Map();
+  for (const wait of waits) {
+    const at = positions.get(wait);
+    if (at === undefined) continue;
+    const seen = latest.get(wait.stage);
+    if (seen === undefined || at > positions.get(seen)) latest.set(wait.stage, wait);
+  }
+
+  const described = [...latest.values()].map((wait) => {
+      const at = positions.get(wait);
+      const movedOnAt = wait.stage ? lastActivity.get(wait.stage) : undefined;
+      return {
+        stage: wait.stage,
+        timestamp: wait.timestamp,
+        settled: at === undefined || movedOnAt === undefined ? undefined : movedOnAt > at,
+      // What the engine had to say at the gate, verbatim when it said anything.
+      detail: wait.details
+    };
+  });
+  return byTimestamp(described);
+}
+
+
 function diagnose(intentDir, options = {}) {
   const summary = auditReader.summarise(intentDir);
   const refusals = describeRefusals(summary, options);
+  const approvalWaits = describeApprovalWaits(summary);
   return {
     eventTotal: summary.total,
     refusals,
@@ -112,6 +163,9 @@ function diagnose(intentDir, options = {}) {
     undecided: refusals.filter((entry) => entry.settled === undefined),
     sensorFailures: sensorFailuresByStage(summary),
     sensorFailureTotal: summary.sensorFailures.length,
+    // Stages parked at a gate. `waitingOnYou` is the subset nothing resolved.
+    approvalWaits,
+    waitingOnYou: approvalWaits.filter((entry) => entry.settled === false),
     // An event name this build has no meaning for. Not an error: the vocabulary
     // differs between projects, and reporting it is how the next project tells
     // us what we have not met yet.
@@ -138,6 +192,7 @@ function byTimestamp(events) {
 
 module.exports = {
   describeRefusals,
+  describeApprovalWaits,
   sensorFailuresByStage,
   diagnose,
   byTimestamp

@@ -30,6 +30,7 @@ const { planInstall, planRemoval } = require('./aidlc/install-plan');
 const { applyPlan, applyRemoval } = require('./aidlc/install-apply');
 const { fetchPayload, UPSTREAM_REF, REPO, HARNESSES } = require('./aidlc/payload');
 const { detectBun } = require('./aidlc/bun-check');
+const { readProject } = require('./aidlc/index');
 
 const HARNESS_LABELS = {
   'kiro-ide': 'Kiro IDE',
@@ -401,6 +402,29 @@ function hasRemovableInstall(folderUri) {
 // does not have the folder open as a workspace, or bun is missing so the hooks
 // cannot run. Each has a different fix, so the check names which one it is rather
 // than reporting a generic problem.
+// The vocabulary this build met and had no meaning for, as display lines.
+//
+// Kept out of checkV2 so the command stays a sequence of statements about the
+// project, and so this can fail without taking the report with it: a project whose
+// data cannot be read still deserves the rest of the answer.
+function unrecognisedVocabulary(root) {
+  try {
+    const project = readProject(root, {});
+    if (!project.v2 || !project.v2.ok) return [];
+    const gaps = project.v2.gaps ?? {};
+    const lines = [];
+    // Not enumerated by name. Whatever the reader chose to report as a gap is
+    // reported here, so a new kind of gap needs no change in this function.
+    for (const [kind, values] of Object.entries(gaps)) {
+      if (!Array.isArray(values) || values.length === 0) continue;
+      lines.push(`${kind}: ${values.join(', ')}`);
+    }
+    return lines;
+  } catch {
+    return [];
+  }
+}
+
 async function checkV2(folderUri) {
   if (!folderUri) {
     vscode.window.showWarningMessage('Select a folder to watch first.');
@@ -450,6 +474,30 @@ async function checkV2(folderUri) {
     lines.push(bun.installCommand);
   } else {
     lines.push('Everything needed is in place. /aidlc should be available.');
+  }
+
+  // What this build does not recognise in the engine it just read.
+  //
+  // This used to sit in the supervision panel, where it printed a near-identical set
+  // of bookkeeping names on every project: unchanging, and nothing a user could act
+  // on. It is useful here instead, because the install follows the v2 branch rather
+  // than a fixed commit, so this is the only thing that notices upstream growing a
+  // vocabulary this build has never met. A maintainer reads this command; a user does
+  // not.
+  //
+  // Read through the same reader the panel uses, so what is reported is what the
+  // extension actually acted on rather than a separate scan of its own.
+  if (hasAgent) {
+    const unknown = unrecognisedVocabulary(root);
+    if (unknown.length > 0) {
+      lines.push('');
+      lines.push('Read but not understood by this build:');
+      for (const entry of unknown) lines.push(`  ${entry}`);
+      lines.push(
+        '  Nothing above depends on these. They are named so that a change upstream ' +
+          'is visible rather than silent.'
+      );
+    }
   }
 
   const copyLabel = 'Copy this report';

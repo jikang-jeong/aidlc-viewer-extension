@@ -250,6 +250,9 @@ ${this.body()}
     return [
       this.intro(intent),
       this.position(project, intent),
+      // Above the refusals, because a gate waiting on the reader is the one thing in
+      // this panel that only the reader can clear.
+      this.awaiting(intent),
       this.blocking(intent),
       this.sensors(intent),
       this.contrast(intent),
@@ -518,13 +521,75 @@ ${detailRows}`;
 
   // Anything in this project the model could not account for. Shown because an
   // empty gap list is a claim, and a reader deserves to know when it fails.
-  gaps(project) {
-    const unknown = project.v2.gaps.unknownEvents;
-    if (unknown.length === 0) return '';
-    return `<h2>Not understood by this extension</h2>
-<p class="quiet">The engine recorded ${unknown.length} kind(s) of event this version of the extension has no meaning for, so they are named rather than ignored: ${escapeHtml(
-      unknown.join(', ')
-    )}. Everything above is unaffected; this is only a note that the extension does not claim to understand the whole ledger.</p>`;
+  // Stages the engine parked for a person, and has not moved past.
+  //
+  // The panel's reason to exist, and until now it could not say it. In v2 the agent
+  // reads and you approve, so a stage at its gate is not slow, it is stopped on you
+  // -- and the chat said so once, several hundred lines ago.
+  //
+  // Only unresolved waits are shown. A finished run reached a gate at every stage,
+  // so the raw count is history and listing it would be thirteen warnings about work
+  // already approved. Nothing waiting produces no section at all rather than a
+  // reassuring line, which is the same rule the refusals section follows.
+  awaiting(intent) {
+    const waiting = intent.diagnosis.waitingOnYou ?? [];
+    const undecided = (intent.diagnosis.approvalWaits ?? []).filter(
+      (entry) => entry.settled === undefined
+    );
+    if (waiting.length === 0 && undecided.length === 0) return '';
+
+    const rows = waiting
+      .map((entry) => {
+        const stage = this.stageLabel(intent, entry.stage);
+        const when = entry.timestamp ? ` <span class="quiet">since ${escapeHtml(entry.timestamp)}</span>` : '';
+        const detail = entry.detail ? `<div class="quiet">${escapeHtml(entry.detail)}</div>` : '';
+        return `<div class="block"><strong>${escapeHtml(stage)}</strong>${when}${detail}</div>`;
+      })
+      .join('');
+
+    // Named rather than dropped: the ledger could not place these, and silently
+    // omitting them would turn an unknown into a clean bill of health.
+    const unsure =
+      undecided.length > 0
+        ? `<p class="quiet">${undecided.length} more gate(s) could not be placed in the ledger, so whether they are still open is unknown.</p>`
+        : '';
+
+    const heading = waiting.length > 0 ? 'Waiting for you' : 'Gates that could not be placed';
+    const lead =
+      waiting.length > 0
+        ? '<p class="quiet">The engine finished the work and stopped at the gate. Nothing moves until you approve or reject it.</p>'
+        : '';
+    return `<h2 class="warn">${heading}</h2>${lead}${rows}${unsure}`;
+  }
+
+  // A stage's own name when the compiled graph has one, and its slug otherwise. The
+  // slug is what the ledger records, and a slug this build has never seen still has
+  // to render.
+  stageLabel(intent, slug) {
+    if (!slug) return '(stage not recorded)';
+    const node = intent.journey.checkpoints.find((cp) => cp.id === slug);
+    return node ? node.label : slug;
+  }
+
+  // The unknown-event list is no longer shown here.
+  //
+  // Reviewed across four projects and it printed a near-identical set every time:
+  // the same five to eleven bookkeeping names, unchanged by anything the user does.
+  // A section that cannot vary with the project says nothing about the project, and
+  // an unchanging block trains a reader to skip the panel it sits in.
+  //
+  // It is not deleted. Under branch-tracking it is the only thing that notices
+  // upstream growing a vocabulary this build has not met, so it moved to the
+  // diagnostic command and `npm run probe`, where a maintainer looks. See
+  // install-commands.js.
+  //
+  // Reviewing it also earned its keep: three of the names it was listing were
+  // STAGE_AWAITING_APPROVAL, SUMMARY_CONFIRMATION_RECORDED and DECISION_RECORDED --
+  // a panel about supervising delegation announcing it had no meaning for the event
+  // that says the delegation is waiting on you. The first of those is now a section
+  // of its own.
+  gaps() {
+    return '';
   }
 
   // Sensor paths in the ledger are relative to the project root.
