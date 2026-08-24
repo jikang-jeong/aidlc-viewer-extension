@@ -1,8 +1,8 @@
 {
   "name": "aidlc-viewer",
   "displayName": "AIDLC-VIEWER",
-  "description": "Watch AIDLC workflow folders, visualize AI-DLC progress, and edit Markdown artifacts in a split editor/preview viewer with zoom.",
-  "version": "0.0.20",
+  "description": "Companion tool for AWS AI-DLC. Sets the workflow up in one click, and shows where it has got to.",
+  "version": "0.0.21",
   "publisher": "jikjeong",
   "license": "MIT",
   "repository": {
@@ -23,10 +23,13 @@
   "keywords": [
     "aidlc",
     "ai-dlc",
+    "aws",
     "workflow",
+    "agent",
     "markdown",
     "viewer",
-    "sdlc"
+    "sdlc",
+    "kiro"
   ],
   "activationEvents": [
     "onStartupFinished",
