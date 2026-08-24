@@ -1670,7 +1670,10 @@ function buildStageTooltip(summary) {
       `In scope: ${journey.counts.done}/${journey.plannedTotal} done`
     ];
     if (journey.counts.skipped > 0) {
-      lines.push(`Skipped by scope: ${journey.counts.skipped}`);
+      // Wording matched to the strip and the phase rows. "Skipped" would claim the
+      // run went past these, and this branch is v2-only where that is never what
+      // the count means.
+      lines.push(`Not in this scope: ${journey.counts.skipped}`);
     }
     if (journey.units.length > 0) {
       lines.push(`Units of work: ${journey.units.join(', ')}`);

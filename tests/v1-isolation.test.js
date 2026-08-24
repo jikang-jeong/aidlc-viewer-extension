@@ -301,3 +301,207 @@ test('a v1 project is never cached, because its journey is rebuilt by the caller
   assert.strictEqual(readProject(root, { v1Journey: a }).journey, a);
   assert.strictEqual(readProject(root, { v1Journey: b }).journey, b);
 });
+
+// ---------------------------------------------------------------------------
+// The renderers, compared against 0.0.19's own code
+// ---------------------------------------------------------------------------
+//
+// Every v2 change that adds a field ends up read by a renderer, and a renderer that
+// reads it for v1 too changes what three thousand people see. That has now happened
+// twice in development: once when the tree summary row branched on whether a journey
+// existed, and once when a label branched on `conditional`, which v1 also sets.
+//
+// So these tests do not check that v1's data is unchanged -- other tests do that.
+// They extract the label-deciding code from 0.0.19's extension.js and from the
+// current one, run both over identical v1 journeys, and require the answers to match.
+// Re-implementing the logic in the test would prove only that the test agrees with
+// itself.
+
+const RELEASED = 'e17e4ad'; // v0.0.19
+
+// extension.js requires `vscode`, so it is compiled with that module stubbed and the
+// internals under test exported. Nothing here touches the editor or the filesystem.
+function loadExtensionInternals() {
+  const Module = require('module');
+  const file = path.join(__dirname, '..', 'src', 'extension.js');
+  const realLoad = Module._load;
+  Module._load = function stubbed(request, ...rest) {
+    if (request !== 'vscode') return realLoad.call(this, request, ...rest);
+    return {
+      TreeItem: class {
+        constructor(label) {
+          this.label = label;
+        }
+      },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      ThemeIcon: class {},
+      ThemeColor: class {},
+      MarkdownString: class {
+        constructor(value) {
+          this.value = value;
+        }
+      },
+      Uri: { file: (p) => ({ fsPath: p }) },
+      window: {},
+      workspace: { fs: {} },
+      commands: {},
+      EventEmitter: class {
+        constructor() {
+          this.event = () => {};
+          this.fire = () => {};
+        }
+      },
+      FileType: {},
+      RelativePattern: class {},
+      ProgressLocation: {}
+    };
+  };
+  try {
+    const loaded = new Module(file);
+    loaded.filename = file;
+    loaded.paths = Module._nodeModulePaths(path.dirname(file));
+    loaded._compile(
+      `${fs.readFileSync(file, 'utf8')}
+module.exports = { currentPhaseFromJourney, buildStageTooltip };`,
+      file
+    );
+    return loaded.exports;
+  } finally {
+    Module._load = realLoad;
+  }
+}
+
+function releasedExtensionSource() {
+  const { execFileSync } = require('child_process');
+  return execFileSync('git', ['show', `${RELEASED}:src/extension.js`], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024
+  });
+}
+
+function currentExtensionSource() {
+  return fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
+}
+
+// The webview's per-stage tag block, lifted out and made callable.
+function tagFunctionFrom(source) {
+  const start = source.indexOf("let tag = '';");
+  assert.notEqual(start, -1, 'the tag block moved; this test needs updating');
+  const end = source.indexOf('if (tag) {', start);
+  assert.ok(end > start, 'the end of the tag block moved');
+  const body = source.slice(start, end).replace(/entry\.cp/g, 'cp');
+  // eslint-disable-next-line no-new-func
+  return new Function('cp', `${body}\nreturn tag;`);
+}
+
+// The segment tooltip's state phrase, lifted out the same way.
+function tooltipStateFrom(source) {
+  const labelLine = source.slice(
+    source.indexOf('const STATE_LABEL ='),
+    source.indexOf('\n', source.indexOf('const STATE_LABEL ='))
+  );
+  const fn = source.indexOf('function tooltipFor(');
+  assert.notEqual(fn, -1, 'tooltipFor moved; this test needs updating');
+  const bodyStart = source.indexOf('{', fn);
+  const stop = source.indexOf('bits.push(PHASE_LABEL', bodyStart);
+  const block = source.slice(bodyStart + 1, stop);
+  // eslint-disable-next-line no-new-func
+  return new Function(
+    'cp',
+    'index',
+    'journey',
+    'PHASE_LABEL',
+    `${labelLine}\n${block}\nreturn bits.join(' | ');`
+  );
+}
+
+const V1_LAYOUTS = [
+  [],
+  [{ relPath: 'inception/requirements/requirements.md', mtime: 1 }],
+  [
+    { relPath: 'construction/plans/u1-plan.md', mtime: 1 },
+    { relPath: 'construction/alpha/functional-design.md', mtime: 2 },
+    { relPath: 'construction/beta/functional-design.md', mtime: 3 }
+  ],
+  [{ relPath: 'operations/review.md', mtime: 1 }],
+  [
+    { relPath: 'inception/x.md', mtime: 1 },
+    { relPath: 'construction/y/z.md', mtime: 2 },
+    { relPath: 'unrecognised/u.md', mtime: 3 }
+  ]
+];
+
+function everyV1Journey() {
+  const journeys = [];
+  for (const artifacts of V1_LAYOUTS) {
+    for (const rulesInstalled of [false, true]) {
+      journeys.push(buildJourney({ artifacts, rulesInstalled }));
+    }
+  }
+  return journeys;
+}
+
+test("the strip's per-stage tag is identical to 0.0.19 on every v1 layout", () => {
+  const before = tagFunctionFrom(releasedExtensionSource());
+  const after = tagFunctionFrom(currentExtensionSource());
+  let compared = 0;
+  for (const journey of everyV1Journey()) {
+    for (const cp of journey.checkpoints) {
+      compared += 1;
+      assert.equal(
+        after(cp),
+        before(cp),
+        `tag changed for ${cp.id}: 0.0.19 said "${before(cp)}", now "${after(cp)}"`
+      );
+    }
+  }
+  assert.ok(compared > 100, `only ${compared} checkpoints compared`);
+});
+
+test("the segment tooltip's state phrase is identical to 0.0.19 on every v1 layout", () => {
+  const before = tooltipStateFrom(releasedExtensionSource());
+  const after = tooltipStateFrom(currentExtensionSource());
+  for (const journey of everyV1Journey()) {
+    journey.checkpoints.forEach((cp, index) => {
+      assert.equal(
+        after(cp, index, journey, {}),
+        before(cp, index, journey, {}),
+        `tooltip changed for ${cp.id}`
+      );
+    });
+  }
+});
+
+test('v1 carries none of the fields the v2 labels are keyed off', () => {
+  // The mechanism that keeps the two tests above passing. A v2 change may add a field
+  // and read it in a renderer; it may not add one v1 also produces. `conditional` is
+  // the counterexample that proves the rule -- v1 sets it, which is why the label
+  // reads `mayNotRun` instead.
+  for (const journey of everyV1Journey()) {
+    for (const cp of journey.checkpoints) {
+      assert.ok(!('outOfScope' in cp), `v1 checkpoint has outOfScope: ${cp.id}`);
+      assert.ok(!('mayNotRun' in cp), `v1 checkpoint has mayNotRun: ${cp.id}`);
+    }
+  }
+});
+
+test('the v2-only tooltip branch is unreachable from a v1 journey', () => {
+  // buildStageTooltip reports scope figures that would all be meaningless for v1, and
+  // it is gated on the phase lookup rather than on the presence of a journey -- a v1
+  // journey answers that question too, which is how the first attempt at this leaked.
+  const { currentPhaseFromJourney } = loadExtensionInternals();
+  for (const journey of everyV1Journey()) {
+    const summary = {
+      generation: 'v1',
+      journey,
+      currentStage: 'inception',
+      counts: { inception: 1, construction: 0, operations: 0 }
+    };
+    assert.equal(
+      currentPhaseFromJourney(summary),
+      undefined,
+      'a v1 summary reached the v2 tooltip branch'
+    );
+  }
+});
