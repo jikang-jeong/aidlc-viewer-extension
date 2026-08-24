@@ -34,8 +34,16 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
     const record = runtime ? runtime.byStage.get(stage.slug) : undefined;
     let status;
     if (!stage.inScope) {
-      // The scope decided not to run this stage. That is not work left to do,
+      // The scope declared this stage would not run. That is not work left to do,
       // which is why it leaves the denominator below.
+      //
+      // It reuses v1's `skipped` status so every renderer keeps hatching it and
+      // excluding it from counts without a branch. But it is NOT what v1 means by
+      // skipped: v1 skipped a stage by moving past it, so the position was always
+      // beyond it. This is declared before anything runs, which is why a project
+      // sitting in its second phase showed Operation stages as "skipped" and read
+      // as either a bug or as a decision nobody made. `outOfScope` carries the
+      // distinction to the places that print a word, and v1 never sets it.
       status = V2_STATUS.SKIPPED;
     } else if (record && record.done) {
       status = V2_STATUS.DONE;
@@ -55,6 +63,12 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
       // expresses the same thing through scope, so nothing is a placeholder.
       placeholder: false,
       planned: stage.inScope,
+      // Only ever true, and only in v2. The renderers print a different word for
+      // it, because "skipped" describes something the run did and this describes
+      // something the scope declared before the run began. Absent on in-scope
+      // stages and absent on every v1 checkpoint, so a reader of this field cannot
+      // accidentally relabel v1.
+      outOfScope: stage.inScope ? undefined : true,
       status,
       outcome: record ? record.outcome : undefined,
       agent: record ? record.agent : stage.leadAgent,

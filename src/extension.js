@@ -1133,7 +1133,12 @@ function formatJourneyCounts(journey) {
     parts.push(`${counts.active} in progress`);
   }
   if (skipped) {
-    parts.push(`${skipped} skipped`);
+    // v2 excludes a stage because the scope never included it; v1 excludes one
+    // because the run went past it. Same count, different sentence, and the word
+    // is chosen from the checkpoints rather than from the generation so v1's text
+    // is unchanged by construction.
+    const outOfScope = journey.checkpoints.filter((cp) => cp.outOfScope).length;
+    parts.push(`${skipped} ${outOfScope === skipped ? 'not in scope' : 'skipped'}`);
   }
   return parts.join(' · ');
 }
@@ -1143,12 +1148,13 @@ class StageProgressChild extends vscode.TreeItem {
     super(capitalize(phase), vscode.TreeItemCollapsibleState.None);
     const done = checkpoints.filter((cp) => cp.status === 'done').length;
     const skipped = checkpoints.filter((cp) => cp.status === 'skipped').length;
+    const outOfScope = checkpoints.filter((cp) => cp.outOfScope).length;
     const planned = checkpoints.filter(
       (cp) => cp.status !== 'skipped' && !(cp.placeholder && cp.status !== 'done')
     ).length;
     const parts = [`${done}/${planned}`];
     if (skipped) {
-      parts.push(`${skipped} skipped`);
+      parts.push(`${skipped} ${outOfScope === skipped ? 'not in scope' : 'skipped'}`);
     }
     if (checkpoints.some((cp) => cp.placeholder && cp.status !== 'done')) {
       parts.push('placeholder');
@@ -2494,7 +2500,10 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
 
       function tooltipFor(cp, index) {
-        const bits = [(index + 1) + '. ' + cp.label, STATE_LABEL[cp.status] || cp.status];
+        // Out of scope shares the skipped status but not its meaning, so the
+        // tooltip says which one this is.
+        const state = cp.outOfScope ? 'not in scope' : (STATE_LABEL[cp.status] || cp.status);
+        const bits = [(index + 1) + '. ' + cp.label, state];
         bits.push(PHASE_LABEL[cp.phase] || cp.phase);
         if (cp.unitProgress && cp.unitProgress.total > 0) {
           bits.push(cp.unitProgress.done + '/' + cp.unitProgress.total + ' units');
@@ -2592,8 +2601,17 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
             item.appendChild(label);
 
             // A tag only where the state is not obvious from the mark alone.
+            //
+            // "skipped" and "not in scope" share a status so they share the
+            // hatching, but they are not the same claim. Skipped means the run
+            // moved past this stage, so the position is beyond it. Not in scope
+            // means the scope declared it would never run, which is known before
+            // anything starts -- and printing that as "skipped" made a project in
+            // its second phase look as though it had already passed over
+            // deployment.
             let tag = '';
             if (entry.cp.placeholder && entry.cp.status !== 'done') tag = 'placeholder';
+            else if (entry.cp.outOfScope) tag = 'not in scope';
             else if (entry.cp.status === 'skipped') tag = 'skipped';
             else if (entry.cp.status === 'pending') tag = 'not started';
             else if (entry.cp.unitProgress && entry.cp.unitProgress.total > 1) {

@@ -610,3 +610,96 @@ test('position: the furthest evidenced stage wins, so a late edit cannot move it
   const journey = buildV2(root).intents[0].journey;
   assert.equal(journey.checkpoints[journey.currentIndex].id, 'c');
 });
+
+// ---------------------------------------------------------------------------
+// Out of scope is not the same as skipped
+// ---------------------------------------------------------------------------
+
+test('a stage the scope never included is marked out of scope, not skipped', () => {
+  // Reported from a screenshot: a project sitting in its second phase showed every
+  // Operation stage as "skipped". Read literally that claims the run went past
+  // deployment, which cannot be true from ideation. The scope had simply never
+  // included those stages, which is a different fact and is known before anything
+  // runs.
+  //
+  // The status stays `skipped` so every renderer keeps hatching it and keeps it out
+  // of the denominator. `outOfScope` is what carries the distinction to the places
+  // that print a word.
+  const stages = [
+    { slug: 'a', name: 'A', phase: 'ideation', inScope: true },
+    { slug: 'b', name: 'B', phase: 'ideation', inScope: false },
+    { slug: 'z', name: 'Z', phase: 'operation', inScope: false }
+  ];
+  const runtime = {
+    units: { units: [] },
+    byStage: new Map([['a', { done: true, outcome: 'approved' }]])
+  };
+  const journey = buildFromStages(stages, runtime);
+
+  const [a, b, z] = journey.checkpoints;
+  assert.equal(a.status, V2_STATUS.DONE);
+  assert.equal(a.outOfScope, undefined, 'an in-scope stage carries no out-of-scope mark');
+
+  for (const cp of [b, z]) {
+    assert.equal(cp.status, V2_STATUS.SKIPPED, 'status unchanged, so hatching still works');
+    assert.equal(cp.outOfScope, true);
+    assert.equal(cp.planned, false);
+  }
+
+  // And the denominator still counts only what the scope included.
+  assert.equal(journey.plannedTotal, 1);
+  assert.equal(journey.counts.done, 1);
+});
+
+test('an in-scope stage not yet reached is pending, never out of scope', () => {
+  // The other half of the screenshot: some rows read "not started" and some read
+  // "skipped", with nothing to tell the reader why. A stage ahead of the run that the
+  // scope did include must be pending.
+  const stages = [
+    { slug: 'a', name: 'A', phase: 'ideation', inScope: true },
+    { slug: 'later', name: 'Later', phase: 'operation', inScope: true }
+  ];
+  const runtime = {
+    units: { units: [] },
+    byStage: new Map([['a', { done: true, outcome: 'approved' }]])
+  };
+  const later = buildFromStages(stages, runtime).checkpoints[1];
+  assert.equal(later.status, V2_STATUS.PENDING);
+  assert.equal(later.outOfScope, undefined);
+  assert.equal(later.planned, true);
+});
+
+test('v1 checkpoints never carry the out-of-scope mark', () => {
+  // v1 has no scope, and its `skipped` means what it has always meant: the run moved
+  // past a stage without producing anything. Asserted because the renderers now take
+  // their wording from this field, so v1's text is unchanged only as long as v1 never
+  // sets it.
+  const v1 = require('../src/aidlc/journey');
+  for (const artifacts of [
+    [],
+    [{ relPath: 'inception/requirements/requirements.md', mtime: 1 }],
+    [{ relPath: 'operations/review.md', mtime: 1 }],
+    [{ relPath: 'construction/plans/u1-plan.md', mtime: 1 }]
+  ]) {
+    for (const rulesInstalled of [false, true]) {
+      const journey = v1.buildJourney({ artifacts, rulesInstalled });
+      for (const cp of journey.checkpoints) {
+        assert.ok(!('outOfScope' in cp), `a v1 checkpoint carries outOfScope: ${cp.id}`);
+      }
+    }
+  }
+});
+
+test('an out-of-scope stage reads the same whatever phase it sits in', () => {
+  // The treatment must not depend on position. A stage the scope excluded looks the
+  // same one row below the run as it does five phases below it.
+  const stages = ['initialization', 'ideation', 'inception', 'construction', 'operation'].map(
+    (phase, index) => ({ slug: `s${index}`, name: `S${index}`, phase, inScope: false })
+  );
+  const journey = buildFromStages(stages, undefined);
+  assert.equal(journey.plannedTotal, 0);
+  for (const cp of journey.checkpoints) {
+    assert.equal(cp.status, V2_STATUS.SKIPPED);
+    assert.equal(cp.outOfScope, true);
+  }
+});
