@@ -521,45 +521,41 @@ ${detailRows}`;
 
   // Anything in this project the model could not account for. Shown because an
   // empty gap list is a claim, and a reader deserves to know when it fails.
-  // Stages the engine parked for a person, and has not moved past.
+  // Stages the engine finished and has not moved past.
   //
-  // The panel's reason to exist, and until now it could not say it. In v2 the agent
-  // reads and you approve, so a stage at its gate is not slow, it is stopped on you
-  // -- and the chat said so once, several hundred lines ago.
+  // The panel's reason to exist. In v2 the agent reads and you approve, so a stage
+  // here is not slow, it is stopped on you, and the chat said so once several hundred
+  // lines ago.
   //
-  // Only unresolved waits are shown. A finished run reached a gate at every stage,
-  // so the raw count is history and listing it would be thirteen warnings about work
-  // already approved. Nothing waiting produces no section at all rather than a
-  // reassuring line, which is the same rule the refusals section follows.
+  // A row says how this was concluded, because the two are not equally certain. When
+  // the engine emitted its own awaiting-approval record, that is quoted. When it did
+  // not -- and the newer engine does not, for some gates -- the stage is here because
+  // it finished its work, the graph does not have it as done, and nothing has moved it
+  // since. Worth distinguishing on screen rather than presenting both as the engine's
+  // word.
+  //
+  // Nothing waiting produces no section, not a reassuring line, which is the rule the
+  // refusals section follows too.
   awaiting(intent) {
     const waiting = intent.diagnosis.waitingOnYou ?? [];
-    const undecided = (intent.diagnosis.approvalWaits ?? []).filter(
-      (entry) => entry.settled === undefined
-    );
-    if (waiting.length === 0 && undecided.length === 0) return '';
+    if (waiting.length === 0) return '';
 
     const rows = waiting
       .map((entry) => {
         const stage = this.stageLabel(intent, entry.stage);
-        const when = entry.timestamp ? ` <span class="quiet">since ${escapeHtml(entry.timestamp)}</span>` : '';
+        const when = entry.timestamp
+          ? ` <span class="quiet">since ${escapeHtml(entry.timestamp)}</span>`
+          : '';
+        const how = entry.stated
+          ? '<div class="quiet">the engine recorded that it is waiting for approval</div>'
+          : '<div class="quiet">finished its work and nothing has moved it since</div>';
         const detail = entry.detail ? `<div class="quiet">${escapeHtml(entry.detail)}</div>` : '';
-        return `<div class="block"><strong>${escapeHtml(stage)}</strong>${when}${detail}</div>`;
+        return `<div class="block"><strong>${escapeHtml(stage)}</strong>${when}${how}${detail}</div>`;
       })
       .join('');
 
-    // Named rather than dropped: the ledger could not place these, and silently
-    // omitting them would turn an unknown into a clean bill of health.
-    const unsure =
-      undecided.length > 0
-        ? `<p class="quiet">${undecided.length} more gate(s) could not be placed in the ledger, so whether they are still open is unknown.</p>`
-        : '';
-
-    const heading = waiting.length > 0 ? 'Waiting for you' : 'Gates that could not be placed';
-    const lead =
-      waiting.length > 0
-        ? '<p class="quiet">The engine finished the work and stopped at the gate. Nothing moves until you approve or reject it.</p>'
-        : '';
-    return `<h2 class="warn">${heading}</h2>${lead}${rows}${unsure}`;
+    return `<h2 class="warn">Waiting for you</h2>
+<p class="quiet">Nothing here moves until you approve it or ask for changes.</p>${rows}`;
   }
 
   // A stage's own name when the compiled graph has one, and its slug otherwise. The

@@ -85,7 +85,7 @@
       },
       "refusals": 13,
       "refusalsLive": 0,
-      "approvalGates": 13,
+      "approvalGates": 0,
       "waitingOnYou": [],
       "sensorFailureTotal": 25,
       "sensorsByStage": {
@@ -211,7 +211,7 @@
       },
       "refusals": 10,
       "refusalsLive": 0,
-      "approvalGates": 17,
+      "approvalGates": 0,
       "waitingOnYou": [],
       "sensorFailureTotal": 27,
       "sensorsByStage": {
@@ -351,7 +351,7 @@
       },
       "refusals": 21,
       "refusalsLive": 0,
-      "approvalGates": 9,
+      "approvalGates": 1,
       "waitingOnYou": [
         "functional-design"
       ],
@@ -471,7 +471,9 @@
       "refusals": 13,
       "refusalsLive": 0,
       "approvalGates": 1,
-      "waitingOnYou": [],
+      "waitingOnYou": [
+        "requirements-analysis"
+      ],
       "sensorFailureTotal": 9,
       "sensorsByStage": {
         "intent-capture": 9

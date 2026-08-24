@@ -809,9 +809,53 @@ test('a gate nothing resolved is reported as waiting on a person', () => {
     { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 'domain-design' }
   ]);
   const result = diagnose(dir);
-  assert.equal(result.approvalWaits.length, 1);
   assert.equal(result.waitingOnYou.length, 1);
   assert.equal(result.waitingOnYou[0].stage, 'domain-design');
+  // Quoted from the engine rather than concluded, and the panel says which.
+  assert.equal(result.waitingOnYou[0].stated, true);
+});
+
+test('a stage that finished its work is waiting even with no gate event', () => {
+  // The case that broke the first version within the hour: a project sitting at a
+  // Requirements Analysis gate with the chat asking for approval, and this reporting
+  // nothing, because that engine emitted no awaiting-approval record for that gate.
+  // Keying on one event name is a rule base with a single rule, and the v2 branch
+  // moves -- UNIT_COMPLETED is already gone from the newer engine.
+  for (const evidence of ['REVIEW_COMPLETED', 'ARTIFACT_CREATED', 'ARTIFACT_UPDATED']) {
+    const dir = intentWith([
+      { Timestamp: '2026-01-01T00:00:00Z', Event: 'STAGE_STARTED', Stage: 's' },
+      { Timestamp: '2026-01-01T00:01:00Z', Event: evidence, Stage: 's' }
+    ]);
+    const result = diagnose(dir);
+    assert.equal(result.waitingOnYou.length, 1, `${evidence} did not read as finished work`);
+    // Concluded, not quoted. The distinction reaches the screen.
+    assert.equal(result.waitingOnYou[0].stated, false);
+    assert.equal(result.waitingOnYou[0].evidence, evidence);
+  }
+});
+
+test('checks running over an artifact are part of writing it, not movement after it', () => {
+  // Sensors fire on every artifact write, so treating any later event as movement
+  // would silence every gate the moment the engine checked its own output.
+  const dir = intentWith([
+    { Timestamp: '2026-01-01T00:01:00Z', Event: 'ARTIFACT_UPDATED', Stage: 's' },
+    { Timestamp: '2026-01-01T00:02:00Z', Event: 'SENSOR_FIRED', Stage: 's' },
+    { Timestamp: '2026-01-01T00:03:00Z', Event: 'SENSOR_PASSED', Stage: 's' },
+    { Timestamp: '2026-01-01T00:04:00Z', Event: 'SENSOR_FAILED', Stage: 's' }
+  ]);
+  assert.equal(diagnose(dir).waitingOnYou.length, 1);
+});
+
+test('a stage the runtime graph has as done is not waiting, whatever the ledger says', () => {
+  // The graph is the authority on completion. A ledger that never recorded the
+  // approval must not keep a finished stage on screen.
+  const dir = intentWith([
+    { Timestamp: '2026-01-01T00:01:00Z', Event: 'REVIEW_COMPLETED', Stage: 's' }
+  ]);
+  const runtime = { byStage: new Map([['s', { done: true, outcome: 'approved' }]]) };
+  assert.equal(diagnose(dir, { runtime }).waitingOnYou.length, 0);
+  // And without that authority it is still reported, rather than suppressed on a guess.
+  assert.equal(diagnose(dir).waitingOnYou.length, 1);
 });
 
 test('a gate the stage moved past is history, not a warning', () => {
@@ -822,9 +866,7 @@ test('a gate the stage moved past is history, not a warning', () => {
     { Timestamp: '2026-01-01T00:02:00Z', Event: 'GATE_APPROVED', Stage: 'domain-design' },
     { Timestamp: '2026-01-01T00:03:00Z', Event: 'STAGE_COMPLETED', Stage: 'domain-design' }
   ]);
-  const result = diagnose(dir);
-  assert.equal(result.approvalWaits.length, 1);
-  assert.equal(result.waitingOnYou.length, 0);
+  assert.equal(diagnose(dir).waitingOnYou.length, 0);
 });
 
 test('resolution is not a fixed list of event names', () => {
@@ -855,7 +897,6 @@ test('a stage parked twice is reported once', () => {
     { Timestamp: '2026-01-01T00:03:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 's' }
   ]);
   const result = diagnose(dir);
-  assert.equal(result.approvalWaits.length, 1);
   assert.equal(result.waitingOnYou.length, 1);
   // The later of the two, so the timestamp shown is the wait actually in force.
   assert.equal(result.waitingOnYou[0].timestamp, '2026-01-01T00:03:00Z');
@@ -867,27 +908,21 @@ test('gates on different stages are reported separately', () => {
     { Timestamp: '2026-01-01T00:02:00Z', Event: 'STAGE_AWAITING_APPROVAL', Stage: 'b' },
     { Timestamp: '2026-01-01T00:03:00Z', Event: 'STAGE_COMPLETED', Stage: 'a' }
   ]);
-  const result = diagnose(dir);
-  assert.equal(result.approvalWaits.length, 2);
-  assert.deepEqual(result.waitingOnYou.map((entry) => entry.stage), ['b']);
+  assert.deepEqual(diagnose(dir).waitingOnYou.map((entry) => entry.stage), ['b']);
 });
 
-test('a gate the ledger cannot place is undecided, not assumed clear', () => {
-  // Silently omitting it would turn an unknown into a clean bill of health.
+test('a gate with no stage recorded is not attributed to a guess', () => {
+  // Every judgement here is per stage, so a record naming none cannot be placed. It is
+  // left out rather than assigned to whichever stage was nearby.
   const dir = intentWith([
     { Timestamp: '2026-01-01T00:01:00Z', Event: 'STAGE_AWAITING_APPROVAL' }
   ]);
-  const result = diagnose(dir);
-  assert.equal(result.approvalWaits.length, 1);
-  assert.equal(result.approvalWaits[0].settled, undefined);
-  assert.equal(result.waitingOnYou.length, 0, 'undecided is not counted as waiting');
+  assert.deepEqual(diagnose(dir).waitingOnYou, []);
 });
 
 test('a ledger with no gates reports none, and does not throw', () => {
   const dir = intentWith([{ Timestamp: '2026-01-01T00:00:00Z', Event: 'HUMAN_TURN' }]);
-  const result = diagnose(dir);
-  assert.deepEqual(result.approvalWaits, []);
-  assert.deepEqual(result.waitingOnYou, []);
+  assert.deepEqual(diagnose(dir).waitingOnYou, []);
 });
 
 test('the gate events are no longer reported as unrecognised', () => {
