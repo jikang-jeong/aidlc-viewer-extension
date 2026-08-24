@@ -362,7 +362,7 @@ function loadExtensionInternals() {
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
     loaded._compile(
       `${fs.readFileSync(file, 'utf8')}
-module.exports = { currentPhaseFromJourney, buildStageTooltip };`,
+module.exports = { currentPhaseFromJourney, buildStageTooltip, isIgnoredEventPath, shouldSkipDirectory };`,
       file
     );
     return loaded.exports;
@@ -504,4 +504,80 @@ test('the v2-only tooltip branch is unreachable from a v1 journey', () => {
       'a v1 summary reached the v2 tooltip branch'
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// Which file events must refresh
+// ---------------------------------------------------------------------------
+
+test("v2's evidence lives in dot-directories, and events there must still refresh", () => {
+  // Reported as "the agent said the sensors fired and it re-ran them, and the panel
+  // showed the same thing". It did. v2 keeps the compiled graphs and runtime state
+  // under .kiro/tools/data/ and each sensor's findings under .aidlc-sensors/, and the
+  // watcher was dropping events under any dot-directory -- so the two most
+  // authoritative inputs to the strip and the panel could change with nothing asking
+  // the reader to look again.
+  //
+  // The audit ledger was the exception that hid it: it sits in a plain `audit/`
+  // directory, so ledger-driven figures did update while graph-driven ones did not.
+  const { isIgnoredEventPath } = loadExtensionInternals();
+  const root = { fsPath: '/p' };
+  const ignored = (rel) => isIgnoredEventPath(root, { fsPath: `/p/${rel}` });
+
+  for (const rel of [
+    '.kiro/tools/data/runtime-graph.json',
+    '.kiro/tools/data/stage-graph.json',
+    '.kiro/tools/data/scope-grid.json',
+    'aidlc/spaces/default/intents/i1/.aidlc-sensors/intent-capture/claim-sources-abc.md',
+    'aidlc/spaces/default/intents/i1/audit/shard.md'
+  ]) {
+    assert.equal(ignored(rel), false, `a v2 evidence path is being ignored: ${rel}`);
+  }
+});
+
+test('the directories that were noisy are still ignored', () => {
+  // The rule this loosens exists for a reason: a refresh per object written into .git
+  // during a rebase is worth nothing, because the tree never shows any of it.
+  const { isIgnoredEventPath } = loadExtensionInternals();
+  const root = { fsPath: '/p' };
+  const ignored = (rel) => isIgnoredEventPath(root, { fsPath: `/p/${rel}` });
+
+  for (const rel of [
+    '.git/objects/ab/cdef',
+    '.git/refs/heads/main',
+    'node_modules/pkg/index.js',
+    '.vscode/settings.json',
+    '.idea/workspace.xml',
+    'dist/bundle.js',
+    'build/out.js',
+    'coverage/lcov.info',
+    '.venv/lib/python3.12/site-packages/x.py',
+    '__pycache__/m.cpython-312.pyc',
+    'target/debug/app'
+  ]) {
+    assert.equal(ignored(rel), true, `a noisy path is no longer ignored: ${rel}`);
+  }
+});
+
+test('v1 paths are unaffected by the dot-directory exception', () => {
+  // v1 keeps its rules under .kiro/ too, so this widened what triggers a refresh for
+  // v1 as well. Nothing v1 displays changes: the tree still excludes .kiro/ from
+  // rendering, so the effect is that a refresh recomputes the same answer -- and only
+  // when rule files change, which is at setup.
+  const { isIgnoredEventPath, shouldSkipDirectory } = loadExtensionInternals();
+  const root = { fsPath: '/p' };
+
+  for (const rel of [
+    'aidlc-docs/inception/requirements.md',
+    'aidlc-docs/construction/plans/u1-plan.md',
+    '.kiro/steering/aws-aidlc-rules/core-workflow.md',
+    '.kiro/aws-aidlc-rule-details/common/x.md'
+  ]) {
+    assert.equal(isIgnoredEventPath(root, { fsPath: `/p/${rel}` }), false, rel);
+  }
+
+  // And the tree's own filter is untouched, which is what keeps .kiro/ off screen.
+  assert.equal(shouldSkipDirectory('.kiro'), true);
+  assert.equal(shouldSkipDirectory('.aidlc-sensors'), true);
+  assert.equal(shouldSkipDirectory('aidlc-docs'), false);
 });

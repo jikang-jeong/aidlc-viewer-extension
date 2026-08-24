@@ -1815,6 +1815,23 @@ function ensureTrailingSlash(value) {
   return value.endsWith('/') ? value : `${value}/`;
 }
 
+// Paths that carry v2's evidence, and which the tree does not show.
+//
+// v2 keeps everything the panel and the strip read inside dot-directories: the
+// compiled graphs and runtime state under `.kiro/tools/data/`, and each sensor's
+// findings under `.aidlc-sensors/` beside the artifacts they judge. The tree is right
+// not to render those, but the reader depends on them, so an event there has to
+// refresh even though nothing in the tree will change.
+//
+// Reported as "the agent said the sensors fired and re-ran, and the panel showed the
+// same thing". It did, because these events were being dropped and nothing asked the
+// reader to look again.
+//
+// Matched on a path segment rather than on a full path, so a layout that moves within
+// the project still works, and expressed as a positive list so a new dot-directory
+// upstream invents is ignored by default rather than silently steering refreshes.
+const WATCHED_DOT_DIRS = new Set(['.kiro', '.aidlc-sensors']);
+
 const SKIP_DIRS = new Set([
   'node_modules', 'dist', 'build', 'out', 'coverage',
   '.git', '.svn', '.hg', '.vscode', '.idea',
@@ -1837,6 +1854,12 @@ function isIgnoredEventPath(rootUri, uri) {
   // the file/dir the event is about — never filtered here, so events the tree
   // previously reacted to still trigger a refresh exactly as before.
   const parentSegments = rel.split(path.sep).slice(0, -1);
+  // An event inside a directory v2 keeps its evidence in must refresh, even though
+  // the tree will not render it. Checked before the skip rules, because these are
+  // dot-directories and would otherwise be dropped by them.
+  if (parentSegments.some((segment) => WATCHED_DOT_DIRS.has(segment))) {
+    return false;
+  }
   return parentSegments.some((segment) => shouldSkipDirectory(segment));
 }
 
