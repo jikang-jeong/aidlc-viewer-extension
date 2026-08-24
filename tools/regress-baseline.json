@@ -1,0 +1,485 @@
+{
+  "v2-probe": {
+    "generation": "v2",
+    "stageCount": 33,
+    "phases": [
+      "initialization",
+      "ideation",
+      "inception",
+      "construction",
+      "operation"
+    ],
+    "scopeCount": 12,
+    "gaps": {
+      "unknownStageFields": [
+        "for_each",
+        "optional_produces",
+        "produces_kinds",
+        "workspace_requires"
+      ],
+      "unknownEvents": [
+        "DECISION_RECORDED",
+        "GUARDRAIL_LOADED",
+        "HEALTH_CHECKED",
+        "PHASE_VERIFIED",
+        "PRACTICES_AFFIRMED",
+        "PRACTICES_DISCOVERED",
+        "WORKSPACE_INITIALISED",
+        "WORKSPACE_SCAFFOLDED",
+        "WORKSPACE_SCANNED"
+      ],
+      "nonPhaseDirs": [
+        "audit",
+        "verification"
+      ]
+    },
+    "active": {
+      "scope": "lms-exploratory-build",
+      "at": "CI Pipeline",
+      "plannedTotal": 16,
+      "counts": {
+        "done": 16,
+        "active": 0,
+        "pending": 0,
+        "skipped": 17
+      },
+      "units": [],
+      "labels": {
+        "done": 16,
+        "not in scope": 17
+      },
+      "byStage": {
+        "workspace-scaffold": "done",
+        "workspace-detection": "done",
+        "state-init": "done",
+        "intent-capture": "done",
+        "market-research": "not in scope",
+        "feasibility": "not in scope",
+        "scope-definition": "done",
+        "team-formation": "not in scope",
+        "rough-mockups": "not in scope",
+        "approval-handoff": "done",
+        "reverse-engineering": "not in scope",
+        "practices-discovery": "done",
+        "requirements-analysis": "done",
+        "user-stories": "done",
+        "refined-mockups": "done",
+        "domain-design": "done",
+        "units-generation": "not in scope",
+        "contract-design": "not in scope",
+        "delivery-planning": "not in scope",
+        "functional-design": "done",
+        "nfr-requirements": "done",
+        "nfr-design": "not in scope",
+        "infrastructure-design": "not in scope",
+        "code-generation": "done",
+        "build-and-test": "done",
+        "ci-pipeline": "done",
+        "deployment-pipeline": "not in scope",
+        "environment-provisioning": "not in scope",
+        "deployment-execution": "not in scope",
+        "observability-setup": "not in scope",
+        "incident-response": "not in scope",
+        "performance-validation": "not in scope",
+        "feedback-optimization": "not in scope"
+      },
+      "refusals": 13,
+      "refusalsLive": 0,
+      "approvalGates": 0,
+      "waitingOnYou": [],
+      "sensorFailureTotal": 25,
+      "sensorsByStage": {
+        "approval-handoff": 1,
+        "ci-pipeline": 1,
+        "code-generation": 4,
+        "functional-design": 1,
+        "nfr-requirements": 2,
+        "practices-discovery": 2,
+        "user-stories": 14
+      },
+      "contrastRows": 4,
+      "contrast": {
+        "code-generation": {
+          "items": 66,
+          "records": 1,
+          "unaccounted": 2
+        },
+        "functional-design": {
+          "items": 33,
+          "records": 1,
+          "unaccounted": 1
+        },
+        "nfr-requirements": {
+          "items": 5,
+          "records": 1,
+          "unaccounted": 1
+        },
+        "user-stories": {
+          "items": 22,
+          "records": 1,
+          "unaccounted": 5
+        }
+      }
+    }
+  },
+  "v2-probe2": {
+    "generation": "v2",
+    "stageCount": 33,
+    "phases": [
+      "initialization",
+      "ideation",
+      "inception",
+      "construction",
+      "operation"
+    ],
+    "scopeCount": 11,
+    "gaps": {
+      "unknownStageFields": [
+        "for_each",
+        "optional_produces",
+        "produces_kinds",
+        "workspace_requires"
+      ],
+      "unknownEvents": [
+        "DECISION_RECORDED",
+        "MEMORY_EMPTY",
+        "PHASE_VERIFIED",
+        "PRACTICES_AFFIRMED",
+        "PRACTICES_DISCOVERED",
+        "WORKSPACE_INITIALISED",
+        "WORKSPACE_SCAFFOLDED",
+        "WORKSPACE_SCANNED"
+      ],
+      "nonPhaseDirs": [
+        "audit",
+        "verification"
+      ]
+    },
+    "active": {
+      "scope": "mvp",
+      "at": "CI Pipeline",
+      "plannedTotal": 23,
+      "counts": {
+        "done": 20,
+        "active": 2,
+        "pending": 1,
+        "skipped": 10
+      },
+      "units": [
+        "map-app"
+      ],
+      "labels": {
+        "done": 20,
+        "not in scope": 10,
+        "if needed": 1,
+        "in progress": 2
+      },
+      "byStage": {
+        "workspace-scaffold": "done",
+        "workspace-detection": "done",
+        "state-init": "done",
+        "intent-capture": "done",
+        "market-research": "not in scope",
+        "feasibility": "done",
+        "scope-definition": "done",
+        "team-formation": "not in scope",
+        "rough-mockups": "done",
+        "approval-handoff": "not in scope",
+        "reverse-engineering": "if needed",
+        "practices-discovery": "done",
+        "requirements-analysis": "done",
+        "user-stories": "done",
+        "refined-mockups": "done",
+        "domain-design": "done",
+        "units-generation": "done",
+        "contract-design": "in progress",
+        "delivery-planning": "done",
+        "functional-design": "done",
+        "nfr-requirements": "done",
+        "nfr-design": "done",
+        "infrastructure-design": "done",
+        "code-generation": "done",
+        "build-and-test": "done",
+        "ci-pipeline": "in progress",
+        "deployment-pipeline": "not in scope",
+        "environment-provisioning": "not in scope",
+        "deployment-execution": "not in scope",
+        "observability-setup": "not in scope",
+        "incident-response": "not in scope",
+        "performance-validation": "not in scope",
+        "feedback-optimization": "not in scope"
+      },
+      "refusals": 10,
+      "refusalsLive": 0,
+      "approvalGates": 0,
+      "waitingOnYou": [],
+      "sensorFailureTotal": 27,
+      "sensorsByStage": {
+        "code-generation": 1,
+        "delivery-planning": 1,
+        "domain-design": 1,
+        "functional-design": 1,
+        "infrastructure-design": 6,
+        "intent-capture": 9,
+        "nfr-design": 1,
+        "practices-discovery": 2,
+        "user-stories": 5
+      },
+      "contrastRows": 6,
+      "contrast": {
+        "domain-design": {
+          "items": 22,
+          "records": 1,
+          "unaccounted": 7
+        },
+        "user-stories": {
+          "items": 22,
+          "records": 1,
+          "unaccounted": 8
+        },
+        "code-generation": {
+          "items": 35,
+          "records": 1,
+          "unaccounted": 42
+        },
+        "functional-design": {
+          "items": 21,
+          "records": 1,
+          "unaccounted": 21
+        },
+        "infrastructure-design": {
+          "items": 3,
+          "records": 1,
+          "unaccounted": 1
+        },
+        "nfr-design": {
+          "items": 6,
+          "records": 1,
+          "unaccounted": 1
+        }
+      }
+    }
+  },
+  "v2-probe3": {
+    "generation": "v2",
+    "stageCount": 33,
+    "phases": [
+      "initialization",
+      "ideation",
+      "inception",
+      "construction",
+      "operation"
+    ],
+    "scopeCount": 12,
+    "gaps": {
+      "unknownStageFields": [
+        "for_each",
+        "optional_produces",
+        "produces_kinds",
+        "workspace_requires"
+      ],
+      "unknownEvents": [
+        "DECISION_RECORDED",
+        "MEMORY_EMPTY",
+        "PHASE_VERIFIED",
+        "PRACTICES_AFFIRMED",
+        "PRACTICES_DISCOVERED",
+        "UNIT_STARTED",
+        "WORKSPACE_INITIALISED",
+        "WORKSPACE_SCAFFOLDED",
+        "WORKSPACE_SCANNED"
+      ],
+      "nonPhaseDirs": [
+        "audit",
+        "verification"
+      ]
+    },
+    "active": {
+      "scope": "qc-inspection-local",
+      "at": "Functional Design",
+      "plannedTotal": 14,
+      "counts": {
+        "done": 11,
+        "active": 1,
+        "pending": 2,
+        "skipped": 19
+      },
+      "units": [
+        "u1-inspection-core",
+        "u2-lot-approval"
+      ],
+      "labels": {
+        "done": 11,
+        "not in scope": 19,
+        "in progress": 1,
+        "not started": 2
+      },
+      "byStage": {
+        "workspace-scaffold": "done",
+        "workspace-detection": "done",
+        "state-init": "done",
+        "intent-capture": "done",
+        "market-research": "not in scope",
+        "feasibility": "not in scope",
+        "scope-definition": "done",
+        "team-formation": "not in scope",
+        "rough-mockups": "not in scope",
+        "approval-handoff": "done",
+        "reverse-engineering": "not in scope",
+        "practices-discovery": "done",
+        "requirements-analysis": "done",
+        "user-stories": "not in scope",
+        "refined-mockups": "not in scope",
+        "domain-design": "done",
+        "units-generation": "done",
+        "contract-design": "done",
+        "delivery-planning": "not in scope",
+        "functional-design": "in progress",
+        "nfr-requirements": "not in scope",
+        "nfr-design": "not in scope",
+        "infrastructure-design": "not in scope",
+        "code-generation": "not started",
+        "build-and-test": "not started",
+        "ci-pipeline": "not in scope",
+        "deployment-pipeline": "not in scope",
+        "environment-provisioning": "not in scope",
+        "deployment-execution": "not in scope",
+        "observability-setup": "not in scope",
+        "incident-response": "not in scope",
+        "performance-validation": "not in scope",
+        "feedback-optimization": "not in scope"
+      },
+      "refusals": 21,
+      "refusalsLive": 0,
+      "approvalGates": 1,
+      "waitingOnYou": [
+        "functional-design"
+      ],
+      "sensorFailureTotal": 51,
+      "sensorsByStage": {
+        "approval-handoff": 2,
+        "contract-design": 1,
+        "domain-design": 3,
+        "functional-design": 25,
+        "intent-capture": 15,
+        "practices-discovery": 2,
+        "units-generation": 3
+      },
+      "contrastRows": 3,
+      "contrast": {
+        "domain-design": {
+          "items": 46,
+          "records": 1,
+          "unaccounted": 51
+        },
+        "units-generation": {
+          "items": 46,
+          "records": 1,
+          "unaccounted": 90
+        },
+        "functional-design": {
+          "items": 43,
+          "records": 2,
+          "unaccounted": 167
+        }
+      }
+    }
+  },
+  "v2-test": {
+    "generation": "v2",
+    "stageCount": 33,
+    "phases": [
+      "initialization",
+      "ideation",
+      "inception",
+      "construction",
+      "operation"
+    ],
+    "scopeCount": 11,
+    "gaps": {
+      "unknownStageFields": [
+        "for_each",
+        "optional_produces",
+        "produces_kinds",
+        "workspace_requires"
+      ],
+      "unknownEvents": [
+        "DECISION_RECORDED",
+        "PHASE_VERIFIED",
+        "WORKSPACE_INITIALISED",
+        "WORKSPACE_SCAFFOLDED",
+        "WORKSPACE_SCANNED"
+      ],
+      "nonPhaseDirs": [
+        "audit",
+        "verification"
+      ]
+    },
+    "active": {
+      "scope": "poc",
+      "at": "Requirements Analysis",
+      "plannedTotal": 8,
+      "counts": {
+        "done": 4,
+        "active": 1,
+        "pending": 3,
+        "skipped": 25
+      },
+      "units": [],
+      "labels": {
+        "done": 4,
+        "not in scope": 25,
+        "if needed": 1,
+        "in progress": 1,
+        "not started": 2
+      },
+      "byStage": {
+        "workspace-scaffold": "done",
+        "workspace-detection": "done",
+        "state-init": "done",
+        "intent-capture": "done",
+        "market-research": "not in scope",
+        "feasibility": "not in scope",
+        "scope-definition": "not in scope",
+        "team-formation": "not in scope",
+        "rough-mockups": "not in scope",
+        "approval-handoff": "not in scope",
+        "reverse-engineering": "if needed",
+        "practices-discovery": "not in scope",
+        "requirements-analysis": "in progress",
+        "user-stories": "not in scope",
+        "refined-mockups": "not in scope",
+        "domain-design": "not in scope",
+        "units-generation": "not in scope",
+        "contract-design": "not in scope",
+        "delivery-planning": "not in scope",
+        "functional-design": "not in scope",
+        "nfr-requirements": "not in scope",
+        "nfr-design": "not in scope",
+        "infrastructure-design": "not in scope",
+        "code-generation": "not started",
+        "build-and-test": "not started",
+        "ci-pipeline": "not in scope",
+        "deployment-pipeline": "not in scope",
+        "environment-provisioning": "not in scope",
+        "deployment-execution": "not in scope",
+        "observability-setup": "not in scope",
+        "incident-response": "not in scope",
+        "performance-validation": "not in scope",
+        "feedback-optimization": "not in scope"
+      },
+      "refusals": 13,
+      "refusalsLive": 0,
+      "approvalGates": 1,
+      "waitingOnYou": [
+        "requirements-analysis"
+      ],
+      "sensorFailureTotal": 9,
+      "sensorsByStage": {
+        "intent-capture": 9
+      },
+      "contrastRows": 0,
+      "contrast": {}
+    }
+  }
+}

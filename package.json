@@ -1,8 +1,8 @@
 {
   "name": "aidlc-viewer",
   "displayName": "AIDLC-VIEWER",
-  "description": "Watch AIDLC workflow folders, track stage files, and edit Markdown in a custom viewer.",
-  "version": "0.0.1",
+  "description": "Companion tool for AWS AI-DLC. Sets the workflow up in one click, and shows where it has got to.",
+  "version": "0.0.21",
   "publisher": "jikjeong",
   "license": "MIT",
   "repository": {
@@ -23,14 +23,19 @@
   "keywords": [
     "aidlc",
     "ai-dlc",
+    "aws",
     "workflow",
+    "agent",
     "markdown",
     "viewer",
-    "sdlc"
+    "sdlc",
+    "kiro"
   ],
   "activationEvents": [
     "onStartupFinished",
     "onCommand:markdownWatchViewer.selectFolder",
+    "onCommand:markdownWatchViewer.showHelp",
+    "onCommand:markdownWatchViewer.setupRules",
     "onView:markdownWatchViewer.tree"
   ],
   "main": "./src/extension.js",
@@ -38,24 +43,51 @@
     "commands": [
       {
         "command": "markdownWatchViewer.selectFolder",
-        "title": "AIDLC-VIEWER: Select Folder",
-        "shortTitle": "Open"
+        "title": "AIDLC-VIEWER: Open Workspace",
+        "shortTitle": "Workspace",
+        "icon": "$(folder-opened)"
       },
       {
         "command": "markdownWatchViewer.refresh",
         "title": "AIDLC-VIEWER: Refresh",
-        "shortTitle": "Refresh"
+        "shortTitle": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "markdownWatchViewer.showHelp",
+        "title": "AIDLC-VIEWER: Help / Guide",
+        "shortTitle": "Help",
+        "icon": "$(question)"
+      },
+      {
+        "command": "markdownWatchViewer.setupRules",
+        "title": "AIDLC-VIEWER: Set up AI-DLC Rules",
+        "shortTitle": "Setup Rules",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "markdownWatchViewer.checkV2",
+        "title": "AIDLC-VIEWER: Check AI-DLC v2 setup"
+      },
+      {
+        "command": "markdownWatchViewer.removeV2",
+        "title": "AIDLC-VIEWER: Remove AI-DLC v2"
       },
       {
         "command": "markdownWatchViewer.openFile",
         "title": "AIDLC-VIEWER: Open File"
+      },
+      {
+        "command": "markdownWatchViewer.openInTextEditor",
+        "title": "Open in Text Editor",
+        "icon": "$(go-to-file)"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "markdownWatchViewer",
-          "title": "AIDLC",
+          "title": "AI-DLC Viewer",
           "icon": "media/activity-icon.svg"
         }
       ]
@@ -63,11 +95,30 @@
     "views": {
       "markdownWatchViewer": [
         {
+          "id": "markdownWatchViewer.supervision",
+          "name": "SUPERVISION",
+          "type": "webview",
+          "when": "aidlcViewer.v2Detected"
+        },
+        {
           "id": "markdownWatchViewer.tree",
           "name": "VIEWER"
         }
       ]
     },
+    "configurationDefaults": {
+      "[markdownWatchViewer.tree]": {
+        "workbench.tree.indent": 20
+      },
+      "workbench.tree.indent": 20,
+      "workbench.tree.renderIndentGuides": "always"
+    },
+    "viewsWelcome": [
+      {
+        "view": "markdownWatchViewer.tree",
+        "contents": "No AI-DLC folder is being watched yet.\n\n[Select AI-DLC Folder](command:markdownWatchViewer.selectFolder)\n\nAI-DLC generates artifacts under `inception/`, `construction/`, and `operations/`. Pick the root folder where these are (or will be) created.\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)"
+      }
+    ],
     "menus": {
       "view/title": [
         {
@@ -79,6 +130,16 @@
           "command": "markdownWatchViewer.refresh",
           "when": "view == markdownWatchViewer.tree",
           "group": "navigation@2"
+        },
+        {
+          "command": "markdownWatchViewer.setupRules",
+          "when": "view == markdownWatchViewer.tree",
+          "group": "navigation@3"
+        },
+        {
+          "command": "markdownWatchViewer.showHelp",
+          "when": "view == markdownWatchViewer.tree",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -86,11 +147,31 @@
           "command": "markdownWatchViewer.openFile",
           "when": "view == markdownWatchViewer.tree && viewItem == markdownFile",
           "group": "inline"
+        },
+        {
+          "command": "markdownWatchViewer.openInTextEditor",
+          "when": "view == markdownWatchViewer.tree && viewItem == markdownFile",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "markdownWatchViewer.checkV2"
+        },
+        {
+          "command": "markdownWatchViewer.removeV2",
+          "when": "aidlcViewer.v2Detected"
         }
       ]
     }
   },
   "scripts": {
-    "package": "vsce package"
+    "check": "node --check src/extension.js",
+    "test": "node --test \"tests/*.test.js\"",
+    "verify": "npm run check && npm test",
+    "probe": "node tools/aidlc-probe.js",
+    "package": "vsce package",
+    "regress": "node tools/aidlc-regress.js",
+    "regress:update": "node tools/aidlc-regress.js --update"
   }
 }
