@@ -10,14 +10,18 @@ AI-DLC has your agent work through a lifecycle, producing Markdown artifacts as 
 
 **It shows you where the workflow actually is.** The furthest stage reached, which file needs you next, and each artifact opened in a readable split view, so you are not digging through folders to find out what your agent has been doing.
 
-Works in **Kiro** and in VS Code and its forks.
+Works in **Kiro** and in VS Code and its forks. AI-DLC v2's engine ships agent definitions for Kiro only, so v2 setup targets Kiro IDE or Kiro CLI; v1 works with Kiro, Claude Code and your editor's own convention.
 
 ## Getting started
 
 1. Install the extension and click the **AIDLC** icon in the activity bar.
-2. Press **Set up AI-DLC Rules** and pick a generation. AI-DLC comes in two: v1 is rule files your agent reads, v2 is an engine that drives the workflow itself. If your project already has AI-DLC, the extension detects which one and you can skip this step.
-3. Select the project folder to watch.
-4. Start your agent and say *"Using AI-DLC, ..."*. New artifacts appear as they are created.
+2. **Choose the project folder** to watch. Everything below acts on that folder, so this comes first.
+3. Press **Set up AI-DLC Rules** and pick a generation. AI-DLC comes in two: v1 is rule files your agent reads, v2 is an engine that drives the workflow itself. If your project already has AI-DLC, the extension detects which one and you can skip this step.
+4. Start the workflow. **On v1**, tell your agent *"Using AI-DLC, build ..."*. **On v2**, type `/aidlc` — it installs a conductor agent plus a set of role agents, so `/aidlc` starts or resumes a workflow and `/aidlc-mvp` and the rest are there when you want a specific one.
+
+New artifacts appear in the tree as they are created.
+
+Two things to know about v2 before you start. It needs [bun](https://bun.com/docs/installation), and setup will stop and hand you the install command rather than leave you a project whose gates never fire. And Kiro reads `/aidlc` from the **workspace root**, so if you installed into a folder that is not the root of your window, open that folder and `/aidlc` will be there. **AI-DLC v2: Check setup** in the Command Palette tells you which of these is missing.
 
 Setup does not overwrite anything. Existing files are detected and left alone.
 
@@ -30,7 +34,6 @@ The top of the tree names the furthest stage reached and how many stages are don
 **There is no percentage, on purpose.** AI-DLC adapts to the work: most stages are conditional, and Construction repeats once per unit of work with a unit count that does not exist until units have been generated. Any denominator would be guesswork, so reached stages are counted instead, and stages that repeat show their own progress like `2/3`.
 
 A stage the workflow moved past without producing anything is shown as skipped rather than left blank, and one your scope never included says so. Both are normal.
-
 ### Which file needs you
 
 New artifacts are marked `NEW` until you open them, then `READ`, with counts rolled up to their folders. Folders containing new files open themselves, so you are not hunting for what just appeared. Changes are picked up whether they came from your agent, from git, or from anything else.
@@ -68,7 +71,6 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 **v1 is installed from a snapshot inside the extension. v2 is downloaded** from the `v2` branch of [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows), and the commit it resolved to is recorded in the project so you can always tell which engine you have.
 
 **Nothing is read out of your Markdown.** Progress comes from the project's structure, so an artifact in an unexpected format cannot put your position wrong, and anything the extension does not recognise is reported rather than guessed at.
-
 ## What's New
 
 ### 0.0.21
