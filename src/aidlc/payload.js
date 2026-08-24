@@ -8,10 +8,14 @@
 // only that subtree is extracted (~0.24s). The alternative -- a request per file
 // through the contents API -- would be 293 round trips against a rate limit.
 //
-// The commit is pinned by the caller and never resolved from a branch name. v2 is
-// GA but still moving, so a floating ref would mean two users installing on
-// different days get engines that behave differently while both believe they
-// installed "v2".
+// The commit is resolved from a branch at install time, and reported.
+//
+// This tracks upstream rather than pinning, so a person installing today gets the
+// engine as it is today. The cost is real and is the reason this is not silent:
+// two people installing on different days can get engines that behave
+// differently. So the sha the archive actually carried is read back out of it and
+// written into the install receipt, which means a project can always answer which
+// engine it has even though nothing chose that engine in advance.
 //
 // Two things this deliberately does NOT do. It does not bundle the payload into
 // the extension, because a snapshot of an actively changing engine goes stale
@@ -34,29 +38,119 @@ const { execFile } = require('child_process');
 const REPO = 'awslabs/aidlc-workflows';
 const PAYLOAD_PREFIX = 'dist';
 
-// The commit this build installs.
+// The branch this build installs from.
 //
-// Pinned in source rather than resolved from the v2 branch at install time. v2 is
-// GA but still moving, and a floating ref would mean two people installing on
-// different days get engines that behave differently while both believe they
-// installed "v2" -- and neither could be told which one they have.
-//
-// This is the head of the v2 branch at the time this support was written and
-// verified: every observation the v2 reader relies on (the stage graph's fields,
-// the audit event shapes, bolt_dag, the per-unit recording differences between
-// inline and subagent stages) was made against a project installed from exactly
-// this commit. Moving it means re-verifying those, so it is a deliberate edit
-// paired with a run of the probe against a fresh sample, not a routine bump.
-const PINNED_COMMIT = '4d0968fc';
+// v2 is where upstream ships the engine. Following the branch means an install
+// gets the current engine rather than the one that was current when this support
+// was written, which is what was asked for and is right for a workflow still
+// moving. The trade is that the reader modules in this directory were verified
+// against an earlier head, so a change upstream can produce a field or an event
+// this build has not seen. That is survivable by construction rather than by luck:
+// nothing here enumerates stage slugs, phase names, sensor ids or event names, and
+// anything unrecognised is reported under "Not understood by this extension"
+// instead of being guessed at or throwing.
+const UPSTREAM_REF = 'v2';
+
+// A ref goes into a URL and into an archive path, so it is constrained to what a
+// git ref can legitimately be. This keeps a path traversal, a flag-looking string
+// and a shell fragment out of both.
+const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/;
 
 // Only harnesses this extension has actually verified against a real run. A name
 // not on this list is refused rather than attempted, because a wrong path yields
 // an empty extraction that would look like a successful install of nothing.
 const HARNESSES = { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro-cli' };
 
-// A commit has to look like one. Rejecting anything else keeps a branch name, a
-// tag, or a shell fragment out of a URL and out of an archive path.
+// A commit has to look like one. Used to check the sha read back out of the
+// archive, and to accept an explicit commit from a caller that wants a fixed one.
 const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/;
+
+// Which commit a ref points at right now.
+//
+// Needed because GitHub does NOT put the sha in the archive when the download is
+// by branch name: asking for `v2` yields a root directory named
+// `aidlc-workflows-2`, so the archive cannot say which engine it is. Asking the API
+// first, then downloading that exact sha, makes the install accountable and also
+// removes the window where upstream could push between learning the sha and
+// fetching the code.
+//
+// `Accept: application/vnd.github.sha` returns the sha as plain text rather than a
+// commit object, so there is no JSON to parse and nothing large to buffer.
+//
+// Every failure resolves to undefined rather than throwing. This request is a
+// nicety: unauthenticated API calls are rate limited, a proxy may allow codeload
+// while blocking api.github.com, and none of that is a reason to refuse an
+// install. The caller falls back to downloading the ref directly.
+function resolveRefCommit(ref) {
+  const url = `https://api.github.com/repos/${REPO}/commits/${ref}`;
+  return new Promise((resolve) => {
+    const request = https.get(
+      url,
+      {
+        timeout: REQUEST_TIMEOUT_MS,
+        headers: {
+          Accept: 'application/vnd.github.sha',
+          // GitHub rejects API requests without one.
+          'User-Agent': 'aidlc-viewer'
+        }
+      },
+      (response) => {
+        if (response.statusCode !== 200) {
+          response.resume();
+          resolve(undefined);
+          return;
+        }
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          body += chunk;
+          // A sha is 40 characters. Anything longer is not the answer, and is not
+          // worth accumulating.
+          if (body.length > 200) {
+            response.destroy();
+            resolve(undefined);
+          }
+        });
+        response.on('end', () => {
+          const sha = body.trim().toLowerCase();
+          resolve(COMMIT_PATTERN.test(sha) ? sha : undefined);
+        });
+      }
+    );
+    request.on('timeout', () => {
+      request.destroy();
+      resolve(undefined);
+    });
+    request.on('error', () => resolve(undefined));
+  });
+}
+
+// Which commit the archive carried, when it can say.
+//
+// GitHub names the top-level directory `<repo>-<sha>` for a download by sha, so
+// this confirms what arrived without a second network call. For a download by
+// branch the directory is named after the ref instead, and this returns undefined.
+function resolveArchiveCommit(archivePath) {
+  return new Promise((resolve) => {
+    execFile(
+      'tar',
+      ['-tzf', archivePath],
+      { timeout: EXTRACT_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 },
+      (error, stdout) => {
+        if (error) {
+          resolve(undefined);
+          return;
+        }
+        const first = String(stdout).split('\n', 1)[0] ?? '';
+        const root = first.split('/', 1)[0] ?? '';
+        // Take the trailing segment rather than assuming the repository name, so a
+        // rename upstream does not break this.
+        const sha = root.slice(root.lastIndexOf('-') + 1).toLowerCase();
+        resolve(COMMIT_PATTERN.test(sha) ? sha : undefined);
+      }
+    );
+  });
+}
 
 // Ceilings, so a redirect loop or an unexpectedly huge archive fails with a
 // reason instead of filling the disk or hanging a session.
@@ -196,19 +290,42 @@ function topLevelEntries(dir) {
 // planInstall consumes. An extraction that produced nothing is reported as such
 // rather than passed on: a plan built from an empty listing would install nothing
 // and call it done.
-async function fetchPayload({ commit, harness, workDir }) {
-  // Defaults to the pinned commit, so a caller that does not care gets the one
-  // this build was verified against rather than whatever is current.
-  const target = commit ?? PINNED_COMMIT;
+//
+// `ref` selects what to download and defaults to the v2 branch, so a caller that
+// does not care gets the current engine. `commit` still works and takes
+// precedence, which keeps a reproducible install available for a bug report or a
+// bisect without a second code path.
+async function fetchPayload({ ref, commit, harness, workDir }) {
   if (!HARNESSES[harness]) {
     return { ok: false, reason: 'unknown-harness', text: `No payload path known for "${harness}".` };
   }
-  if (typeof target !== 'string' || !COMMIT_PATTERN.test(target)) {
-    return {
-      ok: false,
-      reason: 'bad-commit',
-      text: 'A full or short commit sha is required; a branch or tag would float.'
-    };
+
+  let target;
+  let requestedRef;
+  let pinned = false;
+  if (commit !== undefined) {
+    if (typeof commit !== 'string' || !COMMIT_PATTERN.test(commit)) {
+      return {
+        ok: false,
+        reason: 'bad-commit',
+        text: 'A full or short commit sha is required when a commit is given.'
+      };
+    }
+    target = commit;
+    pinned = true;
+  } else {
+    requestedRef = ref ?? UPSTREAM_REF;
+    if (typeof requestedRef !== 'string' || !REF_PATTERN.test(requestedRef)) {
+      return {
+        ok: false,
+        reason: 'bad-ref',
+        text: 'A branch or tag name is required, and this one is not usable in a URL.'
+      };
+    }
+    // Resolve the ref to a sha and download that, so the install can name the
+    // engine it got. When resolution is unavailable the ref is downloaded directly
+    // rather than the install being refused.
+    target = (await resolveRefCommit(requestedRef)) ?? requestedRef;
   }
 
   const base = workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-payload-'));
@@ -232,13 +349,26 @@ async function fetchPayload({ commit, harness, workDir }) {
     };
   }
 
+  // Prefer what the archive itself says, then what was downloaded, so the recorded
+  // commit is a fact about the bytes on disk rather than about the request.
+  const resolved =
+    (COMMIT_PATTERN.test(target) ? target : undefined) ??
+    (await resolveArchiveCommit(archive)) ??
+    target;
+
   return {
     ok: true,
     workDir: base,
     payloadDir: out,
     entries,
     bytes: downloaded.bytes,
-    commit: target,
+    ref: requestedRef,
+    commit: resolved,
+    // True when the commit was chosen by the caller rather than followed from a
+    // ref. Also true in effect when a ref resolved, but this reports intent.
+    pinned,
+    // The install has a sha to record, rather than only a branch name.
+    identified: COMMIT_PATTERN.test(resolved),
     harness
   };
 }
@@ -246,13 +376,16 @@ async function fetchPayload({ commit, harness, workDir }) {
 module.exports = {
   REPO,
   PAYLOAD_PREFIX,
-  PINNED_COMMIT,
+  UPSTREAM_REF,
   HARNESSES,
   COMMIT_PATTERN,
+  REF_PATTERN,
   MAX_BYTES,
   tarballUrl,
   download,
   extract,
+  resolveRefCommit,
+  resolveArchiveCommit,
   topLevelEntries,
   fetchPayload
 };

@@ -504,11 +504,67 @@ test('the tarball url is built from the pinned commit', () => {
   );
 });
 
-test('the pinned commit is a sha, and it is what a caller gets by default', () => {
-  // Pinned in source so two people installing on different days get the same
-  // engine. Every observation the v2 reader relies on was made against a project
-  // installed from this commit, so a change here is a deliberate edit paired with
-  // re-verification, not a routine bump.
-  assert.ok(payload.COMMIT_PATTERN.test(payload.PINNED_COMMIT));
-  assert.equal(payload.PINNED_COMMIT, '4d0968fc');
+test('the default is a branch, and it is followed rather than pinned', () => {
+  // Changed deliberately from a pinned commit: an install should get the engine as
+  // it is now. What makes that accountable is that the resolved sha is recorded, so
+  // the tests below are about identification rather than about the ref's value.
+  assert.equal(payload.UPSTREAM_REF, 'v2');
+  assert.ok(payload.REF_PATTERN.test(payload.UPSTREAM_REF));
+  // A ref is not a sha, so the sha check must reject it. Otherwise a branch name
+  // could pass as an identified commit.
+  assert.equal(payload.COMMIT_PATTERN.test(payload.UPSTREAM_REF), false);
+});
+
+test('a ref that could escape a URL or a path is refused', async () => {
+  // The ref reaches a URL and an archive path, so anything that is not a plausible
+  // git ref is rejected before either.
+  for (const ref of [
+    '../etc/passwd',
+    '-oProxyCommand=x',
+    'v2 && rm -rf .',
+    'v2;whoami',
+    'v2?x=1',
+    '',
+    'x'.repeat(200),
+    'v2\nother'
+  ]) {
+    const result = await payload.fetchPayload({ ref, harness: 'kiro-ide' });
+    assert.equal(result.ok, false, `accepted a bad ref: ${JSON.stringify(ref)}`);
+    assert.equal(result.reason, 'bad-ref', JSON.stringify(ref));
+  }
+});
+
+test('an explicit commit still works, and still has to be a sha', async () => {
+  // Kept so a bug report or a bisect can reproduce an exact engine without a
+  // second code path through this module.
+  for (const commit of ['v2', 'main', 'HEAD', 'zzzzzzz', '', '12345']) {
+    const result = await payload.fetchPayload({ commit, harness: 'kiro-ide' });
+    assert.equal(result.ok, false, `accepted a bad commit: ${JSON.stringify(commit)}`);
+    assert.equal(result.reason, 'bad-commit');
+  }
+});
+
+test('a harness that was never verified is refused before any request', async () => {
+  for (const harness of ['claude-code', '', undefined, '../..', 'kiro']) {
+    const result = await payload.fetchPayload({ harness });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'unknown-harness');
+  }
+});
+
+test('resolving a ref to a sha never throws, whatever it is handed', async () => {
+  // This request is a nicety: the API is rate limited and a proxy may block it
+  // while allowing codeload. Failing it must not refuse an install, so it resolves
+  // to undefined rather than rejecting.
+  for (const ref of ['definitely-not-a-ref-' + Date.now(), 'v2']) {
+    const sha = await payload.resolveRefCommit(ref);
+    assert.ok(sha === undefined || payload.COMMIT_PATTERN.test(sha), `bad sha for ${ref}`);
+  }
+});
+
+test('reading a commit out of a non-archive returns nothing rather than throwing', async () => {
+  const junk = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'notar-')), 'x.tar.gz');
+  fs.writeFileSync(junk, 'not a tarball');
+  assert.equal(await payload.resolveArchiveCommit(junk), undefined);
+  assert.equal(await payload.resolveArchiveCommit('/nonexistent/path.tar.gz'), undefined);
 });

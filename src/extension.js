@@ -3084,7 +3084,7 @@ function getHelpHtml() {
 <h2>Getting Started</h2>
 <ol>
   <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root.</li>
-  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 is downloaded from the upstream repository at a pinned commit and needs <a href="https://bun.com/docs/installation">bun</a> — if bun is missing, setup stops and hands you the install command rather than leaving you a project whose gates never fire.</li>
+  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 is downloaded from the current head of the upstream repository's v2 branch, with the commit it resolved to written into the install receipt so the project can say which engine it has. It needs <a href="https://bun.com/docs/installation">bun</a> — if bun is missing, setup stops and hands you the install command rather than leaving you a project whose gates never fire.</li>
   <li>Start your agent and say <code>"Using AI-DLC, ..."</code> — new artifacts appear in the tree automatically as they are generated.</li>
 </ol>
 
@@ -3142,7 +3142,7 @@ function getHelpHtml() {
   <tr><th>Button</th><th>Action</th></tr>
   <tr><td>📂 Open Workspace</td><td>Select the AI-DLC root folder to watch</td></tr>
   <tr><td>🔄 Refresh</td><td>Re-scan the folder and rebuild the tree</td></tr>
-  <tr><td>☁️ Set up AI-DLC</td><td>Asks which generation, then installs it. v1 from the bundled snapshot; v2 from upstream at a pinned commit</td></tr>
+  <tr><td>☁️ Set up AI-DLC</td><td>Asks which generation, then installs it. v1 from the bundled snapshot; v2 from upstream's current head, recording the commit</td></tr>
   <tr><td>❓ Help / Guide</td><td>Open this guide</td></tr>
 </table>
 <p>Two more commands are in the Command Palette for v2 projects: <strong>AI-DLC v2: Check setup</strong> reports what is present and what is missing, and <strong>AI-DLC v2: Remove</strong> takes back only what the installer wrote — it refuses without an install receipt, and never touches the workflow's own <code>aidlc/</code> content.</p>
@@ -3163,7 +3163,7 @@ function getHelpHtml() {
 <h2>시작하기</h2>
 <ol>
   <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트를 선택합니다.</li>
-  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 고정된 커밋의 업스트림 저장소에서 내려받으며 <a href="https://bun.com/docs/installation">bun</a>이 필요합니다. bun이 없으면 설치를 진행하지 않고 설치 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
+  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 업스트림 v2 브랜치의 최신 커밋을 내려받고 받은 커밋을 설치 영수증에 기록하므로 프로젝트가 어느 엔진을 쓰는지 항상 말할 수 있습니다. 그리고 <a href="https://bun.com/docs/installation">bun</a>이 필요합니다. bun이 없으면 설치를 진행하지 않고 설치 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
   <li>에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말하면 — 생성되는 산출물이 트리에 자동으로 나타납니다.</li>
 </ol>
 
@@ -3221,7 +3221,7 @@ function getHelpHtml() {
   <tr><th>버튼</th><th>동작</th></tr>
   <tr><td>📂 Open Workspace</td><td>감시할 AI-DLC 루트 폴더 선택</td></tr>
   <tr><td>🔄 Refresh</td><td>폴더 재스캔 및 트리 갱신</td></tr>
-  <tr><td>☁️ Set up AI-DLC</td><td>어느 세대인지 묻고 설치합니다. v1은 번들 스냅샷에서, v2는 고정 커밋의 업스트림에서</td></tr>
+  <tr><td>☁️ Set up AI-DLC</td><td>어느 세대인지 묻고 설치합니다. v1은 번들 스냅샷에서, v2는 업스트림 최신 커밋에서 받고 그 커밋을 기록</td></tr>
   <tr><td>❓ Help / Guide</td><td>이 가이드 열기</td></tr>
 </table>
 <p>v2 프로젝트에서는 명령 팔레트에 두 가지가 더 있습니다. <strong>AI-DLC v2: Check setup</strong>은 무엇이 있고 무엇이 없는지 알려주고, <strong>AI-DLC v2: Remove</strong>는 설치 프로그램이 쓴 것만 되돌립니다. 설치 영수증이 없으면 거부하며, 워크플로우가 만든 <code>aidlc/</code> 내용은 절대 지우지 않습니다.</p>

@@ -207,12 +207,30 @@ into the extension because a snapshot of an actively moving engine goes stale
 between releases, and no dependency is added because the `tar` shipped with macOS,
 Linux and Windows 10 1803+ does the extraction.
 
-**The commit is pinned in source.** Every observation this document records was
-made against a project installed from exactly that commit. Resolving the `v2`
-branch at install time would mean two people installing on different days get
-engines that behave differently while both believe they installed "v2", and neither
-could say which they have. Moving the pin is a deliberate edit paired with running
-the probe against a fresh sample.
+**The branch is followed, and the commit is recorded.** An install resolves `v2` to
+a sha through the GitHub API, downloads that sha, and writes it into the receipt.
+Following the branch is what was asked for and is right for a workflow still
+moving, but it costs something real: two people installing on different days can
+get engines that behave differently. Recording the resolved sha is what keeps that
+answerable, because a project can always say which engine it has even though
+nothing chose that engine in advance.
+
+The resolution is a nicety, not a gate. Unauthenticated API calls are rate limited
+and a proxy may allow codeload while blocking `api.github.com`, so a failure falls
+back to downloading the ref directly and recording the ref in place of a sha. An
+install is never refused over a missing label.
+
+Note the asymmetry that made this necessary: GitHub puts the sha in the archive's
+top-level directory only for a download by sha. Asking for the branch by name
+yields a root called `aidlc-workflows-2`, which cannot say which engine it is.
+
+What this costs the reader modules is the reason none of them enumerate. Every
+observation in this document was made against `4d0968fc`, and upstream has moved
+since (281 payload files where there were 284). A field, a stage or an event that
+did not exist then is reported under "Not understood by this extension" rather than
+guessed at or thrown on. That property is what makes following a branch safe here,
+and it is worth re-running the probe against a fresh sample after any upstream
+change that matters.
 
 **The harness is chosen once.** Kiro IDE and Kiro CLI ship mutually exclusive agent
 definitions: fourteen files differ, and upstream marks running both as

@@ -28,7 +28,7 @@ const path = require('path');
 const { readInstallState, previewInstall, RECEIPT_PATH } = require('./aidlc/install-state');
 const { planInstall, planRemoval } = require('./aidlc/install-plan');
 const { applyPlan, applyRemoval } = require('./aidlc/install-apply');
-const { fetchPayload, PINNED_COMMIT, HARNESSES } = require('./aidlc/payload');
+const { fetchPayload, UPSTREAM_REF, REPO, HARNESSES } = require('./aidlc/payload');
 const { detectBun } = require('./aidlc/bun-check');
 
 const HARNESS_LABELS = {
@@ -119,7 +119,7 @@ async function chooseGeneration(state) {
         description: 'current',
         detail:
           'Engine-driven: 33 stages, enforced gates, an audit ledger. Downloaded ' +
-          'from upstream at a pinned commit. Needs bun.'
+          'from upstream at its current head. Needs bun.'
       }
     ],
     {
@@ -160,12 +160,13 @@ async function confirmInstall(state, harness, reinstalling) {
   );
   lines.push('');
   lines.push(`Harness: ${HARNESS_LABELS[harness] ?? harness}`);
-  lines.push(`Upstream commit: ${PINNED_COMMIT}`);
+  lines.push(`Upstream: ${REPO} @ ${UPSTREAM_REF} (current head)`);
   lines.push('');
   lines.push(
-    'The engine is downloaded from the awslabs/aidlc-workflows repository at that ' +
-      'exact commit. It is pinned rather than tracking the branch, so this install ' +
-      'matches what the extension was verified against.'
+    'The engine is downloaded from the head of that branch, so this install gets ' +
+      'the engine as it is now rather than a version fixed when the extension was ' +
+      'built. The commit it resolves to is recorded in the install receipt, so the ' +
+      'project can always say which engine it has.'
   );
 
   const goLabel = reinstalling ? 'Reinstall' : 'Install';
@@ -227,8 +228,8 @@ async function installV2(root, state) {
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: 'AI-DLC v2', cancellable: false },
     async (progress) => {
-      progress.report({ message: `downloading upstream ${PINNED_COMMIT}…` });
-      const fetched = await fetchPayload({ commit: PINNED_COMMIT, harness });
+      progress.report({ message: `downloading upstream ${REPO}@${UPSTREAM_REF}…` });
+      const fetched = await fetchPayload({ harness });
       if (!fetched.ok) {
         vscode.window.showErrorMessage(
           `Could not fetch the AI-DLC v2 payload: ${fetched.text ?? fetched.reason}`
@@ -258,9 +259,14 @@ async function installV2(root, state) {
       // Notes the planner produced are worth surfacing after the fact too: the
       // most important one says the project's accumulated rules were left alone.
       const warned = planned.notes.filter((note) => note.level === 'warn');
+      // The full sha is in the receipt; the message shows enough to recognise it.
+      // Falls back to whatever was recorded when a ref was used instead of a sha.
+      const shortCommit = /^[0-9a-f]{7,40}$/.test(fetched.commit)
+        ? fetched.commit.slice(0, 8)
+        : fetched.commit;
       const summary =
         `AI-DLC v2 installed for ${HARNESS_LABELS[harness] ?? harness} ` +
-        `(${result.written.length} files, upstream ${fetched.commit}).`;
+        `(${result.written.length} files, upstream ${shortCommit}).`;
 
       // The step that is easy to miss and blocks everything after it. Kiro reads
       // its agent definitions from the WORKSPACE ROOT's .kiro/agents/, and this
