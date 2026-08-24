@@ -3143,7 +3143,7 @@ function getHelpHtml() {
 <ol>
   <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root.</li>
   <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 is downloaded from the current head of the upstream repository's v2 branch, with the commit it resolved to written into the install receipt so the project can say which engine it has. It needs <a href="https://bun.com/docs/installation">bun</a> — if bun is missing, setup stops and hands you the install command rather than leaving you a project whose gates never fire.</li>
-  <li>Start your agent and say <code>"Using AI-DLC, ..."</code> — new artifacts appear in the tree automatically as they are generated.</li>
+  <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Either way, new artifacts appear in the tree as they are generated.</li>
 </ol>
 
 <h2>Key Features</h2>
@@ -3222,7 +3222,7 @@ function getHelpHtml() {
 <ol>
   <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트를 선택합니다.</li>
   <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 업스트림 v2 브랜치의 최신 커밋을 내려받고 받은 커밋을 설치 영수증에 기록하므로 프로젝트가 어느 엔진을 쓰는지 항상 말할 수 있습니다. 그리고 <a href="https://bun.com/docs/installation">bun</a>이 필요합니다. bun이 없으면 설치를 진행하지 않고 설치 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
-  <li>에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말하면 — 생성되는 산출물이 트리에 자동으로 나타납니다.</li>
+  <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다.</li>
 </ol>
 
 <h2>주요 기능</h2>
@@ -3517,7 +3517,7 @@ async function ensureAidlcRules(folderUri, extensionUri, options = {}) {
   }
 
   vscode.window.showInformationMessage(
-    `AI-DLC rules installed for: ${done.join(', ')}. Start your agent and say "Using AI-DLC, ...".`
+    `AI-DLC v1 rules installed for: ${done.join(', ')}. Start your agent and say "Using AI-DLC, ...".`
   );
 }
 
