@@ -2500,9 +2500,14 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
 
       function tooltipFor(cp, index) {
-        // Out of scope shares the skipped status but not its meaning, so the
-        // tooltip says which one this is.
-        const state = cp.outOfScope ? 'not in scope' : (STATE_LABEL[cp.status] || cp.status);
+        // Three reasons a stage has not happened, and the status alone tells them
+        // apart for only one of them. EXECUTE in the scope grid means eligible
+        // rather than certain, so a conditional stage in scope may still not run.
+        const state = cp.outOfScope
+          ? 'not in scope'
+          : cp.status === 'pending' && cp.mayNotRun
+            ? 'runs only if needed'
+            : (STATE_LABEL[cp.status] || cp.status);
         const bits = [(index + 1) + '. ' + cp.label, state];
         bits.push(PHASE_LABEL[cp.phase] || cp.phase);
         if (cp.unitProgress && cp.unitProgress.total > 0) {
@@ -2602,18 +2607,27 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
 
             // A tag only where the state is not obvious from the mark alone.
             //
-            // "skipped" and "not in scope" share a status so they share the
-            // hatching, but they are not the same claim. Skipped means the run
-            // moved past this stage, so the position is beyond it. Not in scope
-            // means the scope declared it would never run, which is known before
-            // anything starts -- and printing that as "skipped" made a project in
-            // its second phase look as though it had already passed over
-            // deployment.
+            // Three different reasons a stage has not happened, and they were
+            // collapsing into two words. Reported on a greenfield project where
+            // Reverse Engineering read "not started", which promises it will run:
+            //
+            //   not in scope   the scope never included it, so it will not run
+            //   if needed      the scope included it, but the stage declares
+            //                  itself conditional, so whether it runs depends on
+            //                  the project -- Reverse Engineering does not run
+            //                  with no existing code to read
+            //   not started    the scope included it and it always runs, so it is
+            //                  waiting its turn
+            //
+            // The engine states all three. EXECUTE in the scope grid means
+            // eligible, not certain, and the stage graph is what says which.
             let tag = '';
             if (entry.cp.placeholder && entry.cp.status !== 'done') tag = 'placeholder';
             else if (entry.cp.outOfScope) tag = 'not in scope';
             else if (entry.cp.status === 'skipped') tag = 'skipped';
-            else if (entry.cp.status === 'pending') tag = 'not started';
+            else if (entry.cp.status === 'pending') {
+              tag = entry.cp.mayNotRun ? 'if needed' : 'not started';
+            }
             else if (entry.cp.unitProgress && entry.cp.unitProgress.total > 1) {
               tag = entry.cp.unitProgress.done + '/' + entry.cp.unitProgress.total;
             }

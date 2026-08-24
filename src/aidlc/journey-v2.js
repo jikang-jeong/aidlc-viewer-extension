@@ -59,6 +59,16 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
       phase: stage.phase,
       // v2 states its own condition, so this is read rather than guessed.
       conditional: stage.execution ? stage.execution !== 'ALWAYS' : false,
+      // Whether this stage may yet decline to run, as a v2-only field.
+      //
+      // `conditional` cannot carry this to the renderers, because v1 sets it too --
+      // eight of v1's checkpoints are conditional, so keying a label off it would
+      // have relabelled v1's "not started" rows as "if needed". That is exactly the
+      // regression this project guards against, and it was caught by checking rather
+      // than assumed absent.
+      //
+      // Only ever true, and only in v2, so a renderer reading it cannot reach v1.
+      mayNotRun: stage.execution && stage.execution !== 'ALWAYS' ? true : undefined,
       // v1 needed a placeholder concept for a phase its rules never reach. v2
       // expresses the same thing through scope, so nothing is a placeholder.
       placeholder: false,

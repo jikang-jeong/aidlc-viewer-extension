@@ -685,6 +685,9 @@ test('v1 checkpoints never carry the out-of-scope mark', () => {
       const journey = v1.buildJourney({ artifacts, rulesInstalled });
       for (const cp of journey.checkpoints) {
         assert.ok(!('outOfScope' in cp), `a v1 checkpoint carries outOfScope: ${cp.id}`);
+        // v1 does set `conditional`, which is why the renderers key off this field
+        // instead. If v1 ever set it, v1's labels would change.
+        assert.ok(!('mayNotRun' in cp), `a v1 checkpoint carries mayNotRun: ${cp.id}`);
       }
     }
   }
@@ -702,4 +705,72 @@ test('an out-of-scope stage reads the same whatever phase it sits in', () => {
     assert.equal(cp.status, V2_STATUS.SKIPPED);
     assert.equal(cp.outOfScope, true);
   }
+});
+
+test('a conditional stage in scope is not promised, because EXECUTE means eligible', () => {
+  // Reported on a greenfield project: Reverse Engineering read "not started", which
+  // promises it will run. The scope grid did say EXECUTE for it, so the extension was
+  // faithful to one input and blind to the other -- the stage graph declares that
+  // stage CONDITIONAL, and with no existing code to read it does not run.
+  //
+  // So there are three reasons a stage has not happened, not two: the scope excluded
+  // it, the scope allowed it but the stage decides against the project, or it is
+  // simply waiting its turn.
+  const stages = [
+    { slug: 'always', name: 'Always', phase: 'inception', inScope: true, execution: 'ALWAYS' },
+    { slug: 'maybe', name: 'Maybe', phase: 'inception', inScope: true, execution: 'CONDITIONAL' },
+    { slug: 'never', name: 'Never', phase: 'inception', inScope: false, execution: 'ALWAYS' }
+  ];
+  const journey = buildFromStages(stages, { units: { units: [] }, byStage: new Map() });
+  const [always, maybe, never] = journey.checkpoints;
+
+  // All three are pending or skipped; the status alone cannot tell them apart.
+  assert.equal(always.status, V2_STATUS.PENDING);
+  assert.equal(maybe.status, V2_STATUS.PENDING);
+  assert.equal(never.status, V2_STATUS.SKIPPED);
+
+  // The fields the renderers read to say which is which. `mayNotRun` rather than
+  // `conditional`, because v1 sets `conditional` too -- eight of its checkpoints are
+  // conditional, so a renderer keying off that field would have relabelled v1's
+  // "not started" rows. Caught by checking, not assumed.
+  assert.equal(always.mayNotRun, undefined);
+  assert.equal(maybe.mayNotRun, true);
+  assert.equal(never.outOfScope, true);
+  // The underlying fact stays on both, for anything that wants it.
+  assert.equal(always.conditional, false);
+  assert.equal(maybe.conditional, true);
+
+  // A conditional stage is still in the denominator: it may yet run.
+  assert.equal(journey.plannedTotal, 2);
+});
+
+test('a stage graph that states no execution rule promises nothing extra', () => {
+  // Absence must not become a claim. An unstated execution reads as unconditional
+  // only because that is the safer default for a count, and the field says so
+  // plainly rather than the renderer guessing.
+  const journey = buildFromStages(
+    [{ slug: 'x', name: 'X', phase: 'inception', inScope: true }],
+    undefined
+  );
+  assert.equal(journey.checkpoints[0].conditional, false);
+  assert.equal(journey.checkpoints[0].mayNotRun, undefined);
+  assert.equal(journey.checkpoints[0].status, V2_STATUS.PENDING);
+});
+
+test('a conditional stage that already ran is done, not conditional-looking', () => {
+  // Once there is a record the condition has been resolved, so the label must not
+  // keep hedging about a stage that has finished.
+  const stages = [
+    { slug: 'maybe', name: 'Maybe', phase: 'inception', inScope: true, execution: 'CONDITIONAL' }
+  ];
+  const runtime = {
+    units: { units: [] },
+    byStage: new Map([['maybe', { done: true, outcome: 'approved' }]])
+  };
+  const cp = buildFromStages(stages, runtime).checkpoints[0];
+  assert.equal(cp.status, V2_STATUS.DONE);
+  // Both flags stay true as facts about the stage, so renderers must key the hedging
+  // on the status as well as on the flag.
+  assert.equal(cp.conditional, true);
+  assert.equal(cp.mayNotRun, true);
 });

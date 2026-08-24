@@ -296,8 +296,14 @@ ${this.body()}
           node.forEach && node.unitsPlanned > 0 ? ` — ${node.unitsDone}/${node.unitsPlanned} units` : '';
         // A stage the scope never included reads as "not in scope" rather than as
         // "skipped": the latter claims the run went past it, which for a stage in a
-        // later phase is not true and made the rail look wrong.
-        const state = node.outOfScope ? 'not in scope' : node.status;
+        // later phase is not true and made the rail look wrong. A conditional stage
+        // that is in scope is not promised either -- the scope grid says eligible,
+        // and the stage decides against the project.
+        const state = node.outOfScope
+          ? 'not in scope'
+          : node.status === 'pending' && node.mayNotRun
+            ? 'runs only if needed'
+            : node.status;
         return `<span class="${classes.join(' ')}" title="${escapeHtml(
           `${number}. ${node.label} — ${state}${unitPart}`
         )}"></span>`;
