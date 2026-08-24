@@ -97,29 +97,47 @@ async function chooseGeneration(state) {
   const isV2 = state && (state.generation === 'v2' || state.generation === 'both');
   const isV1 = state && (state.generation === 'v1' || state.generation === 'both');
 
-  // v1 is listed first, deliberately. Three thousand people are on it, so it is
-  // the answer most people opening this list are looking for, and a list whose
-  // first row is the uncommon answer makes the common one feel like a fallback.
+  // v1 is listed first, deliberately. Three thousand people are on it, so it is the
+  // answer most people opening this list are looking for, and a list whose first row
+  // is the uncommon answer makes the common one read as a fallback. The first row is
+  // also what Enter picks.
   //
-  // Order carries no recommendation. Each row says what it is and the reader
-  // decides; nothing here nudges toward the newer one for being newer.
+  // Order carries no recommendation. Each row says what it is and the reader decides;
+  // nothing here nudges toward the newer one for being newer.
+  //
+  // What each generation is, not where its files come from.
+  //
+  // These lines used to lead with delivery -- a bundled snapshot versus an upstream
+  // download. That is the installer's concern, not the reader's. Someone choosing
+  // between two generations of a workflow needs to know how the workflow behaves,
+  // and the difference that matters is not a feature list: it is who reads the
+  // artifacts and what happens when nobody does.
+  //
+  // Deliberately no stage or phase counts. v2 declared 33 stages when this was
+  // written, and the install now follows the branch rather than a fixed commit, so
+  // a number here would eventually be a confident lie. Behaviour does not go stale.
+  //
+  // What survives from the old text is bun, because it is not plumbing: without it
+  // the v2 choice cannot be completed, and knowing that in advance saves the trip.
   const picked = await vscode.window.showQuickPick(
     [
       {
         key: 'v1',
         label: isV1 ? 'AI-DLC v1 — already present' : 'AI-DLC v1',
-        description: 'bundled',
+        description: 'you read and answer',
         detail:
-          'Rule files your agent reads. Copied from the snapshot inside this ' +
-          'extension, so it needs no network and no bun.'
+          'Rule files your agent works from. Each step waits for you to read the ' +
+          'artifacts and fill in the answers, so the workflow stops where you stop. ' +
+          'Works offline.'
       },
       {
         key: 'v2',
         label: isV2 ? 'AI-DLC v2 — reinstall' : 'AI-DLC v2',
-        description: 'current',
+        description: 'you review and approve',
         detail:
-          'Engine-driven: 33 stages, enforced gates, an audit ledger. Downloaded ' +
-          'from upstream at its current head. Needs bun.'
+          'An engine drives the workflow, enforces the gates and keeps an audit ' +
+          'ledger. The agent reads the artifacts and you approve a summary; the run ' +
+          'continues whether or not you read them yourself. Needs bun.'
       }
     ],
     {

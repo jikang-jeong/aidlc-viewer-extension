@@ -150,6 +150,58 @@ test('both generations explain themselves, and neither ranks the other', async (
   }
 });
 
+test('each generation is described by how it behaves, not by how it is delivered', async () => {
+  // The old text led with delivery: a bundled snapshot versus an upstream download.
+  // That is the installer's concern. Someone choosing between two generations of a
+  // workflow needs to know who reads the artifacts and what happens when nobody
+  // does.
+  const shown = await captureGenerationPrompt({ generation: 'none' });
+  const [v1, v2] = shown.items;
+
+  // The difference that matters, in the field read at a glance.
+  assert.match(v1.description, /read/i);
+  assert.match(v2.description, /approve/i);
+
+  // Each detail says what the human does, and what the workflow does without them.
+  assert.match(v1.detail, /waits for you|stops where you stop/i);
+  assert.match(v2.detail, /continues|either way|whether or not/i);
+
+  // Delivery mechanics must not lead. A passing mention is fine; describing a
+  // generation by its transport is not.
+  for (const item of shown.items) {
+    assert.doesNotMatch(
+      item.detail.split('.')[0],
+      /download|bundl|snapshot|upstream|network|repositor/i,
+      `the first sentence describes delivery, not behaviour: ${item.detail}`
+    );
+  }
+});
+
+test('no stage or phase count is quoted at the point of choosing', async () => {
+  // v2 declared 33 stages when this was written, and the install follows the branch
+  // rather than a fixed commit, so a number here is a claim about an engine that has
+  // not been downloaded yet. Behaviour does not go stale; counts do.
+  const shown = await captureGenerationPrompt({ generation: 'none' });
+  for (const item of shown.items) {
+    const text = `${item.label} ${item.description} ${item.detail}`;
+    assert.doesNotMatch(
+      text,
+      /\b\d+\s*(stages?|phases?|steps?|files?)\b/i,
+      `a count upstream can change: ${text}`
+    );
+  }
+});
+
+test('bun is named where it decides whether the choice can be completed', async () => {
+  // Not plumbing. Without bun the v2 install stops, so saying it here saves the
+  // round trip. v1 needs nothing, and says so.
+  const shown = await captureGenerationPrompt({ generation: 'none' });
+  const [v1, v2] = shown.items;
+  assert.match(v2.detail, /bun/i);
+  assert.doesNotMatch(v1.detail, /bun/i);
+  assert.match(v1.detail, /offline/i);
+});
+
 test('the question is asked, rather than left to be inferred', async () => {
   // Two buttons were tried instead of one that asks, and the report came back at
   // once: pressing "Set up AI-DLC" installed v1 because that is what it had always
