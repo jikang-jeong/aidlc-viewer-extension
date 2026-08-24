@@ -304,7 +304,87 @@ test('v1 files are reported as left alone, never as something to replace', () =>
     dir('.kiro');
   });
   const notes = state.previewInstall(state.readInstallState(root)).notes;
-  assert.ok(notes.some((note) => /v1 files are present and will be left exactly as they are/.test(note.text)));
+  // Matched on meaning rather than on wording. The exact sentence was rewritten
+  // when the dialog was shortened, and a test pinned to the old phrasing failed
+  // while the behaviour it was protecting had not changed. What matters is that v1
+  // is named, that it is said to be left alone, and that nothing offers to replace
+  // or remove it.
+  const v1Note = notes.find((note) => /v1/i.test(note.text));
+  assert.ok(v1Note, 'v1 is mentioned when v1 is present');
+  assert.match(v1Note.text, /left alone|left exactly|untouched|not.*(touch|replac|remov)/i);
+  for (const note of notes) {
+    if (!/v1/i.test(note.text)) continue;
+    assert.doesNotMatch(
+      note.text,
+      /v1[^.]*\b(replaced|removed|deleted|overwritten)\b/i,
+      `a note threatens v1: ${note.text}`
+    );
+  }
+});
+
+test('the confirm dialog stays short enough to be read', () => {
+  // It ran to eleven lines of prose on a real project, which is long enough that
+  // the one line that matters gets skipped. Notes are now one line each and say
+  // what happens to a named thing.
+  //
+  // The worst case: v2 already installed, v1 also present, the workflow has grown
+  // aidlc/, both shared files exist, and there is no git repository.
+  const root = project(({ dir, file }) => {
+    dir('.kiro/steering/aws-aidlc-rules');
+    file('.kiro/steering/aws-aidlc-rules/core.md', 'x');
+    file(
+      '.kiro/aidlc-viewer-install.json',
+      JSON.stringify({
+        version: 1,
+        harness: 'kiro-ide',
+        upstreamCommit: 'abc1234',
+        files: ['.kiro/x'],
+        appended: [],
+        seeded: ['aidlc/spaces/default/memory/project.md']
+      })
+    );
+    dir('aidlc/spaces/default/memory');
+    for (let i = 0; i < 146; i += 1) {
+      file(`aidlc/spaces/default/memory/f${i}.md`, 'x');
+    }
+    file('AGENTS.md', 'x');
+    file('.gitignore', 'x');
+  });
+
+  const notes = state.previewInstall(state.readInstallState(root)).notes;
+  assert.ok(notes.length <= 6, `too many notes: ${notes.length}`);
+  for (const note of notes) {
+    assert.ok(!note.text.includes('\n'), `a note spans lines: ${note.text}`);
+    assert.ok(note.text.length <= 130, `a note is too long (${note.text.length}): ${note.text}`);
+  }
+  // The note that must survive any future trimming.
+  assert.ok(
+    notes.some((note) => /aidlc\/.*146.*left alone/i.test(note.text)),
+    'the workflow-written directory must be named as left alone'
+  );
+});
+
+test('nothing to say produces nothing to read', () => {
+  // A project with git and no AI-DLC has no notes at all, so the dialog is two
+  // lines. Asserted because an empty list is the easy case to accidentally fill
+  // with reassurance nobody asked for.
+  const root = project(({ dir }) => {
+    dir('.git');
+  });
+  assert.deepEqual(state.previewInstall(state.readInstallState(root)).notes, []);
+});
+
+test('counts of one are not written as plurals', () => {
+  const root = project(({ dir, file }) => {
+    dir('.git');
+    dir('.kiro');
+    file('.kiro/only.md', 'x');
+  });
+  const notes = state.previewInstall(state.readInstallState(root)).notes;
+  const engine = notes.find((note) => note.text.startsWith('.kiro/'));
+  assert.ok(engine);
+  assert.match(engine.text, /1 file:/);
+  assert.doesNotMatch(engine.text, /1 files/);
 });
 
 test('reading a path that does not exist is a verdict, not an error', () => {

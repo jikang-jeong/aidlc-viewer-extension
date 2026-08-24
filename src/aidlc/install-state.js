@@ -162,9 +162,19 @@ function readInstallState(root) {
 
 // What an install would do to this project, as a list of consequences rather than
 // a yes or no. The caller shows these; nothing is decided here.
+// What an install would do to what is already here.
+//
+// Each note is one line and says what happens to a named thing, because this is
+// read by someone deciding whether to press Install rather than by someone
+// learning how the installer works. An earlier version explained itself in prose
+// and ran to eleven lines on a real project, which is long enough that the one
+// line that matters gets skipped.
 function previewInstall(state) {
   if (!state || !state.ok) return { blocked: true, reason: 'no-state' };
   const notes = [];
+  // A dialog that says "1 files" reads as unfinished, and this one is asking for
+  // a decision.
+  const files = (n) => `${n} file${n === 1 ? '' : 's'}`;
 
   if (state.generation === GENERATION.V2 || state.generation === GENERATION.BOTH) {
     notes.push({
@@ -172,40 +182,41 @@ function previewInstall(state) {
       text: 'AI-DLC v2 is already installed here.'
     });
   }
-  if (state.generation === GENERATION.V1 || state.generation === GENERATION.BOTH) {
-    notes.push({
-      level: 'info',
-      text: 'AI-DLC v1 files are present and will be left exactly as they are.'
-    });
-  }
   if (state.memory && state.memory.beyondSeed) {
+    // The one note worth reading. The workflow grows this directory from 9 seed
+    // files into its own rules and records, including a file it overwrites with
+    // what it has learned, and none of it is the installer's to replace.
     notes.push({
       level: 'warn',
-      text:
-        `This project's aidlc/ directory holds ${state.memory.fileCount} files, ` +
-        'which means the workflow has run and written its own rules and records ' +
-        'there. It will not be touched.'
-    });
-  }
-  if (state.engine.present) {
-    notes.push({
-      level: 'info',
-      text: `.kiro/ already holds ${state.engine.fileCount} files and would be replaced.`
-    });
-  }
-  for (const name of state.sharedFiles) {
-    notes.push({
-      level: 'info',
-      text: `${name} exists and would gain an appended section, not be replaced.`
+      text: `aidlc/ — ${files(state.memory.fileCount)} the workflow wrote: left alone.`
     });
   }
   if (!state.hasGitRepo) {
     notes.push({
       level: 'warn',
       text:
-        'No git repository here. The practices the workflow affirms assume ' +
-        'trunk-based development with worktrees, so run git init first if you ' +
-        'intend to reach Construction.'
+        'No git repository. Run git init first, or the workflow will commit to ' +
+        'trunk-based practices it cannot follow.'
+    });
+  }
+  if (state.engine.present) {
+    notes.push({
+      level: 'info',
+      text: `.kiro/ — ${files(state.engine.fileCount)}: replaced.`
+    });
+  }
+  if (state.generation === GENERATION.V1 || state.generation === GENERATION.BOTH) {
+    notes.push({
+      level: 'info',
+      text: "AI-DLC v1's rules: left alone."
+    });
+  }
+  if (state.sharedFiles.length > 0) {
+    // Collapsed into one line. Listed separately these were two identical
+    // sentences differing only in a filename.
+    notes.push({
+      level: 'info',
+      text: `${state.sharedFiles.join(', ')}: a section appended, not replaced.`
     });
   }
   return { blocked: false, notes };

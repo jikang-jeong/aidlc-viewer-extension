@@ -153,21 +153,22 @@ async function chooseHarness(existing) {
 }
 
 // Show the consequences and get a decision. Returns true to proceed.
+// Confirm, with what a person needs to decide and nothing else.
+//
+// A paragraph used to sit at the end explaining why the install follows a branch
+// instead of a pinned commit. It is gone. It was design rationale addressed to
+// someone whose next act is pressing Install, and nothing in it could change that
+// decision -- `@ v2 (current head)` already carries the only part that can, which
+// is that this is not a fixed version. The rest belongs in the docs and in the
+// receipt.
 async function confirmInstall(state, harness, reinstalling) {
   const preview = previewInstall(state);
   const lines = preview.notes.map(
     (note) => `${note.level === 'warn' ? '! ' : '  '}${note.text}`
   );
-  lines.push('');
+  if (lines.length > 0) lines.push('');
   lines.push(`Harness: ${HARNESS_LABELS[harness] ?? harness}`);
   lines.push(`Upstream: ${REPO} @ ${UPSTREAM_REF} (current head)`);
-  lines.push('');
-  lines.push(
-    'The engine is downloaded from the head of that branch, so this install gets ' +
-      'the engine as it is now rather than a version fixed when the extension was ' +
-      'built. The commit it resolves to is recorded in the install receipt, so the ' +
-      'project can always say which engine it has.'
-  );
 
   const goLabel = reinstalling ? 'Reinstall' : 'Install';
   const choice = await vscode.window.showInformationMessage(
