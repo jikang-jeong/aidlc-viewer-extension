@@ -73,7 +73,7 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 **Nothing is read out of your Markdown.** Progress comes from the project's structure, so an artifact in an unexpected format cannot put your position wrong, and anything the extension does not recognise is reported rather than guessed at.
 ## What's New
 
-### 0.0.22
+### 0.0.23
 
 - **v2 setup works again.** Upstream renamed its `v2` branch to `main`, and every v2
   install failed with a message about a missing commit, which was not what had
