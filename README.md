@@ -10,14 +10,14 @@ AI-DLC has your agent work through a lifecycle, producing Markdown artifacts as 
 
 **It shows you where the workflow actually is.** The furthest stage reached, which file needs you next, and each artifact opened in a readable split view, so you are not digging through folders to find out what your agent has been doing.
 
-Works in **Kiro** and in VS Code and its forks. AI-DLC v2's engine ships agent definitions for Kiro only, so v2 setup targets Kiro IDE or Kiro CLI; v1 works with Kiro, Claude Code and your editor's own convention.
+Works in **Kiro** and in VS Code and its forks. This extension's v2 setup targets Kiro IDE or Kiro CLI, which are the two it has verified against a real run; upstream also ships definitions for other agents, which you can install yourself. v1 works with Kiro, Claude Code and your editor's own convention.
 
 ## Getting started
 
 1. Install the extension and click the **AIDLC** icon in the activity bar.
 2. **Choose the project folder** to watch. Everything below acts on that folder, so this comes first.
 3. Press **Set up AI-DLC Rules** and pick a generation. AI-DLC comes in two: v1 is rule files your agent reads, v2 is an engine that drives the workflow itself. If your project already has AI-DLC, the extension detects which one and you can skip this step.
-4. Start the workflow. **On v1**, tell your agent *"Using AI-DLC, build ..."*. **On v2**, type `/aidlc` — it installs a conductor agent plus a set of role agents, so `/aidlc` starts or resumes a workflow and `/aidlc-architect-agent` and the rest are there when you want a specific one.
+4. Start the workflow. **On v1**, tell your agent *"Using AI-DLC, build ..."*. **On v2**, type `/aidlc` — it installs a conductor agent plus a set of role agents, so `/aidlc` starts or resumes a workflow and `/aidlc-mvp` and the rest are there when you want a specific one.
 
 New artifacts appear in the tree as they are created.
 
@@ -68,10 +68,23 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 
 **AI-DLC v2 needs [bun](https://bun.com/docs/installation).** Its engine runs through bun, so setup stops and hands you the install command rather than leaving you a project whose gates never fire. v1 needs nothing and works offline.
 
-**v1 is installed from a snapshot inside the extension. v2 is downloaded** from the `v2` branch of [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows), and the commit it resolved to is recorded in the project so you can always tell which engine you have.
+**v1 is installed from a snapshot inside the extension. v2 is downloaded** from the default branch of [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows), and the commit it resolved to is recorded in the project so you can always tell which engine you have.
 
 **Nothing is read out of your Markdown.** Progress comes from the project's structure, so an artifact in an unexpected format cannot put your position wrong, and anything the extension does not recognise is reported rather than guessed at.
 ## What's New
+
+### 0.0.22
+
+- **v2 setup works again.** Upstream renamed its `v2` branch to `main`, and every v2
+  install failed with a message about a missing commit, which was not what had
+  happened. The extension follows the default branch now, and a 404 says whether a
+  branch or a commit is missing.
+- **Kiro CLI setup works again.** Upstream also renamed that harness's directory, and
+  the old path extracted nothing, which read as a broken download rather than a wrong
+  path.
+- Verified against the current engine end to end: install, reinstall over a project
+  the workflow has grown, and removal. Your accumulated rules and the workflow's own
+  files are still left alone.
 
 ### 0.0.21
 

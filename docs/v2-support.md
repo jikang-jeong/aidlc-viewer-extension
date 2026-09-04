@@ -207,8 +207,23 @@ into the extension because a snapshot of an actively moving engine goes stale
 between releases, and no dependency is added because the `tar` shipped with macOS,
 Linux and Windows 10 1803+ does the extraction.
 
-**The branch is followed, and the commit is recorded.** An install resolves `v2` to
-a sha through the GitHub API, downloads that sha, and writes it into the receipt.
+**The branch is followed, and the commit is recorded.** An install resolves the
+upstream branch to a sha through the GitHub API, downloads that sha, and writes it
+into the receipt.
+
+The branch name is not a constant of nature. Upstream renamed `v2` to `main` on
+2026-09-04, when the engine became the repository's default, and every install broke:
+`codeload.../tar.gz/v2` 404s, and the API's commits endpoint answers 422 rather than
+redirecting, so no sha could be resolved either. The failure said "no archive for that
+commit", which named the wrong thing and cost a diagnosis. Two things changed as a
+result. The ref moved to `main` and is now asserted by a test, because nothing else
+catches it and it breaks every install. And a 404 is now worded by whether a branch or
+a commit was asked for.
+
+The same move renamed `dist/kiro-cli` to `dist/kiro`. That one failed quietly: the
+extraction found nothing and reported an empty payload, which reads as a broken
+download rather than a wrong path. The harness KEY is still `kiro-cli` because install
+receipts on disk record it; only the directory it points at moved.
 Following the branch is what was asked for and is right for a workflow still
 moving, but it costs something real: two people installing on different days can
 get engines that behave differently. Recording the resolved sha is what keeps that

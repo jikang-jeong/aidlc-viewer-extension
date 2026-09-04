@@ -508,11 +508,50 @@ test('the default is a branch, and it is followed rather than pinned', () => {
   // Changed deliberately from a pinned commit: an install should get the engine as
   // it is now. What makes that accountable is that the resolved sha is recorded, so
   // the tests below are about identification rather than about the ref's value.
-  assert.equal(payload.UPSTREAM_REF, 'v2');
+  //
+  // The value moved once already: upstream renamed `v2` to `main` when the engine
+  // became the repository's default. That is asserted rather than left loose,
+  // because every install fails when it is wrong and nothing else catches it.
+  assert.equal(payload.UPSTREAM_REF, 'main');
   assert.ok(payload.REF_PATTERN.test(payload.UPSTREAM_REF));
   // A ref is not a sha, so the sha check must reject it. Otherwise a branch name
   // could pass as an identified commit.
   assert.equal(payload.COMMIT_PATTERN.test(payload.UPSTREAM_REF), false);
+});
+
+test('each harness maps to a directory that upstream actually ships', () => {
+  // The CLI's directory was renamed `kiro-cli` to `kiro` in the same move, and the
+  // old mapping did not fail loudly: it extracted nothing and reported an empty
+  // payload, which reads as a broken download rather than a wrong path.
+  //
+  // The KEY stays `kiro-cli` because install receipts already on disk record it, and
+  // renaming the key would make those unreadable. Only the path moved, and this
+  // asserts the two are allowed to differ.
+  assert.deepEqual(payload.HARNESSES, { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro' });
+  for (const [key, dir] of Object.entries(payload.HARNESSES)) {
+    assert.ok(dir.length > 0, `${key} maps to nothing`);
+    assert.ok(!dir.includes('/'), `${key} maps to a nested path: ${dir}`);
+  }
+});
+
+test('a ref that upstream no longer has is reported as a missing branch', () => {
+  // The wording matters and got this wrong once. A renamed branch 404s the tarball,
+  // and the message said "no archive for that commit", which sent the reader looking
+  // for a commit problem that did not exist. A branch request and a commit request
+  // now say different things.
+  const branch = payload.describeFetchFailure(
+    { reason: 'http-status', status: 404 },
+    { target: 'v2', pinned: false }
+  );
+  assert.match(branch, /branch/i);
+  assert.match(branch, /renamed|removed/i);
+
+  const commit = payload.describeFetchFailure(
+    { reason: 'http-status', status: 404 },
+    { target: 'abc1234', pinned: true }
+  );
+  assert.match(commit, /commit/i);
+  assert.doesNotMatch(commit, /branch/i);
 });
 
 test('a ref that could escape a URL or a path is refused', async () => {

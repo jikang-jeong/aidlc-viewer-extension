@@ -40,26 +40,41 @@ const PAYLOAD_PREFIX = 'dist';
 
 // The branch this build installs from.
 //
-// v2 is where upstream ships the engine. Following the branch means an install
-// gets the current engine rather than the one that was current when this support
-// was written, which is what was asked for and is right for a workflow still
-// moving. The trade is that the reader modules in this directory were verified
-// against an earlier head, so a change upstream can produce a field or an event
-// this build has not seen. That is survivable by construction rather than by luck:
+// Upstream renamed `v2` to `main` on 2026-09-04: the engine that was on a side
+// branch is now the repository's default. GitHub keeps a redirect for the old
+// branch name in its API, but `codeload.github.com/.../tar.gz/v2` returns 404, and
+// the API's commits endpoint answers 422 rather than redirecting — so every install
+// failed with "GitHub has no archive for that commit", which named the wrong thing.
+//
+// Following the branch rather than pinning still holds: an install gets the engine
+// as it is today, and the sha it resolved to is recorded in the receipt so a project
+// can always say which engine it has. The reader survives upstream moving because
 // nothing here enumerates stage slugs, phase names, sensor ids or event names, and
-// anything unrecognised is reported under "Not understood by this extension"
-// instead of being guessed at or throwing.
-const UPSTREAM_REF = 'v2';
+// anything unrecognised is reported rather than guessed at.
+const UPSTREAM_REF = 'main';
 
 // A ref goes into a URL and into an archive path, so it is constrained to what a
 // git ref can legitimately be. This keeps a path traversal, a flag-looking string
 // and a shell fragment out of both.
 const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/;
 
-// Only harnesses this extension has actually verified against a real run. A name
-// not on this list is refused rather than attempted, because a wrong path yields
-// an empty extraction that would look like a successful install of nothing.
-const HARNESSES = { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro-cli' };
+// Harnesses this extension installs, mapped to their directory under `dist/`.
+//
+// A name not on this list is refused rather than attempted, because a wrong path
+// yields an empty extraction that would look like a successful install of nothing.
+//
+// The CLI's directory was renamed `kiro-cli` to `kiro` when the engine moved to
+// main, so the old mapping produced exactly that empty extraction. The key is left
+// as `kiro-cli` because it is written into install receipts that already exist on
+// disk, and changing it would make those unreadable; only the path it points at
+// moved.
+//
+// Upstream now ships five more harnesses (claude, codex, copilot, cursor,
+// opencode). They are deliberately absent: each writes a different layout, and this
+// extension only offers what it has verified against a real run. Their existence
+// does mean the documented claim that v2 targets Kiro alone is no longer true of
+// upstream, which is a documentation matter rather than a code one.
+const HARNESSES = { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro' };
 
 // A commit has to look like one. Used to check the sha read back out of the
 // archive, and to accept an explicit commit from a caller that wants a fixed one.
@@ -68,11 +83,16 @@ const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/;
 // Which commit a ref points at right now.
 //
 // Needed because GitHub does NOT put the sha in the archive when the download is
-// by branch name: asking for `v2` yields a root directory named
-// `aidlc-workflows-2`, so the archive cannot say which engine it is. Asking the API
+// by branch name: asking for `main` yields a root directory named
+// `aidlc-workflows-main`, so the archive cannot say which engine it is. Asking the API
 // first, then downloading that exact sha, makes the install accountable and also
 // removes the window where upstream could push between learning the sha and
 // fetching the code.
+//
+// Redirects are followed, which is not a nicety. When upstream renamed `v2` to
+// `main` the API answered the old name with a redirect while codeload 404'd the
+// tarball outright — so a build that followed the redirect here would have resolved
+// a sha and installed correctly, and this one did not. A rename should cost nothing.
 //
 // `Accept: application/vnd.github.sha` returns the sha as plain text rather than a
 // commit object, so there is no JSON to parse and nothing large to buffer.
@@ -81,8 +101,12 @@ const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/;
 // nicety: unauthenticated API calls are rate limited, a proxy may allow codeload
 // while blocking api.github.com, and none of that is a reason to refuse an
 // install. The caller falls back to downloading the ref directly.
-function resolveRefCommit(ref) {
+function resolveRefCommit(ref, redirectsLeft = MAX_REDIRECTS) {
   const url = `https://api.github.com/repos/${REPO}/commits/${ref}`;
+  return resolveShaFrom(url, redirectsLeft);
+}
+
+function resolveShaFrom(url, redirectsLeft) {
   return new Promise((resolve) => {
     const request = https.get(
       url,
@@ -95,7 +119,18 @@ function resolveRefCommit(ref) {
         }
       },
       (response) => {
-        if (response.statusCode !== 200) {
+        const status = response.statusCode ?? 0;
+        if (status >= 300 && status < 400 && response.headers.location) {
+          response.resume();
+          if (redirectsLeft <= 0) {
+            resolve(undefined);
+            return;
+          }
+          const next = new URL(response.headers.location, url).toString();
+          resolveShaFrom(next, redirectsLeft - 1).then(resolve);
+          return;
+        }
+        if (status !== 200) {
           response.resume();
           resolve(undefined);
           return;
@@ -190,12 +225,13 @@ function download(url, destination, redirectsLeft = MAX_REDIRECTS) {
           ok: false,
           reason: 'http-status',
           status,
-          // 404 on a well-formed commit means the commit is not in this
-          // repository, which is a different problem from being offline.
-          text:
-            status === 404
-              ? 'GitHub has no archive for that commit in this repository.'
-              : `GitHub returned HTTP ${status}.`
+          // A 404 on a well-formed request means the thing asked for is not in this
+          // repository, which is a different problem from being offline. The wording
+          // is left to the caller, which knows whether it asked for a branch or a
+          // commit: this said "no archive for that commit" when upstream renamed a
+          // branch, and sent the reader looking for a commit problem that did not
+          // exist.
+          text: status === 404 ? undefined : `GitHub returned HTTP ${status}.`
         });
         return;
       }
@@ -284,6 +320,22 @@ function topLevelEntries(dir) {
   }
 }
 
+// How a failed fetch reads to a person.
+//
+// Separated from download() because only the caller knows whether it asked for a
+// branch or for a commit, and separated from fetchPayload so it can be checked
+// without a network. A 404 said "no archive for that commit" when upstream renamed a
+// branch, which sent the reader looking for a commit problem that did not exist.
+function describeFetchFailure(failure, { target, pinned }) {
+  if (failure.reason === 'http-status' && failure.status === 404) {
+    return pinned
+      ? `GitHub has no archive for commit ${target} in ${REPO}.`
+      : `GitHub has no archive for the branch "${target}" in ${REPO}. It may have been ` +
+        'renamed or removed upstream.';
+  }
+  return failure.text;
+}
+
 // Fetch a payload and report what arrived.
 //
 // The caller gets a directory and its top-level listing, which is exactly what
@@ -334,7 +386,13 @@ async function fetchPayload({ ref, commit, harness, workDir }) {
   fs.mkdirSync(out, { recursive: true });
 
   const downloaded = await download(tarballUrl(target), archive);
-  if (!downloaded.ok) return { ...downloaded, workDir: base };
+  if (!downloaded.ok) {
+    return {
+      ...downloaded,
+      text: describeFetchFailure(downloaded, { target, pinned }),
+      workDir: base
+    };
+  }
 
   const extracted = await extract(archive, out, harness);
   if (!extracted.ok) return { ...extracted, workDir: base };
@@ -386,6 +444,7 @@ module.exports = {
   extract,
   resolveRefCommit,
   resolveArchiveCommit,
+  describeFetchFailure,
   topLevelEntries,
   fetchPayload
 };

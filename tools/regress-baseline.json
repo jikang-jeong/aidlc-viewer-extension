@@ -417,21 +417,20 @@
     },
     "active": {
       "scope": "poc",
-      "at": "Requirements Analysis",
+      "at": "Build and Test",
       "plannedTotal": 8,
       "counts": {
-        "done": 4,
+        "done": 6,
         "active": 1,
-        "pending": 3,
+        "pending": 1,
         "skipped": 25
       },
       "units": [],
       "labels": {
-        "done": 4,
+        "done": 6,
         "not in scope": 25,
         "if needed": 1,
-        "in progress": 1,
-        "not started": 2
+        "in progress": 1
       },
       "byStage": {
         "workspace-scaffold": "done",
@@ -446,7 +445,7 @@
         "approval-handoff": "not in scope",
         "reverse-engineering": "if needed",
         "practices-discovery": "not in scope",
-        "requirements-analysis": "in progress",
+        "requirements-analysis": "done",
         "user-stories": "not in scope",
         "refined-mockups": "not in scope",
         "domain-design": "not in scope",
@@ -457,8 +456,8 @@
         "nfr-requirements": "not in scope",
         "nfr-design": "not in scope",
         "infrastructure-design": "not in scope",
-        "code-generation": "not started",
-        "build-and-test": "not started",
+        "code-generation": "done",
+        "build-and-test": "in progress",
         "ci-pipeline": "not in scope",
         "deployment-pipeline": "not in scope",
         "environment-provisioning": "not in scope",
@@ -468,18 +467,23 @@
         "performance-validation": "not in scope",
         "feedback-optimization": "not in scope"
       },
-      "refusals": 13,
+      "refusals": 16,
       "refusalsLive": 0,
-      "approvalGates": 1,
-      "waitingOnYou": [
-        "requirements-analysis"
-      ],
-      "sensorFailureTotal": 9,
+      "approvalGates": 0,
+      "waitingOnYou": [],
+      "sensorFailureTotal": 13,
       "sensorsByStage": {
+        "code-generation": 4,
         "intent-capture": 9
       },
-      "contrastRows": 0,
-      "contrast": {}
+      "contrastRows": 1,
+      "contrast": {
+        "code-generation": {
+          "items": 12,
+          "records": 1,
+          "unaccounted": 14
+        }
+      }
     }
   }
 }
