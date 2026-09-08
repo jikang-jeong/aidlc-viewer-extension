@@ -73,11 +73,18 @@ function configureProject({ binary, root, harness, dryRun = false, env } = {}) {
   // through the engine's own pointer file does not, which is why this asks about the
   // resolved path rather than about the platform. Without it, a machine whose pointer is
   // damaged fails with EINVAL and no mention of AI-DLC.
+  //
+  // Under a shell, Node concatenates rather than quotes, so the path is quoted here: the
+  // wrapper lives under %LOCALAPPDATA%, and Windows user names carry spaces routinely
+  // ("C:\Users\Jane Doe\..."). The arguments need no such treatment because every one of
+  // them is a fixed token of this function's own -- nothing user-supplied is ever
+  // concatenated into a shell line.
   const shell = needsShell(binary);
+  const file = shell ? `"${binary}"` : binary;
 
   return new Promise((resolve) => {
     execFile(
-      binary,
+      file,
       args,
       {
         cwd: root,

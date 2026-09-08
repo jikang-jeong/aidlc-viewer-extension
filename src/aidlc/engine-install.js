@@ -222,6 +222,10 @@ function download(url, destination, redirectsLeft = MAX_REDIRECTS) {
 function runInstaller({ installerPath, env } = {}) {
   const win = process.platform === 'win32';
   const command = win ? 'powershell' : 'sh';
+  // No shell here, so the argument array reaches the process untouched and
+  // `installerPath` needs no quoting even though it sits under a temp directory whose
+  // path carries the user's name -- with a space, on many Windows machines. The sibling
+  // in engine-config.js DOES quote, because a `.cmd` forces it through a shell.
   const args = win
     ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', installerPath, '-Json', '-Yes']
     : [installerPath, '--json', '--yes'];

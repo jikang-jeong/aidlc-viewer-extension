@@ -423,3 +423,20 @@ test('the Windows installer is a .ps1, invoked with switches it actually declare
     assert.equal(/curl/.test(command), false);
   }
 });
+
+test('a .cmd path with a space survives the shell it is forced through', async () => {
+  // Under shell:true Node concatenates rather than quotes, and the wrapper lives beneath
+  // %LOCALAPPDATA% -- a path that carries the user's name, which on Windows routinely has
+  // a space ("C:\Users\Jane Doe\..."). Found by walking the forged-platform flow, where
+  // the unquoted command visibly split at the space.
+  //
+  // Verified by principle on this host: an executable in a directory with a space fails
+  // under shell:true unquoted and runs quoted. Here the quoting decision is pinned: the
+  // command is quoted exactly when a shell is involved, and left alone otherwise, because
+  // quotes handed to execFile WITHOUT a shell become part of the filename.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'aidlc', 'engine-config.js'),
+    'utf8'
+  );
+  assert.match(source, /shell \? `"\$\{binary\}"` : binary/, 'the quoting must follow the shell decision');
+});
