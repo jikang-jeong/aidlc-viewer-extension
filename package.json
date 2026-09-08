@@ -2,7 +2,7 @@
   "name": "aidlc-viewer",
   "displayName": "AIDLC-VIEWER",
   "description": "Companion tool for AWS AI-DLC. Sets the workflow up in one click, and shows where it has got to.",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "publisher": "jikjeong",
   "license": "MIT",
   "repository": {

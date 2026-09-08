@@ -73,18 +73,19 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 **Nothing is read out of your Markdown.** Progress comes from the project's structure, so an artifact in an unexpected format cannot put your position wrong, and anything the extension does not recognise is reported rather than guessed at.
 ## What's New
 
-### 0.0.24
+### 0.0.25
 
 - **v2 setup works again, and now installs the engine.** AI-DLC v2 changed shape: its
   engine used to be files copied into your project and is now a program installed on
   your machine, which the project's hooks call by name. Copying files alone would have
-  produced a project that looked complete and never advanced. Setup installs the engine
-  through the installer AWS publishes, then configures your project with it, so one
-  button still does the whole thing.
+  produced a project that looked complete and never advanced. Setup downloads the engine
+  from the official release, checks every file against the release's published
+  checksums, and lets the engine set your project up itself — one button still does the
+  whole thing. The same setup runs on macOS, Windows and Linux.
 - **bun is no longer required.** The engine reports that itself now. Setup used to stop
   without bun, which would have blocked people over something v2 does not use.
 - **Your files are the engine's to keep, not ours to guess at.** Setting up over a
-  project the workflow has already grown now goes through the engine's own installer,
+  project the workflow has already grown goes through the engine's own configuration,
   which reports what it left alone. Verified against a real project: accumulated rules,
   generated artifacts and hand-written steering all survive, and so do v1's rules where
   the two generations share a folder.
@@ -93,6 +94,9 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 - **v2 is recognised in more projects.** Detection knew only the older name for the
   agent file, so a project carrying only the newer one could be missed. Both count now,
   and **Check setup** no longer reports a correctly installed project as missing a file.
+- **The number on the activity-bar icon matches the tree again.** Files the engine keeps
+  for itself were being counted as new artifacts you had to read, so the badge said more
+  than the folder showed and nothing you could open would clear it.
 
 ### 0.0.23
 

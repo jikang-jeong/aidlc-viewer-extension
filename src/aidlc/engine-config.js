@@ -33,7 +33,6 @@
 //
 // Pure module: never import `vscode`. Node built-ins and subprocesses only.
 
-const path = require('path');
 const { execFile } = require('child_process');
 const { needsShell } = require('./engine-install');
 
@@ -165,19 +164,9 @@ function firstMeaningfulLine(text) {
   return error ?? lines[0];
 }
 
-// Where the engine records what it installed into a project. Used to answer "is this
-// project configured" without running anything.
-function manifestPath(root) {
-  // Both supported harnesses use `.kiro`. Written as one path rather than a lookup that
-  // pretends to branch: a third harness would need a real mapping, and a fake one would
-  // hide that it was missing.
-  return path.join(root, '.kiro', 'tools', 'data', 'aidlc-manifest.json');
-}
-
 module.exports = {
   HARNESS_IDS,
   configureProject,
   parsePlan,
-  parseOutstanding,
-  manifestPath
+  parseOutstanding
 };

@@ -32,15 +32,6 @@ const {
 const MARKER_BEGIN = '<!-- BEGIN AIDLC VIEWER -->';
 const MARKER_END = '<!-- END AIDLC VIEWER -->';
 
-// Operation kinds. Deliberately few, and each one describable in a sentence to a
-// user before it runs.
-const OP = {
-  REPLACE_TREE: 'replace-tree',
-  SEED_TREE: 'seed-tree',
-  COPY_FILE: 'copy-file',
-  APPEND_SECTION: 'append-section',
-  WRITE_RECEIPT: 'write-receipt'
-};
 
 // Paths inside the engine tree that belong to v1, not to v2.
 //
@@ -50,9 +41,6 @@ const OP = {
 // silently deleted v1's rules -- while previewInstall told the user v1 files would
 // be left exactly as they are.
 //
-// Listed as top-level names under `.kiro/` rather than as full paths, because that
-// is the granularity the replace operation preserves at.
-const V1_PATHS_INSIDE_ENGINE = ['steering', 'aws-aidlc-rule-details'];
 
 // Top-level entries of the upstream payload, split by how each may be treated.
 //
@@ -60,107 +48,6 @@ const V1_PATHS_INSIDE_ENGINE = ['steering', 'aws-aidlc-rule-details'];
 // and reported, because a payload that grew an entry is news rather than an error.
 const ENGINE_ENTRY = '.kiro';
 const SEED_ENTRY = 'aidlc';
-
-// Build the plan.
-//
-// `payloadEntries` is the top-level listing of the extracted upstream payload, as
-// `{ name, isDirectory }`. `state` comes from readInstallState.
-function planInstall({ payloadEntries, state, harness, upstreamCommit }) {
-  const ops = [];
-  const notes = [];
-  const unexpected = [];
-
-  const memoryMovedOn = Boolean(state && state.memory && state.memory.beyondSeed);
-
-  for (const entry of payloadEntries) {
-    if (entry.name === ENGINE_ENTRY) {
-      // The engine is wholly owned by whoever installed it, so a reinstall
-      // replaces it outright. Replacing rather than merging is the point: a
-      // half-old engine is a configuration nobody has tested.
-      ops.push({
-        type: OP.REPLACE_TREE,
-        from: entry.name,
-        to: entry.name,
-        // The receipt lives inside this tree and must survive its replacement,
-        // or removal loses the record of what to remove. v1's rules live there
-        // too, and the preview promises they are left alone, so they are carried
-        // through as well.
-        preserve: [
-          path.join(...RECEIPT_PATH.slice(1)),
-          ...V1_PATHS_INSIDE_ENGINE
-        ]
-      });
-      continue;
-    }
-
-    if (entry.name === SEED_ENTRY) {
-      if (memoryMovedOn) {
-        // The refusal this module exists for.
-        notes.push({
-          level: 'warn',
-          text:
-            `aidlc/ holds ${state.memory.fileCount} files, so the workflow has ` +
-            'written its own rules and records there. It is left untouched; the ' +
-            'seed is not reapplied.'
-        });
-        continue;
-      }
-      // Absent, or present and still exactly the seed. Seeding fills in what is
-      // missing and never replaces a file that is already there, so a project
-      // that edited one seed file before running anything keeps that edit.
-      ops.push({ type: OP.SEED_TREE, from: entry.name, to: entry.name });
-      continue;
-    }
-
-    if (SHARED_FILES.includes(entry.name)) {
-      // Shared with whatever else the project keeps in that file.
-      ops.push({
-        type: OP.APPEND_SECTION,
-        from: entry.name,
-        to: entry.name,
-        markerBegin: MARKER_BEGIN,
-        markerEnd: MARKER_END
-      });
-      continue;
-    }
-
-    if (entry.isDirectory) {
-      // A directory the payload grew. Seeded rather than replaced, because this
-      // build does not know whether the project owns anything inside it.
-      unexpected.push(entry.name);
-      ops.push({ type: OP.SEED_TREE, from: entry.name, to: entry.name });
-      continue;
-    }
-
-    unexpected.push(entry.name);
-    ops.push({ type: OP.COPY_FILE, from: entry.name, to: entry.name });
-  }
-
-  if (unexpected.length > 0) {
-    notes.push({
-      level: 'info',
-      text:
-        `The upstream payload carries ${unexpected.join(', ')}, which this build ` +
-        'has no specific handling for. Copied without replacing anything.'
-    });
-  }
-
-  ops.push({
-    type: OP.WRITE_RECEIPT,
-    to: path.join(...RECEIPT_PATH),
-    receipt: {
-      schemaVersion: RECEIPT_SCHEMA,
-      harness,
-      upstreamCommit,
-      // Filled in by the executor with what it actually wrote, so removal takes
-      // back exactly that and not what the plan hoped for.
-      files: [],
-      appended: []
-    }
-  });
-
-  return { ops, notes, unexpected };
-}
 
 // Build the removal plan from a receipt.
 //
@@ -229,12 +116,9 @@ function planRemoval(state) {
 }
 
 module.exports = {
-  OP,
-  V1_PATHS_INSIDE_ENGINE,
   MARKER_BEGIN,
   MARKER_END,
   ENGINE_ENTRY,
   SEED_ENTRY,
-  planInstall,
   planRemoval
 };

@@ -259,7 +259,11 @@ class WatchController {
     this.fileWatcher = vscode.workspace.createFileSystemWatcher(mdPattern);
     this.fileWatcher.onDidCreate((uri) => {
       if (isIgnoredEventPath(folderUri, uri)) return;
-      this.handleCreate(uri);
+      // Track only what the tree can show. Events under `.kiro/` and friends pass the
+      // filter above so the v2 reader refreshes, but marking their files NEW puts the
+      // badge out of step with the tree -- the mark can only be cleared by opening the
+      // file, and a hidden file has nothing to click.
+      if (isVisibleInTree(folderUri, uri)) this.handleCreate(uri);
       this.scheduleRefresh();
     });
     this.fileWatcher.onDidDelete((uri) => {
@@ -1840,6 +1844,37 @@ const SKIP_DIRS = new Set([
 
 function shouldSkipDirectory(name) {
   return name.startsWith('.') || SKIP_DIRS.has(name);
+}
+
+// Whether the tree can SHOW this path, which is the condition for tracking it as NEW.
+//
+// Tracking has to follow rendering exactly, because opening a file is the only thing
+// that clears its NEW mark, and a file the tree hides has nothing to click. Every
+// invisible entry in the NEW set is a phantom: the activity-bar badge counts it, the
+// tree shows fewer, and the numbers disagree until the next full rescan happens to
+// prune it. Reported exactly that way -- the badge said more than the folder showed.
+//
+// The regression that made this visible was WATCHED_DOT_DIRS: events under `.kiro/`
+// have to pass the ignore filter so the v2 reader refreshes, but a v2 engine install
+// writes ~100 `.md` files under `.kiro/` in one stroke, and every one of them was
+// tracked as a NEW artifact the tree would never render. The same rule also covers a
+// corner as old as the badge itself: a dot-file like `.notes.md` at a visible level
+// was tracked but never shown.
+//
+// The rule mirrors the tree's children filter, segment by segment: nothing may start
+// with a dot, and no intermediate directory may be one the tree skips. The event's own
+// refresh is not gated here -- the reader still needs it.
+function isVisibleInTree(rootUri, uri) {
+  const rel = path.relative(rootUri.fsPath, uri.fsPath);
+  if (!rel || rel.startsWith('..')) {
+    return false;
+  }
+  const segments = rel.split(path.sep);
+  return segments.every(
+    (segment, index) =>
+      !segment.startsWith('.') &&
+      (index === segments.length - 1 || !SKIP_DIRS.has(segment))
+  );
 }
 
 // Watcher events under skipped directories (.git, node_modules, ...) would only

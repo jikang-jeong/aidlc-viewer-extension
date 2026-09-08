@@ -25,7 +25,7 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 
-const { readInstallState, previewInstall, RECEIPT_PATH } = require('./aidlc/install-state');
+const { readInstallState, RECEIPT_PATH } = require('./aidlc/install-state');
 const { planRemoval } = require('./aidlc/install-plan');
 const { applyRemoval } = require('./aidlc/install-apply');
 
