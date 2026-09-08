@@ -21,7 +21,7 @@ Works in **Kiro** and in VS Code and its forks. This extension's v2 setup target
 
 New artifacts appear in the tree as they are created.
 
-Two things to know about v2 before you start. It needs [bun](https://bun.com/docs/installation), and setup will stop and hand you the install command rather than leave you a project whose gates never fire. And Kiro reads `/aidlc` from the **workspace root**, so if you installed into a folder that is not the root of your window, open that folder and `/aidlc` will be there. **AI-DLC v2: Check setup** in the Command Palette tells you which of these is missing.
+Two things to know about v2 before you start. Its engine is a program installed on your machine, so the first v2 setup downloads about 110MB and takes a minute; every project after that is seconds. And Kiro reads `/aidlc` from the **workspace root**, so if you set up a folder that is not the root of your window, open that folder and `/aidlc` will be there. **AI-DLC v2: Check setup** in the Command Palette tells you which of these is missing.
 
 Setup does not overwrite anything. Existing files are detected and left alone.
 
@@ -66,20 +66,33 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 
 ## Notes
 
-**AI-DLC v2 needs [bun](https://bun.com/docs/installation).** Its engine runs through bun, so setup stops and hands you the install command rather than leaving you a project whose gates never fire. v1 needs nothing and works offline.
+**AI-DLC v2's engine is installed on your machine, and this extension installs it for you.** It runs the installer AWS publishes with each release, which verifies what it downloads and puts everything under your home directory, so no administrator rights are needed. If that cannot run where you are, setup hands you the same command to run yourself rather than leaving you a project whose gates never fire. v1 needs nothing and works offline.
 
-**v1 is installed from a snapshot inside the extension. v2 is downloaded** from the latest published release of [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows), and the version it installed is recorded in the project so you can always tell which engine you have.
+**v1 is installed from a snapshot inside the extension. v2 comes from the latest published release** of [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows), and the version you have is recorded in the project so you can always tell which engine it is.
 
 **Nothing is read out of your Markdown.** Progress comes from the project's structure, so an artifact in an unexpected format cannot put your position wrong, and anything the extension does not recognise is reported rather than guessed at.
 ## What's New
 
 ### 0.0.24
 
-- **v2 setup works again.** Upstream restructured: the ready-to-install directories it
-  used to publish in the repository are gone, and the files the extension reads are
-  now built rather than committed. v2 installs from the published release instead, and
-  the version it installed is recorded in your project — a version rather than a commit,
-  which is a clearer answer to which engine you have.
+- **v2 setup works again, and now installs the engine.** AI-DLC v2 changed shape: its
+  engine used to be files copied into your project and is now a program installed on
+  your machine, which the project's hooks call by name. Copying files alone would have
+  produced a project that looked complete and never advanced. Setup installs the engine
+  through the installer AWS publishes, then configures your project with it, so one
+  button still does the whole thing.
+- **bun is no longer required.** The engine reports that itself now. Setup used to stop
+  without bun, which would have blocked people over something v2 does not use.
+- **Your files are the engine's to keep, not ours to guess at.** Setting up over a
+  project the workflow has already grown now goes through the engine's own installer,
+  which reports what it left alone. Verified against a real project: accumulated rules,
+  generated artifacts and hand-written steering all survive, and so do v1's rules where
+  the two generations share a folder.
+- **Removal works on projects the engine installed**, by reading the engine's own record
+  of what it wrote rather than requiring one of ours.
+- **v2 is recognised in more projects.** Detection knew only the older name for the
+  agent file, so a project carrying only the newer one could be missed. Both count now,
+  and **Check setup** no longer reports a correctly installed project as missing a file.
 
 ### 0.0.23
 

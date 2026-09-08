@@ -98,7 +98,7 @@ function loadWithStub({ onQuickPick, onModal, onToast, onProgressStart, onProgre
     loaded._compile(
       `${fs.readFileSync(TARGET, 'utf8')}
 module.exports.chooseGeneration = chooseGeneration;
-module.exports.handleMissingBun = handleMissingBun;`,
+module.exports.handleEngineInstallFailure = handleEngineInstallFailure;`,
       TARGET
     );
     return { api: loaded.exports, shown };
@@ -278,16 +278,21 @@ test('the progress notification ends before the completion message appears', asy
       return new Promise(() => {});
     },
     modules: {
-      './aidlc/bun-check': { detectBun: () => ({ found: true, path: '/fake/bun' }) },
-      './aidlc/payload': {
-        REPO: 'awslabs/aidlc-workflows',
-        HARNESSES: { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro-cli' },
-        fetchPayload: async () => ({
+      // The engine is already on the machine, so the install goes straight to
+      // configuring the project -- the shortest path through the progress scope, and
+      // therefore the one where a toast awaited inside it would be most visible.
+      './aidlc/engine-install': {
+        DOCS_URL: 'https://example.invalid/docs',
+        detectEngine: () => ({ found: true, path: '/fake/aidlc', version: '2.8.0' }),
+        installEngine: async () => ({ ok: true, version: '2.8.0' }),
+        installCommand: () => 'INSTALL-COMMAND'
+      },
+      './aidlc/engine-config': {
+        configureProject: async () => ({
           ok: true,
-          payloadDir,
-          entries: [{ name: '.kiro', isDirectory: true }],
-          commit: 'abcdef1234567890abcdef1234567890abcdef12',
-          harness: 'kiro-ide'
+          plan: { create: 323, update: 0, merge: 0, preserve: 0, remove: 0, conflict: 0 },
+          outstanding: [],
+          message: 'configured'
         })
       }
     }
@@ -349,62 +354,63 @@ test('nothing that waits on a person runs inside a progress scope', () => {
 // Missing bun
 // ---------------------------------------------------------------------------
 
-test('a missing bun offers no way to install without it', async () => {
-  // There was a second button that installed AI-DLC anyway. The engine is invoked
-  // as `bun <file>` throughout, so that produced 284 files that do nothing, with
-  // gates that never fire and no error to say why.
+test('a failed engine install offers no way to go on without it', async () => {
+  // Same principle the bun gate held, applied to what actually gates v2 now. The
+  // project's hooks run `aidlc engine adapter <harness>`; without the binary they are
+  // files that do nothing, with gates that never fire and no error to say why. So there
+  // is no "install anyway".
   const { api, shown } = loadWithStub({ onModal: () => undefined });
-  await api.handleMissingBun({
-    found: false,
-    installCommand: 'INSTALL-COMMAND',
-    pathNote: 'note',
-    alternatives: ['alt'],
-    docsUrl: 'https://example.invalid/docs'
-  });
+  await api.handleEngineInstallFailure('the reason it failed');
   assert.equal(shown.modals.length, 1);
   for (const action of shown.modals[0].actions) {
     assert.ok(!/anyway|continue|skip|proceed/i.test(action), `must not offer to go on: "${action}"`);
   }
 });
 
-test('copying the bun command does not install anything', async () => {
+test('the failure carries the reason through rather than replacing it', async () => {
+  // The installer names conditions this extension has no business paraphrasing -- a
+  // checksum mismatch, a failed provenance check, Alpine missing libstdc++.
+  const { api, shown } = loadWithStub({ onModal: () => undefined });
+  await api.handleEngineInstallFailure('Checksum mismatch for aidlc-darwin-arm64.');
+  assert.ok(shown.modals[0].options.detail.includes('Checksum mismatch for aidlc-darwin-arm64.'));
+});
+
+test('copying the engine command does not install anything', async () => {
   const { api, shown } = loadWithStub({
     onModal: (record) => record.actions.find((a) => /copy/i.test(a))
   });
-  await api.handleMissingBun({
-    found: false,
-    installCommand: 'INSTALL-COMMAND',
-    pathNote: 'note',
-    alternatives: ['alt'],
-    docsUrl: 'https://example.invalid/docs'
-  });
-  assert.deepEqual(shown.copied, ['INSTALL-COMMAND']);
+  await api.handleEngineInstallFailure('a reason');
+  assert.equal(shown.copied.length, 1);
+  // Upstream's published installer, not something equivalent-but-different that would
+  // not match a search result or upstream's own docs.
+  assert.match(shown.copied[0], /aidlc-workflows\/releases\/latest\/download\/install\.(sh|ps1)/);
   assert.equal(shown.opened.length, 0);
-  // And says what to do next, rather than leaving the user at a copied string.
   assert.ok(shown.toasts.some((t) => /again/i.test(t.message)));
 });
 
-test('the docs button opens bun, and copies nothing', async () => {
+test('the docs button opens the docs, and copies nothing', async () => {
   const { api, shown } = loadWithStub({
-    onModal: (record) => record.actions.find((a) => /page|docs/i.test(a))
+    onModal: (record) => record.actions.find((a) => /docs/i.test(a))
   });
-  await api.handleMissingBun({
-    found: false,
-    installCommand: 'INSTALL-COMMAND',
-    pathNote: 'note',
-    alternatives: ['alt'],
-    docsUrl: 'https://example.invalid/docs'
-  });
-  assert.deepEqual(shown.opened, ['https://example.invalid/docs']);
+  await api.handleEngineInstallFailure('a reason');
   assert.equal(shown.copied.length, 0);
+  assert.equal(shown.opened.length, 1);
+  assert.match(shown.opened[0], /^https:\/\//);
 });
 
-test('a bun report missing its optional fields still renders', async () => {
-  // prerequisite is absent on macOS, and alternatives could be empty.
+test('the dialog says the install needs no administrator rights', async () => {
+  // It installs under the user's home directory. Saying so pre-empts the question that
+  // otherwise stops a person who cannot elevate on a managed machine.
   const { api, shown } = loadWithStub({ onModal: () => undefined });
-  await assert.doesNotReject(() =>
-    api.handleMissingBun({ found: false, installCommand: 'C', pathNote: 'N' })
-  );
-  assert.equal(shown.modals.length, 1);
-  assert.ok(shown.modals[0].options.detail.includes('C'));
+  await api.handleEngineInstallFailure('a reason');
+  assert.match(shown.modals[0].options.detail, /administrator|admin/i);
+});
+
+test('the engine install failure never mentions bun as the blocker', async () => {
+  // The engine reports `bun: not-required` itself now. Naming bun here would send a
+  // person to install something the engine does not use.
+  const { api, shown } = loadWithStub({ onModal: () => undefined });
+  await api.handleEngineInstallFailure('a reason');
+  const text = `${shown.modals[0].message} ${shown.modals[0].options.detail}`;
+  assert.equal(/\bbun\b/i.test(text), false, text);
 });

@@ -21,11 +21,22 @@ const GENERATION = {
 // Each marker is a path relative to the project root. Presence of ANY marker
 // for a generation is enough: installers vary by harness (Kiro IDE, Kiro CLI,
 // Claude Code, Cursor) and drop different subsets.
+//
+// The v2 agent file is listed under both spellings. Upstream shipped
+// `.kiro/agents/aidlc.json` and now ships `.kiro/agents/aidlc.md`; both are kept because
+// projects installed by either build are still in use, and a marker list that only knew
+// one of them would fail to recognise half of them. Neither is removed when upstream
+// changes again -- an obsolete marker costs nothing, while a missing one costs a project
+// its whole v2 view.
 const MARKERS = {
   [GENERATION.V2]: [
     ['aidlc', 'spaces'],
+    ['.kiro', 'agents', 'aidlc.md'],
     ['.kiro', 'agents', 'aidlc.json'],
-    ['.kiro', 'aidlc-common']
+    ['.kiro', 'aidlc-common'],
+    // The compiled data the reader depends on. Present in every v2 install regardless of
+    // harness, which makes it the marker least likely to move.
+    ['.kiro', 'tools', 'data', 'stage-graph.json']
   ],
   [GENERATION.V1]: [
     ['aidlc-docs'],

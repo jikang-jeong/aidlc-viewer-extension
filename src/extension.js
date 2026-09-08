@@ -3142,7 +3142,7 @@ function getHelpHtml() {
 <h2>Getting Started</h2>
 <ol>
   <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root.</li>
-  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 is downloaded from the latest published release of the upstream repository, with the version written into the install receipt so the project can say which engine it has. It needs <a href="https://bun.com/docs/installation">bun</a> — if bun is missing, setup stops and hands you the install command rather than leaving you a project whose gates never fire.</li>
+  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
   <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Either way, new artifacts appear in the tree as they are generated.</li>
 </ol>
 
@@ -3200,7 +3200,7 @@ function getHelpHtml() {
   <tr><th>Button</th><th>Action</th></tr>
   <tr><td>📂 Open Workspace</td><td>Select the AI-DLC root folder to watch</td></tr>
   <tr><td>🔄 Refresh</td><td>Re-scan the folder and rebuild the tree</td></tr>
-  <tr><td>☁️ Set up AI-DLC</td><td>Asks which generation, then installs it. v1 from the bundled snapshot; v2 from upstream's latest release, recording the version</td></tr>
+  <tr><td>☁️ Set up AI-DLC</td><td>Asks which generation, then installs it. v1 from the bundled snapshot; v2 installs the engine on this machine, then configures the project</td></tr>
   <tr><td>❓ Help / Guide</td><td>Open this guide</td></tr>
 </table>
 <p>Two more commands are in the Command Palette for v2 projects: <strong>AI-DLC v2: Check setup</strong> reports what is present and what is missing, and <strong>AI-DLC v2: Remove</strong> takes back only what the installer wrote — it refuses without an install receipt, and never touches the workflow's own <code>aidlc/</code> content.</p>
@@ -3221,7 +3221,7 @@ function getHelpHtml() {
 <h2>시작하기</h2>
 <ol>
   <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트를 선택합니다.</li>
-  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 업스트림의 최신 릴리스를 내려받고 그 버전을 설치 영수증에 기록하므로 프로젝트가 어느 엔진을 쓰는지 항상 말할 수 있습니다. 그리고 <a href="https://bun.com/docs/installation">bun</a>이 필요합니다. bun이 없으면 설치를 진행하지 않고 설치 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
+  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
   <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다.</li>
 </ol>
 
@@ -3279,7 +3279,7 @@ function getHelpHtml() {
   <tr><th>버튼</th><th>동작</th></tr>
   <tr><td>📂 Open Workspace</td><td>감시할 AI-DLC 루트 폴더 선택</td></tr>
   <tr><td>🔄 Refresh</td><td>폴더 재스캔 및 트리 갱신</td></tr>
-  <tr><td>☁️ Set up AI-DLC</td><td>어느 세대인지 묻고 설치합니다. v1은 번들 스냅샷에서, v2는 업스트림 최신 릴리스에서 받고 그 버전을 기록</td></tr>
+  <tr><td>☁️ Set up AI-DLC</td><td>어느 세대인지 묻고 설치합니다. v1은 번들 스냅샷에서, v2는 엔진을 이 컴퓨터에 설치한 뒤 프로젝트를 설정</td></tr>
   <tr><td>❓ Help / Guide</td><td>이 가이드 열기</td></tr>
 </table>
 <p>v2 프로젝트에서는 명령 팔레트에 두 가지가 더 있습니다. <strong>AI-DLC v2: Check setup</strong>은 무엇이 있고 무엇이 없는지 알려주고, <strong>AI-DLC v2: Remove</strong>는 설치 프로그램이 쓴 것만 되돌립니다. 설치 영수증이 없으면 거부하며, 워크플로우가 만든 <code>aidlc/</code> 내용은 절대 지우지 않습니다.</p>

@@ -26,10 +26,21 @@ const fs = require('fs');
 const path = require('path');
 
 const { readInstallState, previewInstall, RECEIPT_PATH } = require('./aidlc/install-state');
-const { planInstall, planRemoval } = require('./aidlc/install-plan');
-const { applyPlan, applyRemoval } = require('./aidlc/install-apply');
-const { fetchPayload, REPO, HARNESSES } = require('./aidlc/payload');
-const { detectBun } = require('./aidlc/bun-check');
+const { planRemoval } = require('./aidlc/install-plan');
+const { applyRemoval } = require('./aidlc/install-apply');
+
+const {
+  detectEngine,
+  installEngine,
+  installCommand,
+  pathCaveat,
+  REPO
+} = require('./aidlc/engine-install');
+
+// Harnesses this extension sets up. The release ships seven; these two are the ones
+// verified against a real run, and the keys are the ids receipts already on disk record.
+const HARNESSES = { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro' };
+const { configureProject } = require('./aidlc/engine-config');
 const { readProject } = require('./aidlc/index');
 
 const HARNESS_LABELS = {
@@ -37,49 +48,46 @@ const HARNESS_LABELS = {
   'kiro-cli': 'Kiro CLI'
 };
 
-// bun is missing, so the install stops here.
+// The engine could not be installed, so setup stops here with the official command.
 //
-// There was a second button that installed AI-DLC anyway. It is gone. The engine is
-// invoked as `bun <file>` at hundreds of call sites, so a project installed without
-// bun is not a degraded project -- it is 284 files that do nothing, with gates that
-// never fire and no error to say why. Offering that as a choice dressed it up as a
-// trade-off when it was only a worse outcome reached in more steps.
+// This replaced a bun gate, and the reason is worth keeping. Until 2026-09-08 the engine
+// was bun/TypeScript running from inside the project, so bun was the prerequisite and a
+// project without it was files that did nothing. The engine is now a compiled binary
+// installed on the machine, its hooks run `aidlc engine adapter <harness>`, and the
+// engine reports `bun: not-required` itself. Gating on bun would now block an install
+// over something the engine does not use.
 //
-// The label said "Install anyway" without naming what it installed, and it was read
-// as installing bun -- the opposite of what it did.
-//
-// So there is one action: take the command away and come back. Never installs
-// anything, and never runs the command it shows.
-async function handleMissingBun(bun) {
-  const copyLabel = 'Copy the bun command';
-  const docsLabel = "Open bun's install page";
+// Reached only when this extension could not run the install itself -- most often a
+// policy that blocks piping a downloaded script into a shell. Never runs the command it
+// shows, and never installs anything.
+async function handleEngineInstallFailure(text) {
+  const command = installCommand();
+  const copyLabel = 'Copy the install command';
+  const docsLabel = "Open AI-DLC's docs";
 
-  const detail = [bun.installCommand];
-  if (bun.prerequisite) detail.push('', bun.prerequisite);
-  if (bun.alternatives && bun.alternatives.length > 0) {
-    // For a machine or a policy the one-liner cannot get past. A person who cannot
-    // run the first command needs a second one, not a reason the first should work.
-    detail.push('', `If that cannot run here: ${bun.alternatives.join('  or  ')}`);
-  }
-  detail.push('', bun.pathNote);
-  detail.push('', 'Then set up AI-DLC v2 again.');
+  const detail = [
+    text,
+    '',
+    'Run this in a terminal, then set up AI-DLC v2 again:',
+    command,
+    '',
+    'It installs into your home directory and needs no administrator rights.'
+  ];
 
   const choice = await vscode.window.showWarningMessage(
-    'AI-DLC v2 needs bun, and it was not found. Install bun first, then run this ' +
-      'setup again.',
+    'AI-DLC v2 needs its engine installed on this machine, and that could not be done ' +
+      'automatically.',
     { modal: true, detail: detail.join('\n') },
     copyLabel,
     docsLabel
   );
   if (choice === copyLabel) {
-    await vscode.env.clipboard.writeText(bun.installCommand);
+    await vscode.env.clipboard.writeText(command);
     vscode.window.showInformationMessage(
       'Command copied. Run it in a terminal, then set up AI-DLC v2 again.'
     );
   } else if (choice === docsLabel) {
-    // bun's own page covers what this extension deliberately does not reproduce:
-    // musl builds, CPU requirements, Docker, older versions.
-    await vscode.env.openExternal(vscode.Uri.parse(bun.docsUrl));
+    await vscode.env.openExternal(vscode.Uri.parse(require('./aidlc/engine-install').DOCS_URL));
   }
 }
 
@@ -222,19 +230,6 @@ async function installV2(root, state) {
   const harness = await chooseHarness(existing);
   if (!harness) return;
 
-  const bun = detectBun();
-  if (!bun.found) {
-    // No longer a question with a way past it: without bun there is nothing worth
-    // installing, so this reports and stops.
-    await handleMissingBun(bun);
-    return;
-  }
-
-  // Read before anything is written, because the install changes what this
-  // reports: aidlc/ file counts and the presence of a git repository are facts
-  // about the project as the user left it.
-  const before = previewInstall(state);
-
   // The progress notification covers the work and nothing else.
   //
   // It used to also contain the completion message, and awaiting that message meant
@@ -253,63 +248,88 @@ async function installV2(root, state) {
       cancellable: false
     },
     async (progress) => {
-      progress.report({ message: installHeadline(harness) });
-      const fetched = await fetchPayload({ harness });
-      if (!fetched.ok) {
-        return { failed: `Could not fetch the AI-DLC v2 payload: ${fetched.text ?? fetched.reason}` };
+      let freshInstallCaveat;
+      // Two steps now, and they are different in kind. The engine is installed once per
+      // MACHINE; the project is configured once per PROJECT. Separating them means a
+      // second project costs seconds rather than a 111MB download.
+      let engine = detectEngine();
+      if (!engine.found) {
+        // Upstream's own installer does the work: it resolves the platform target
+        // including musl, verifies every asset against checksums.txt, verifies release
+        // provenance when the tooling for that is present, and lets the verified binary
+        // lay out the machine. Reimplementing that would mean owning a security boundary
+        // to save a subprocess.
+        progress.report({ message: 'installing the AI-DLC engine (about 110MB)…' });
+        const installed = await installEngine();
+        if (!installed.ok) {
+          return { engineFailed: installed.text ?? installed.reason };
+        }
+        // Only after an install this run. A machine that already had the engine has
+        // whatever PATH arrangement it has been working with, and repeating the caveat
+        // there would be noise.
+        freshInstallCaveat = pathCaveat(installed.binDir);
+        engine = detectEngine();
+        if (!engine.found) {
+          // The installer said it succeeded and the binary is not where it should be.
+          // Reported rather than pressed on with, because the next step would fail in a
+          // way that named the project instead of the machine.
+          return {
+            engineFailed:
+              `The engine reported a successful install of ${installed.version ?? 'AI-DLC'} ` +
+              'but its binary was not found afterwards.'
+          };
+        }
       }
 
-      progress.report({ message: 'writing files…' });
-      const planned = planInstall({
-        payloadEntries: fetched.entries,
-        state,
-        harness,
-        upstreamCommit: fetched.commit
-      });
-      const result = applyPlan({ payloadDir: fetched.payloadDir, root, ops: planned.ops });
-
-      if (!result.ok) {
-        // A partial install is reported with its own count, because the receipt
-        // records what was written and removal can take exactly that back.
+      progress.report({ message: installHeadline(harness) });
+      const configured = await configureProject({ binary: engine.path, root, harness });
+      if (!configured.ok) {
         return {
           failed:
-            `AI-DLC v2 setup failed after writing ${result.written.length} file(s): ` +
-            `${result.text ?? result.reason}. Use "Remove AI-DLC v2" to undo it.`
+            `AI-DLC v2 setup failed: ${configured.text ?? configured.reason}`
         };
       }
 
-      return { planned, result, commit: fetched.commit };
+      return { configured, engine, freshInstallCaveat };
     }
   );
 
+  if (outcome.engineFailed) {
+    await handleEngineInstallFailure(outcome.engineFailed);
+    return;
+  }
   if (outcome.failed) {
     vscode.window.showErrorMessage(outcome.failed);
     return;
   }
-  const { planned, result, commit } = outcome;
+  const { configured, engine, freshInstallCaveat } = outcome;
 
-  // Everything worth saying, said once, after the fact.
+  // What to say, said once, after the fact.
   //
-  // The planner reports what this install did. previewInstall reported what was
-  // here beforehand, and only its `lasting` notes are still true now -- the rest
-  // described a state the install has just changed, or duplicated the planner in
-  // different words.
-  const seen = new Set();
-  const notices = [
-    ...planned.notes.filter((note) => note.level === 'warn'),
-    ...(before.notes ?? []).filter((note) => note.level === 'warn' && note.lasting)
-  ]
-    .map((note) => note.text)
-    .filter((text) => (seen.has(text) ? false : seen.add(text)));
+  // The engine reports its own plan counts and its own outstanding actions, and both are
+  // carried through rather than summarised. `preserve` in particular is the number that
+  // matters on a reinstall: it is the engine saying how many of the project's files it
+  // left alone.
+  const plan = configured.plan;
+  const counts = plan
+    ? `${plan.create} written` +
+      (plan.preserve > 0 ? `, ${plan.preserve} left alone` : '') +
+      (plan.update > 0 ? `, ${plan.update} updated` : '') +
+      (plan.conflict > 0 ? `, ${plan.conflict} in conflict` : '')
+    : undefined;
 
-  // The full sha is in the receipt; the message shows enough to recognise it.
-  // Falls back to whatever was recorded when a ref was used instead of a sha.
-  // A release tag now, a sha before. Abbreviating is only right for a sha; a tag is
-  // already the short form and truncating it would lose the version.
-  const shortCommit = /^[0-9a-f]{7,40}$/.test(commit) ? commit.slice(0, 8) : commit;
   const summary =
-    `AI-DLC v2 installed for ${HARNESS_LABELS[harness] ?? harness} ` +
-    `(${result.written.length} files, upstream ${shortCommit}).`;
+    `AI-DLC v2 ${engine.version ?? ''} set up for ${HARNESS_LABELS[harness] ?? harness}` +
+    (counts ? ` (${counts}).` : '.');
+
+  // Whatever the engine said still needs doing. Left in its own words: these name
+  // machine conditions -- most often that the binary resolves only on an interactive
+  // PATH, which decides whether the workflow's hooks can find it at all -- and this
+  // extension neither fixes nor paraphrases them.
+  const notices = (configured.outstanding ?? []).slice();
+  // Platform-specific, and it decides whether the hooks can find the engine at all, so it
+  // goes with what the engine itself flagged rather than in place of it.
+  if (freshInstallCaveat) notices.push(freshInstallCaveat);
 
   // The step that is easy to miss and blocks everything after it. Kiro reads its
   // agent definitions from the WORKSPACE ROOT's .kiro/agents/, and this install goes
@@ -435,19 +455,39 @@ async function checkV2(folderUri) {
   const root = folderUri.fsPath;
   const state = readInstallState(root);
   const lines = [];
-  const bun = detectBun();
+  const engine = detectEngine();
 
-  const agentFile = path.join(root, '.kiro', 'agents', 'aidlc.json');
-  const hasAgent = fs.existsSync(agentFile);
+  // Either spelling counts. The engine shipped `.kiro/agents/aidlc.json` and now ships
+  // `.kiro/agents/aidlc.md`; a diagnostic that only knew the old name reported MISSING on
+  // a correctly installed current project, which is worse than saying nothing.
+  const agentCandidates = [
+    path.join(root, '.kiro', 'agents', 'aidlc.md'),
+    path.join(root, '.kiro', 'agents', 'aidlc.json')
+  ];
+  const agentFile = agentCandidates.find((candidate) => fs.existsSync(candidate));
+  const hasAgent = Boolean(agentFile);
   const isWorkspace = (vscode.workspace.workspaceFolders ?? []).some(
     (folder) => folder.uri.fsPath === root
   );
 
   lines.push(`Folder: ${root}`);
   lines.push(`Generation detected: ${state.ok ? state.generation : 'unreadable'}`);
-  lines.push(`.kiro/agents/aidlc.json: ${hasAgent ? 'present' : 'MISSING'}`);
+  lines.push(
+    `.kiro/agents/aidlc.{md,json}: ${hasAgent ? `present (${path.basename(agentFile)})` : 'MISSING'}`
+  );
   lines.push(`Open as a Kiro workspace: ${isWorkspace ? 'yes' : 'NO'}`);
-  lines.push(`bun: ${bun.found ? bun.path : 'not found'}`);
+  // The engine, which is what the project's hooks call. bun is deliberately not reported:
+  // the engine states `bun: not-required` itself, and naming it here would send someone to
+  // install something the workflow does not use.
+  lines.push(
+    `AI-DLC engine: ${engine.found ? `${engine.version ?? 'installed'} at ${engine.path}` : 'NOT INSTALLED'}`
+  );
+  if (!engine.found) {
+    lines.push(
+      "  The project's hooks run `aidlc engine adapter <harness>`, so without this the " +
+        'workflow cannot advance. Run "Set up AI-DLC" and pick v2, which installs it.'
+    );
+  }
   lines.push('');
 
   if (!hasAgent) {

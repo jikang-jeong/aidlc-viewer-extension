@@ -24,6 +24,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { GENERATION, detectGeneration } = require('./detect');
+const { readEngineManifest, receiptFromManifest } = require('./engine-manifest');
 
 // Where an install receipt lives. Inside `.kiro/` because that is the tree the
 // installer owns; putting it in `aidlc/` would mean writing into the directory
@@ -130,7 +131,27 @@ function memoryHasContent(root) {
 function readInstallState(root) {
   if (!root) return { ok: false, reason: 'no-root' };
   const { generation, markers } = detectGeneration(root);
-  const receipt = readReceipt(root);
+
+  // This extension's own receipt first, then the engine's.
+  //
+  // The engine performs the install now, and it writes its own inventory rather than this
+  // extension's receipt -- so without the fallback, removal would refuse on every project
+  // the extension had just set up. The engine's record is the better one: it lists what it
+  // owns with a hash, and it deliberately excludes the seed files under `aidlc/`, which is
+  // the same boundary this extension drew by hand.
+  //
+  // Ours is still read first, and still wins, so a project installed by an older build is
+  // removed by exactly the record that build wrote.
+  let receipt = readReceipt(root);
+  let receiptSource = receipt ? 'extension' : undefined;
+  if (!receipt) {
+    const manifest = readEngineManifest(root);
+    const derived = receiptFromManifest(manifest);
+    if (derived) {
+      receipt = derived;
+      receiptSource = 'engine-manifest';
+    }
+  }
   const memory = memoryHasContent(root);
 
   const engineDir = path.join(root, ...ENGINE_DIR);
@@ -146,7 +167,11 @@ function readInstallState(root) {
     // hand or by the upstream instructions has none, and that is a normal state:
     // it means removal cannot be offered, not that something is wrong.
     receipt,
-    installedByExtension: Boolean(receipt),
+    // Which record answered. Shown before a removal, because "this extension installed
+    // it" and "the engine installed it and we are reading its inventory" are different
+    // claims, and the user is about to authorise a delete on the strength of one of them.
+    receiptSource,
+    installedByExtension: receiptSource === 'extension',
     engine,
     // The single most important field. When the project's memory has moved past
     // the seed, a reinstall must not touch `aidlc/` at all.
