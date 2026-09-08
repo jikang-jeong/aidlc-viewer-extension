@@ -207,6 +207,35 @@ into the extension because a snapshot of an actively moving engine goes stale
 between releases, and no dependency is added because the `tar` shipped with macOS,
 Linux and Windows 10 1803+ does the extraction.
 
+**The payload comes from a release, and the version is recorded.**
+
+Upstream restructured on 2026-09-08. `dist/<harness>/`, which held ready-to-copy
+installs, is gone; the repository now carries sources (`core/`, `harness/`), and the two
+files this extension reads -- `stage-graph.json` and `scope-grid.json` -- are not
+committed at all. They are built by a hook and shipped in the release tarball
+`aidlc-runtime-<version>.tar.gz`, laid out as `runtime/<harness>/`.
+
+So a repository tarball no longer contains anything installable. The previous approach
+failed with `tar: */dist/kiro-ide/*: Not found in archive`, and there was no fallback:
+fetching from the repository was the only path.
+
+Two details cost a round of debugging. The release tarball has NO wrapper directory --
+its first entry is `plugins/...` -- where a repository tarball wraps everything in
+`<repo>-<ref>/`, so both the match pattern and `--strip-components` were one level too
+deep. And the asset name carries the version, so it is matched on shape
+(`/^aidlc-runtime-.*\.tar\.gz$/`) rather than by name, with a test that it does not also
+match the platform binaries published beside it.
+
+The receipt now records a release tag rather than a commit sha. That is a better answer
+to "which engine do I have" than a sha was, and it is what upstream itself publishes.
+
+This is the third time in a fortnight that upstream moved the payload: `v2` renamed to
+`main`, `dist/kiro-cli` renamed to `dist/kiro`, and now `dist/` replaced by a release
+asset. The pattern worth carrying forward is that the reader survived all three
+untouched -- 33 stages, 5 phases, 11 scopes, every audit event still known -- because it
+enumerates nothing. What broke each time was the fetch, which is coupling to a layout
+rather than to data.
+
 **The branch is followed, and the commit is recorded.** An install resolves the
 upstream branch to a sha through the GitHub API, downloads that sha, and writes it
 into the receipt.

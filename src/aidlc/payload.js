@@ -2,27 +2,25 @@
 
 // Fetches the upstream v2 payload into a temporary directory.
 //
-// The payload is one subdirectory of a large repository: dist/kiro-ide is 293
-// files and 4.5MB, while the repository is 3,177 files. GitHub serves a tarball
-// per commit, so the whole archive is downloaded once (13MB, ~2s measured) and
-// only that subtree is extracted (~0.24s). The alternative -- a request per file
-// through the contents API -- would be 293 round trips against a rate limit.
+// The payload comes from a GitHub RELEASE asset, not from the repository tree.
+// Upstream restructured on 2026-09-08: `dist/<harness>/`, which held ready-to-copy
+// installs, is gone. The repository now carries sources (`core/`, `harness/`) and the
+// compiled artefacts this extension reads -- stage-graph.json and scope-grid.json --
+// are not committed at all. They are built, and shipped in the release tarball.
 //
-// The commit is resolved from a branch at install time, and reported.
+// So a repository tarball no longer contains anything installable, and the previous
+// approach failed with `tar: */dist/kiro-ide/*: Not found in archive`. Fetching the
+// release asset is now the only way to get a payload without running upstream's build.
 //
-// This tracks upstream rather than pinning, so a person installing today gets the
-// engine as it is today. The cost is real and is the reason this is not silent:
-// two people installing on different days can get engines that behave
-// differently. So the sha the archive actually carried is read back out of it and
-// written into the install receipt, which means a project can always answer which
-// engine it has even though nothing chose that engine in advance.
+// The asset is `aidlc-runtime-<version>.tar.gz`, 12MB, laid out as
+// `runtime/<harness>/`, so extraction is the same shape of operation as before.
 //
-// Two things this deliberately does NOT do. It does not bundle the payload into
-// the extension, because a snapshot of an actively changing engine goes stale
-// between releases. And it adds no runtime dependency: extraction uses the `tar`
-// binary that ships with macOS, Linux and Windows 10 1803 and later, so the
-// extension keeps its zero-dependency footprint rather than taking on a tar
-// implementation to save one subprocess.
+// Two things this deliberately does NOT do. It does not bundle the payload into the
+// extension, because a snapshot of an actively changing engine goes stale between
+// releases. And it adds no runtime dependency: extraction uses the `tar` binary that
+// ships with macOS, Linux and Windows 10 1803 and later, so the extension keeps its
+// zero-dependency footprint rather than taking on a tar implementation to save one
+// subprocess.
 //
 // Pure module: never import `vscode`. Node built-ins and one subprocess only.
 
@@ -32,33 +30,21 @@ const path = require('path');
 const https = require('https');
 const { execFile } = require('child_process');
 
-// Upstream coordinates. The repository is public and the path within it is part of
-// the upstream layout rather than a guess: dist/<harness> is how upstream ships
-// per-harness installs.
+// Upstream coordinates. The prefix is the release tarball's own top-level directory,
+// which is part of upstream's published layout rather than a guess.
 const REPO = 'awslabs/aidlc-workflows';
-const PAYLOAD_PREFIX = 'dist';
+const PAYLOAD_PREFIX = 'runtime';
 
-// The branch this build installs from.
-//
-// Upstream renamed `v2` to `main` on 2026-09-04: the engine that was on a side
-// branch is now the repository's default. GitHub keeps a redirect for the old
-// branch name in its API, but `codeload.github.com/.../tar.gz/v2` returns 404, and
-// the API's commits endpoint answers 422 rather than redirecting — so every install
-// failed with "GitHub has no archive for that commit", which named the wrong thing.
-//
-// Following the branch rather than pinning still holds: an install gets the engine
-// as it is today, and the sha it resolved to is recorded in the receipt so a project
-// can always say which engine it has. The reader survives upstream moving because
-// nothing here enumerates stage slugs, phase names, sensor ids or event names, and
-// anything unrecognised is reported rather than guessed at.
-const UPSTREAM_REF = 'main';
+// Where the release metadata lives. `latest` follows upstream's own notion of the
+// current release rather than this build's guess at one.
+const RELEASE_API = `https://api.github.com/repos/${REPO}/releases/latest`;
 
-// A ref goes into a URL and into an archive path, so it is constrained to what a
-// git ref can legitimately be. This keeps a path traversal, a flag-looking string
-// and a shell fragment out of both.
-const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/;
+// The asset carrying the harness payloads. Matched on shape rather than on an exact
+// name, because the version is in it and upstream bumps that on every release.
+const RUNTIME_ASSET = /^aidlc-runtime-.*\.tar\.gz$/;
 
-// Harnesses this extension installs, mapped to their directory under `dist/`.
+
+// Harnesses this extension installs, mapped to their directory under `runtime/`.
 //
 // A name not on this list is refused rather than attempted, because a wrong path
 // yields an empty extraction that would look like a successful install of nothing.
@@ -78,114 +64,6 @@ const HARNESSES = { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro' };
 
 // A commit has to look like one. Used to check the sha read back out of the
 // archive, and to accept an explicit commit from a caller that wants a fixed one.
-const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/;
-
-// Which commit a ref points at right now.
-//
-// Needed because GitHub does NOT put the sha in the archive when the download is
-// by branch name: asking for `main` yields a root directory named
-// `aidlc-workflows-main`, so the archive cannot say which engine it is. Asking the API
-// first, then downloading that exact sha, makes the install accountable and also
-// removes the window where upstream could push between learning the sha and
-// fetching the code.
-//
-// Redirects are followed, which is not a nicety. When upstream renamed `v2` to
-// `main` the API answered the old name with a redirect while codeload 404'd the
-// tarball outright — so a build that followed the redirect here would have resolved
-// a sha and installed correctly, and this one did not. A rename should cost nothing.
-//
-// `Accept: application/vnd.github.sha` returns the sha as plain text rather than a
-// commit object, so there is no JSON to parse and nothing large to buffer.
-//
-// Every failure resolves to undefined rather than throwing. This request is a
-// nicety: unauthenticated API calls are rate limited, a proxy may allow codeload
-// while blocking api.github.com, and none of that is a reason to refuse an
-// install. The caller falls back to downloading the ref directly.
-function resolveRefCommit(ref, redirectsLeft = MAX_REDIRECTS) {
-  const url = `https://api.github.com/repos/${REPO}/commits/${ref}`;
-  return resolveShaFrom(url, redirectsLeft);
-}
-
-function resolveShaFrom(url, redirectsLeft) {
-  return new Promise((resolve) => {
-    const request = https.get(
-      url,
-      {
-        timeout: REQUEST_TIMEOUT_MS,
-        headers: {
-          Accept: 'application/vnd.github.sha',
-          // GitHub rejects API requests without one.
-          'User-Agent': 'aidlc-viewer'
-        }
-      },
-      (response) => {
-        const status = response.statusCode ?? 0;
-        if (status >= 300 && status < 400 && response.headers.location) {
-          response.resume();
-          if (redirectsLeft <= 0) {
-            resolve(undefined);
-            return;
-          }
-          const next = new URL(response.headers.location, url).toString();
-          resolveShaFrom(next, redirectsLeft - 1).then(resolve);
-          return;
-        }
-        if (status !== 200) {
-          response.resume();
-          resolve(undefined);
-          return;
-        }
-        let body = '';
-        response.setEncoding('utf8');
-        response.on('data', (chunk) => {
-          body += chunk;
-          // A sha is 40 characters. Anything longer is not the answer, and is not
-          // worth accumulating.
-          if (body.length > 200) {
-            response.destroy();
-            resolve(undefined);
-          }
-        });
-        response.on('end', () => {
-          const sha = body.trim().toLowerCase();
-          resolve(COMMIT_PATTERN.test(sha) ? sha : undefined);
-        });
-      }
-    );
-    request.on('timeout', () => {
-      request.destroy();
-      resolve(undefined);
-    });
-    request.on('error', () => resolve(undefined));
-  });
-}
-
-// Which commit the archive carried, when it can say.
-//
-// GitHub names the top-level directory `<repo>-<sha>` for a download by sha, so
-// this confirms what arrived without a second network call. For a download by
-// branch the directory is named after the ref instead, and this returns undefined.
-function resolveArchiveCommit(archivePath) {
-  return new Promise((resolve) => {
-    execFile(
-      'tar',
-      ['-tzf', archivePath],
-      { timeout: EXTRACT_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 },
-      (error, stdout) => {
-        if (error) {
-          resolve(undefined);
-          return;
-        }
-        const first = String(stdout).split('\n', 1)[0] ?? '';
-        const root = first.split('/', 1)[0] ?? '';
-        // Take the trailing segment rather than assuming the repository name, so a
-        // rename upstream does not break this.
-        const sha = root.slice(root.lastIndexOf('-') + 1).toLowerCase();
-        resolve(COMMIT_PATTERN.test(sha) ? sha : undefined);
-      }
-    );
-  });
-}
 
 // Ceilings, so a redirect loop or an unexpectedly huge archive fails with a
 // reason instead of filling the disk or hanging a session.
@@ -193,10 +71,6 @@ const MAX_REDIRECTS = 5;
 const MAX_BYTES = 80 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 60_000;
 const EXTRACT_TIMEOUT_MS = 120_000;
-
-function tarballUrl(commit) {
-  return `https://codeload.github.com/${REPO}/tar.gz/${commit}`;
-}
 
 // Download to a path, following redirects.
 //
@@ -271,9 +145,17 @@ function download(url, destination, redirectsLeft = MAX_REDIRECTS) {
 
 // Extract one subtree of the archive.
 //
-// GitHub archives carry a single top-level directory named `<repo>-<commit>`, so
-// the wanted subtree sits at `*/dist/<harness>/`. `--strip-components=3` removes
-// that wrapper plus `dist/<harness>`, leaving the payload at the destination root.
+// bsdtar (macOS, Windows) and GNU tar (Linux) differ on wildcard flags, so the
+// pattern is passed in a form both accept and a failure reports tar's own stderr
+// rather than a guess about which implementation was in play.
+// Extract one harness's subtree from the release archive.
+//
+// The release tarball has NO wrapper directory: its first entry is `plugins/...`, so
+// the wanted subtree sits at `runtime/<harness>/` from the root. A repository tarball
+// does wrap everything in `<repo>-<ref>/`, which is why the pattern and the strip
+// count were one deeper before and why they had to change with the source.
+// `--strip-components=2` removes `runtime/<harness>`, leaving the payload at the
+// destination root.
 //
 // bsdtar (macOS, Windows) and GNU tar (Linux) differ on wildcard flags, so the
 // pattern is passed in a form both accept and a failure reports tar's own stderr
@@ -286,8 +168,8 @@ function extract(archivePath, destination, harness) {
       [
         '-xzf', archivePath,
         '-C', destination,
-        '--strip-components=3',
-        `*/${PAYLOAD_PREFIX}/${subdir}/*`
+        '--strip-components=2',
+        `${PAYLOAD_PREFIX}/${subdir}/*`
       ],
       { timeout: EXTRACT_TIMEOUT_MS },
       (error, _stdout, stderr) => {
@@ -320,6 +202,102 @@ function topLevelEntries(dir) {
   }
 }
 
+// Which release to install, and where its payload lives.
+//
+// Returns the tag and the asset URL, so the caller records what a project got. The
+// tag replaces the commit sha as the thing written into the receipt: upstream now
+// publishes versioned releases, and a version is a better answer to "which engine do
+// I have" than a sha was.
+//
+// Every failure resolves rather than throwing, and carries a reason a person can act
+// on. An install that cannot reach the release API is a different problem from one
+// whose release carries no runtime asset.
+function resolveRelease(redirectsLeft = MAX_REDIRECTS) {
+  return readJsonFrom(RELEASE_API, redirectsLeft).then((release) => {
+    if (!release) {
+      return { ok: false, reason: 'release-unreadable' };
+    }
+    const assets = Array.isArray(release.assets) ? release.assets : [];
+    const asset = assets.find((entry) => entry && RUNTIME_ASSET.test(String(entry.name)));
+    if (!asset || typeof asset.browser_download_url !== 'string') {
+      // Named separately because a release that exists but ships no runtime tarball
+      // means upstream changed how it publishes, not that the network is broken.
+      return {
+        ok: false,
+        reason: 'no-runtime-asset',
+        text:
+          `Release ${release.tag_name ?? '(untagged)'} of ${REPO} carries no ` +
+          'aidlc-runtime tarball. Upstream may have changed how it publishes the engine.'
+      };
+    }
+    return {
+      ok: true,
+      tag: typeof release.tag_name === 'string' ? release.tag_name : undefined,
+      url: asset.browser_download_url,
+      bytes: asset.size
+    };
+  });
+}
+
+// A JSON body from the API, following redirects, resolving to undefined on anything
+// that is not a 200 with parseable JSON. Redirects are followed because a repository
+// rename answers with one, and a rename should cost nothing.
+function readJsonFrom(url, redirectsLeft) {
+  return new Promise((resolve) => {
+    const request = https.get(
+      url,
+      {
+        timeout: REQUEST_TIMEOUT_MS,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          // GitHub rejects API requests without one.
+          'User-Agent': 'aidlc-viewer'
+        }
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        if (status >= 300 && status < 400 && response.headers.location) {
+          response.resume();
+          if (redirectsLeft <= 0) {
+            resolve(undefined);
+            return;
+          }
+          readJsonFrom(new URL(response.headers.location, url).toString(), redirectsLeft - 1)
+            .then(resolve);
+          return;
+        }
+        if (status !== 200) {
+          response.resume();
+          resolve(undefined);
+          return;
+        }
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          body += chunk;
+          // A release body is a few KB. A megabyte means something else answered.
+          if (body.length > 1024 * 1024) {
+            response.destroy();
+            resolve(undefined);
+          }
+        });
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch {
+            resolve(undefined);
+          }
+        });
+      }
+    );
+    request.on('timeout', () => {
+      request.destroy();
+      resolve(undefined);
+    });
+    request.on('error', () => resolve(undefined));
+  });
+}
+
 // How a failed fetch reads to a person.
 //
 // Separated from download() because only the caller knows whether it asked for a
@@ -347,49 +325,27 @@ function describeFetchFailure(failure, { target, pinned }) {
 // does not care gets the current engine. `commit` still works and takes
 // precedence, which keeps a reproducible install available for a bug report or a
 // bisect without a second code path.
-async function fetchPayload({ ref, commit, harness, workDir }) {
+async function fetchPayload({ release, harness, workDir }) {
   if (!HARNESSES[harness]) {
     return { ok: false, reason: 'unknown-harness', text: `No payload path known for "${harness}".` };
   }
 
-  let target;
-  let requestedRef;
-  let pinned = false;
-  if (commit !== undefined) {
-    if (typeof commit !== 'string' || !COMMIT_PATTERN.test(commit)) {
-      return {
-        ok: false,
-        reason: 'bad-commit',
-        text: 'A full or short commit sha is required when a commit is given.'
-      };
-    }
-    target = commit;
-    pinned = true;
-  } else {
-    requestedRef = ref ?? UPSTREAM_REF;
-    if (typeof requestedRef !== 'string' || !REF_PATTERN.test(requestedRef)) {
-      return {
-        ok: false,
-        reason: 'bad-ref',
-        text: 'A branch or tag name is required, and this one is not usable in a URL.'
-      };
-    }
-    // Resolve the ref to a sha and download that, so the install can name the
-    // engine it got. When resolution is unavailable the ref is downloaded directly
-    // rather than the install being refused.
-    target = (await resolveRefCommit(requestedRef)) ?? requestedRef;
-  }
+  // `release` lets a caller install an exact published version, for reproducing a
+  // report without a second code path through this module. Without it, upstream's
+  // own latest is used.
+  const found = release ?? (await resolveRelease());
+  if (!found.ok) return { ...found };
 
   const base = workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-payload-'));
   const archive = path.join(base, 'upstream.tar.gz');
   const out = path.join(base, 'payload');
   fs.mkdirSync(out, { recursive: true });
 
-  const downloaded = await download(tarballUrl(target), archive);
+  const downloaded = await download(found.url, archive);
   if (!downloaded.ok) {
     return {
       ...downloaded,
-      text: describeFetchFailure(downloaded, { target, pinned }),
+      text: describeFetchFailure(downloaded, { target: found.tag, pinned: true }),
       workDir: base
     };
   }
@@ -402,17 +358,12 @@ async function fetchPayload({ ref, commit, harness, workDir }) {
     return {
       ok: false,
       reason: 'empty-payload',
-      text: `The archive contained no ${PAYLOAD_PREFIX}/${HARNESSES[harness]} directory at ${target}.`,
+      text:
+        `Release ${found.tag ?? '(untagged)'} carries no ` +
+        `${PAYLOAD_PREFIX}/${HARNESSES[harness]} directory. Upstream may have renamed it.`,
       workDir: base
     };
   }
-
-  // Prefer what the archive itself says, then what was downloaded, so the recorded
-  // commit is a fact about the bytes on disk rather than about the request.
-  const resolved =
-    (COMMIT_PATTERN.test(target) ? target : undefined) ??
-    (await resolveArchiveCommit(archive)) ??
-    target;
 
   return {
     ok: true,
@@ -420,13 +371,12 @@ async function fetchPayload({ ref, commit, harness, workDir }) {
     payloadDir: out,
     entries,
     bytes: downloaded.bytes,
-    ref: requestedRef,
-    commit: resolved,
-    // True when the commit was chosen by the caller rather than followed from a
-    // ref. Also true in effect when a ref resolved, but this reports intent.
-    pinned,
-    // The install has a sha to record, rather than only a branch name.
-    identified: COMMIT_PATTERN.test(resolved),
+    // The published version, which is what goes into the receipt. It replaces the
+    // commit sha: upstream publishes versioned releases now, and a version answers
+    // "which engine do I have" better than a sha did.
+    release: found.tag,
+    commit: found.tag,
+    identified: Boolean(found.tag),
     harness
   };
 }
@@ -434,16 +384,13 @@ async function fetchPayload({ ref, commit, harness, workDir }) {
 module.exports = {
   REPO,
   PAYLOAD_PREFIX,
-  UPSTREAM_REF,
+  RELEASE_API,
+  RUNTIME_ASSET,
+  resolveRelease,
   HARNESSES,
-  COMMIT_PATTERN,
-  REF_PATTERN,
   MAX_BYTES,
-  tarballUrl,
   download,
   extract,
-  resolveRefCommit,
-  resolveArchiveCommit,
   describeFetchFailure,
   topLevelEntries,
   fetchPayload

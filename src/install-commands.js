@@ -28,7 +28,7 @@ const path = require('path');
 const { readInstallState, previewInstall, RECEIPT_PATH } = require('./aidlc/install-state');
 const { planInstall, planRemoval } = require('./aidlc/install-plan');
 const { applyPlan, applyRemoval } = require('./aidlc/install-apply');
-const { fetchPayload, UPSTREAM_REF, REPO, HARNESSES } = require('./aidlc/payload');
+const { fetchPayload, REPO, HARNESSES } = require('./aidlc/payload');
 const { detectBun } = require('./aidlc/bun-check');
 const { readProject } = require('./aidlc/index');
 
@@ -184,7 +184,7 @@ async function chooseHarness(existing) {
 // are carried by the completion message, where they can be read without standing
 // between the user and the thing they asked for.
 function installHeadline(harness) {
-  return `installing for ${HARNESS_LABELS[harness] ?? harness} from ${REPO}@${UPSTREAM_REF}`;
+  return `installing for ${HARNESS_LABELS[harness] ?? harness} from the latest ${REPO} release`;
 }
 
 // The setup command. Asks which generation, then routes.
@@ -304,6 +304,8 @@ async function installV2(root, state) {
 
   // The full sha is in the receipt; the message shows enough to recognise it.
   // Falls back to whatever was recorded when a ref was used instead of a sha.
+  // A release tag now, a sha before. Abbreviating is only right for a sha; a tag is
+  // already the short form and truncating it would lose the version.
   const shortCommit = /^[0-9a-f]{7,40}$/.test(commit) ? commit.slice(0, 8) : commit;
   const summary =
     `AI-DLC v2 installed for ${HARNESS_LABELS[harness] ?? harness} ` +

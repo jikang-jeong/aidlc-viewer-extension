@@ -68,10 +68,18 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 
 **AI-DLC v2 needs [bun](https://bun.com/docs/installation).** Its engine runs through bun, so setup stops and hands you the install command rather than leaving you a project whose gates never fire. v1 needs nothing and works offline.
 
-**v1 is installed from a snapshot inside the extension. v2 is downloaded** from the default branch of [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows), and the commit it resolved to is recorded in the project so you can always tell which engine you have.
+**v1 is installed from a snapshot inside the extension. v2 is downloaded** from the latest published release of [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows), and the version it installed is recorded in the project so you can always tell which engine you have.
 
 **Nothing is read out of your Markdown.** Progress comes from the project's structure, so an artifact in an unexpected format cannot put your position wrong, and anything the extension does not recognise is reported rather than guessed at.
 ## What's New
+
+### 0.0.24
+
+- **v2 setup works again.** Upstream restructured: the ready-to-install directories it
+  used to publish in the repository are gone, and the files the extension reads are
+  now built rather than committed. v2 installs from the published release instead, and
+  the version it installed is recorded in your project — a version rather than a commit,
+  which is a clearer answer to which engine you have.
 
 ### 0.0.23
 

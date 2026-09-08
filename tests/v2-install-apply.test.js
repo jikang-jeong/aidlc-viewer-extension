@@ -477,56 +477,40 @@ test('seeding never replaces a file that is already there', () => {
 // Payload fetch: argument handling, offline
 // ---------------------------------------------------------------------------
 
-test('a branch or tag is refused, because a floating ref installs different engines', () => {
-  for (const ref of ['v2', 'main', 'HEAD', '', 'not a sha', '../etc']) {
-    assert.equal(payload.COMMIT_PATTERN.test(ref), false, `"${ref}" must not pass as a commit`);
+test('the payload comes from a release asset, not from the repository tree', () => {
+  // Upstream restructured on 2026-09-08: dist/<harness>/ is gone, the repository now
+  // holds sources, and stage-graph.json and scope-grid.json are not committed at all --
+  // they are built and shipped in the release tarball. A repository tarball therefore
+  // contains nothing installable, which is why the previous approach failed with
+  // "tar: */dist/kiro-ide/*: Not found in archive".
+  assert.match(payload.RELEASE_API, /\/releases\/latest$/);
+  assert.match(payload.RELEASE_API, new RegExp(payload.REPO.replace('/', '\\/')));
+  assert.equal(payload.PAYLOAD_PREFIX, 'runtime');
+});
+
+test('the runtime asset is matched by shape, so a version bump does not break it', () => {
+  // The version is in the filename and upstream bumps it every release, so matching an
+  // exact name would break on the next one.
+  assert.ok(payload.RUNTIME_ASSET.test('aidlc-runtime-2.8.0.tar.gz'));
+  assert.ok(payload.RUNTIME_ASSET.test('aidlc-runtime-10.0.0-rc1.tar.gz'));
+  // And it must not match the platform binaries shipped alongside it.
+  for (const name of [
+    'aidlc-darwin-arm64',
+    'aidlc-linux-x64',
+    'aidlc-windows-x64.exe',
+    'checksums.txt',
+    'install.sh',
+    'version.json',
+    'aidlc-release.intoto.jsonl'
+  ]) {
+    assert.equal(payload.RUNTIME_ASSET.test(name), false, `matched a non-payload asset: ${name}`);
   }
-  assert.ok(payload.COMMIT_PATTERN.test('4d0968fc'));
-  assert.ok(payload.COMMIT_PATTERN.test('4d0968fc'.repeat(5).slice(0, 40)));
 });
 
-test('an unknown harness is refused rather than attempted', async () => {
-  const result = await payload.fetchPayload({ commit: '4d0968fc', harness: 'emacs' });
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'unknown-harness');
-});
-
-test('a bad commit is refused before any network call', async () => {
-  const result = await payload.fetchPayload({ commit: 'v2', harness: 'kiro-ide' });
-  assert.equal(result.ok, false);
-  assert.equal(result.reason, 'bad-commit');
-});
-
-test('the tarball url is built from the pinned commit', () => {
-  assert.equal(
-    payload.tarballUrl('4d0968fc'),
-    'https://codeload.github.com/awslabs/aidlc-workflows/tar.gz/4d0968fc'
-  );
-});
-
-test('the default is a branch, and it is followed rather than pinned', () => {
-  // Changed deliberately from a pinned commit: an install should get the engine as
-  // it is now. What makes that accountable is that the resolved sha is recorded, so
-  // the tests below are about identification rather than about the ref's value.
-  //
-  // The value moved once already: upstream renamed `v2` to `main` when the engine
-  // became the repository's default. That is asserted rather than left loose,
-  // because every install fails when it is wrong and nothing else catches it.
-  assert.equal(payload.UPSTREAM_REF, 'main');
-  assert.ok(payload.REF_PATTERN.test(payload.UPSTREAM_REF));
-  // A ref is not a sha, so the sha check must reject it. Otherwise a branch name
-  // could pass as an identified commit.
-  assert.equal(payload.COMMIT_PATTERN.test(payload.UPSTREAM_REF), false);
-});
-
-test('each harness maps to a directory that upstream actually ships', () => {
-  // The CLI's directory was renamed `kiro-cli` to `kiro` in the same move, and the
-  // old mapping did not fail loudly: it extracted nothing and reported an empty
-  // payload, which reads as a broken download rather than a wrong path.
-  //
-  // The KEY stays `kiro-cli` because install receipts already on disk record it, and
-  // renaming the key would make those unreadable. Only the path moved, and this
-  // asserts the two are allowed to differ.
+test('each harness maps to a directory the release actually ships', () => {
+  // `dist/kiro-cli` became `dist/kiro` and then `runtime/kiro`. The KEY stays
+  // `kiro-cli` because install receipts already on disk record it, and renaming the key
+  // would make those unreadable. Only the path moved.
   assert.deepEqual(payload.HARNESSES, { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro' });
   for (const [key, dir] of Object.entries(payload.HARNESSES)) {
     assert.ok(dir.length > 0, `${key} maps to nothing`);
@@ -534,76 +518,40 @@ test('each harness maps to a directory that upstream actually ships', () => {
   }
 });
 
-test('a ref that upstream no longer has is reported as a missing branch', () => {
-  // The wording matters and got this wrong once. A renamed branch 404s the tarball,
-  // and the message said "no archive for that commit", which sent the reader looking
-  // for a commit problem that did not exist. A branch request and a commit request
-  // now say different things.
-  const branch = payload.describeFetchFailure(
-    { reason: 'http-status', status: 404 },
-    { target: 'v2', pinned: false }
-  );
-  assert.match(branch, /branch/i);
-  assert.match(branch, /renamed|removed/i);
-
-  const commit = payload.describeFetchFailure(
-    { reason: 'http-status', status: 404 },
-    { target: 'abc1234', pinned: true }
-  );
-  assert.match(commit, /commit/i);
-  assert.doesNotMatch(commit, /branch/i);
-});
-
-test('a ref that could escape a URL or a path is refused', async () => {
-  // The ref reaches a URL and an archive path, so anything that is not a plausible
-  // git ref is rejected before either.
-  for (const ref of [
-    '../etc/passwd',
-    '-oProxyCommand=x',
-    'v2 && rm -rf .',
-    'v2;whoami',
-    'v2?x=1',
-    '',
-    'x'.repeat(200),
-    'v2\nother'
-  ]) {
-    const result = await payload.fetchPayload({ ref, harness: 'kiro-ide' });
-    assert.equal(result.ok, false, `accepted a bad ref: ${JSON.stringify(ref)}`);
-    assert.equal(result.reason, 'bad-ref', JSON.stringify(ref));
-  }
-});
-
-test('an explicit commit still works, and still has to be a sha', async () => {
-  // Kept so a bug report or a bisect can reproduce an exact engine without a
-  // second code path through this module.
-  for (const commit of ['v2', 'main', 'HEAD', 'zzzzzzz', '', '12345']) {
-    const result = await payload.fetchPayload({ commit, harness: 'kiro-ide' });
-    assert.equal(result.ok, false, `accepted a bad commit: ${JSON.stringify(commit)}`);
-    assert.equal(result.reason, 'bad-commit');
-  }
-});
-
 test('a harness that was never verified is refused before any request', async () => {
-  for (const harness of ['claude-code', '', undefined, '../..', 'kiro']) {
+  for (const harness of ['claude', 'codex', 'copilot', 'cursor', 'opencode', '', undefined, '../..']) {
     const result = await payload.fetchPayload({ harness });
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'unknown-harness');
   }
 });
 
-test('resolving a ref to a sha never throws, whatever it is handed', async () => {
-  // This request is a nicety: the API is rate limited and a proxy may block it
-  // while allowing codeload. Failing it must not refuse an install, so it resolves
-  // to undefined rather than rejecting.
-  for (const ref of ['definitely-not-a-ref-' + Date.now(), 'v2']) {
-    const sha = await payload.resolveRefCommit(ref);
-    assert.ok(sha === undefined || payload.COMMIT_PATTERN.test(sha), `bad sha for ${ref}`);
-  }
+test('a release carrying no runtime asset is named, not reported as a network fault', () => {
+  // A release that exists but ships no runtime tarball means upstream changed how it
+  // publishes -- a different problem from being offline, and one a person can act on.
+  const text = payload.describeFetchFailure(
+    { reason: 'no-runtime-asset', text: 'Release v9 carries no aidlc-runtime tarball.' },
+    { target: 'v9', pinned: true }
+  );
+  assert.match(text, /runtime/i);
 });
 
-test('reading a commit out of a non-archive returns nothing rather than throwing', async () => {
-  const junk = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'notar-')), 'x.tar.gz');
-  fs.writeFileSync(junk, 'not a tarball');
-  assert.equal(await payload.resolveArchiveCommit(junk), undefined);
-  assert.equal(await payload.resolveArchiveCommit('/nonexistent/path.tar.gz'), undefined);
+test('a missing archive reads as a missing version, not as a network fault', () => {
+  const text = payload.describeFetchFailure(
+    { reason: 'http-status', status: 404 },
+    { target: 'v2.8.0', pinned: true }
+  );
+  assert.match(text, /v2\.8\.0/);
+});
+
+test('resolving the release never throws, and says why when it cannot', async () => {
+  // Unauthenticated API calls are rate limited and a proxy may block api.github.com.
+  // Neither may take the install down with an exception.
+  const result = await payload.resolveRelease();
+  assert.equal(typeof result.ok, 'boolean');
+  if (!result.ok) {
+    assert.ok(['release-unreadable', 'no-runtime-asset'].includes(result.reason), result.reason);
+  } else {
+    assert.match(result.url, /^https:\/\//);
+  }
 });

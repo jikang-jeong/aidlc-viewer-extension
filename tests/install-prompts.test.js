@@ -280,7 +280,6 @@ test('the progress notification ends before the completion message appears', asy
     modules: {
       './aidlc/bun-check': { detectBun: () => ({ found: true, path: '/fake/bun' }) },
       './aidlc/payload': {
-        UPSTREAM_REF: 'v2',
         REPO: 'awslabs/aidlc-workflows',
         HARNESSES: { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro-cli' },
         fetchPayload: async () => ({
