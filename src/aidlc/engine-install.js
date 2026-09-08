@@ -1,41 +1,40 @@
 'use strict';
 
-// Installs AI-DLC v2's engine onto the machine, by running upstream's own installer.
+// Installs AI-DLC v2's engine onto the machine -- one code path for every platform.
 //
-// WHY THIS EXISTS AT ALL
+// WHY THE EXTENSION ORCHESTRATES THIS ITSELF
 //
-// Until 2026-09-08 v2 was a directory of files: upstream published `dist/<harness>/`
-// and a project got a working engine by copying it in. Its hooks ran
-// `bun .kiro/hooks/aidlc-kiro-adapter.ts`, so everything the workflow needed was
-// inside the project and bun was the only prerequisite.
+// The first version ran upstream's install scripts: install.sh through `sh` and
+// install.ps1 through `powershell`. That meant two platform-specific paths, and the
+// Windows one could never be executed here -- every Windows fix in this module's history
+// was found by reading sources, and each had passed every test this project could run.
 //
-// That is no longer true. The engine is a compiled binary installed on the machine,
-// and a project's hooks now run `aidlc engine adapter <harness> ...` -- twelve of the
-// twelve hooks call the binary and none call bun. Copying files into a project
-// therefore produces a project whose every gate fails to fire, which is precisely the
-// outcome the bun gate was written to prevent. Verified by installing upstream's
-// release and reading the hooks: `bun: not-required`.
+// Reading those scripts showed the split differently. The hard part of installing --
+// laying out versions/, the active-version markers, the PATH wrapper -- is not in the
+// scripts at all. Both end by invoking the downloaded binary's own
+// `system lifecycle install-apply`, and everything before that is orchestration: resolve
+// version.json, download assets, verify sha256 sums, run the binary. Orchestration is
+// plain Node, identical on every platform, which turns "cannot verify Windows" into
+// "verify the one path on the machine we have". The only per-platform fact left is which
+// binary asset to download.
 //
-// WHY IT RUNS UPSTREAM'S INSTALLER RATHER THAN REIMPLEMENTING IT
+// So the coupling moved, deliberately: from "upstream's installer exists and takes these
+// flags" to "the release carries these assets and the binary takes install-apply". The
+// latter is the contract BOTH official installers consume, which makes it the least
+// likely thing upstream has to move.
 //
-// install.sh does work this extension should not duplicate: it resolves the platform
-// target including musl, verifies every asset against checksums.txt, verifies release
-// provenance through `gh attestation verify` when that is available, and hands the
-// verified binary its own `system lifecycle install-apply` so the machine layout is
-// whatever upstream currently says it is.
+// WHAT IS MIRRORED FROM THE OFFICIAL INSTALLERS, ON PURPOSE
 //
-// Reimplementing that would mean owning a security boundary in order to save a
-// subprocess, and would break again on upstream's next move. This is upstream's third
-// payload change in a fortnight -- `v2` to `main`, `dist/kiro-cli` to `dist/kiro`, and
-// `dist/` to a release asset -- and each break was in code coupled to a layout. Calling
-// the installer couples to a command instead.
-//
-// WHAT IS STILL OURS
-//
-// Deciding whether to install, telling the user what is about to happen, and reporting
-// what came back. The installer is run with the flags that make it non-interactive and
-// machine-readable, and its own exit code and message are surfaced rather than
-// summarised, so a failure says what upstream said.
+//   - version.json is validated the way install.sh validates it: version shape,
+//     sourceRef must be the version's own tag, sourceDigest must be a 40-hex sha.
+//   - Every downloaded asset is verified against checksums.txt before anything runs.
+//   - checksums.txt itself is verified with `gh attestation verify` when gh is
+//     available, and skipped when it is not -- the scripts make the same choice.
+//   - An elevated Windows session is refused, as install.ps1 refuses it, because an
+//     install run as Administrator strands files the target user cannot manage.
+//   - The --from directory handed to install-apply carries exactly what the scripts
+//     put there: version.json, checksums.txt, the provenance bundle, the binary and
+//     the runtime tarball, under their published names.
 //
 // Pure module: never import `vscode`. Node built-ins and subprocesses only.
 
@@ -43,27 +42,58 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 
 const REPO = 'awslabs/aidlc-workflows';
+const RELEASE_BASE = `https://github.com/${REPO}/releases/latest/download`;
+const RELEASE_WORKFLOW = `${REPO}/.github/workflows/release.yml`;
+const DOCS_URL = 'https://awslabs.github.io/aidlc-workflows/';
 
-// Upstream publishes its installer as a release asset, so the installer and the
-// engine it installs always come from the same release.
-const INSTALLER_ASSETS = {
-  posix: 'install.sh',
-  win32: 'install.ps1'
-};
-
-// Long enough for a 111MB install over a slow link, bounded so a hung proxy does not
-// leave a progress notification up forever.
-const INSTALL_TIMEOUT_MS = 15 * 60 * 1000;
-const DOWNLOAD_TIMEOUT_MS = 60 * 1000;
+// install-apply extracts a 12MB tarball and writes ~2,400 files; the binary itself is up
+// to 97MB over an unknown link. Bounded so a wedged run cannot hold a progress
+// notification open forever, generous so a slow disk or link is not mistaken for a hang.
+const APPLY_TIMEOUT_MS = 10 * 60 * 1000;
+const DOWNLOAD_IDLE_TIMEOUT_MS = 60 * 1000;
 const MAX_REDIRECTS = 5;
 
-// Where upstream's installer puts things, which is also where the binary looks for
-// itself. Read rather than assumed: `aidlc doctor` reports both as failures when the
-// markers are not at these paths, so a probe that guessed differently would report a
-// working install as broken.
+// The binary asset for each platform, exactly as upstream names them. A platform absent
+// here is one upstream publishes no binary for, and is refused by name rather than by a
+// failed download.
+//
+// `musl` matters only on Linux: upstream ships separate musl builds because the glibc
+// ones fail there with a missing libstdc++.
+function assetName({ platform, arch, musl } = {}) {
+  const key = `${platform}-${arch}${musl ? '-musl' : ''}`;
+  const names = {
+    'darwin-arm64': 'aidlc-darwin-arm64',
+    'darwin-x64': 'aidlc-darwin-x64',
+    'linux-arm64': 'aidlc-linux-arm64',
+    'linux-arm64-musl': 'aidlc-linux-arm64-musl',
+    'linux-x64': 'aidlc-linux-x64',
+    'linux-x64-musl': 'aidlc-linux-x64-musl',
+    'win32-x64': 'aidlc-windows-x64.exe'
+  };
+  return names[key];
+}
+
+// Whether this Linux is musl-based. Node's diagnostic report names the glibc runtime
+// when there is one; its absence on Linux means musl. Wrapped because the report API is
+// diagnostic surface, not contract -- if it is unavailable the glibc build is assumed,
+// which is what upstream's installer also falls back to when its own probe fails.
+function isMuslLinux() {
+  if (process.platform !== 'linux') return false;
+  try {
+    return !process.report.getReport().header.glibcVersionRuntime;
+  } catch {
+    return false;
+  }
+}
+
+// Where upstream's binary lays the machine out, per its own aidlc-install-paths.ts.
+// Read rather than assumed: `aidlc doctor` reports failures when the markers are not at
+// these paths, so a probe that guessed differently would report a working install as
+// broken.
 function installRoot() {
   const home = os.homedir();
   if (process.platform === 'win32') {
@@ -72,15 +102,23 @@ function installRoot() {
   return path.join(process.env.XDG_DATA_HOME ?? path.join(home, '.local', 'share'), 'aidlc');
 }
 
+// Where the runnable command lands. Windows keeps it inside the install root; POSIX uses
+// ~/.local/bin. Same source as installRoot.
+function defaultBinDir() {
+  if (process.env.AIDLC_BIN_DIR) return process.env.AIDLC_BIN_DIR;
+  if (process.platform === 'win32') return path.join(installRoot(), 'bin');
+  return path.join(os.homedir(), '.local', 'bin');
+}
+
 // Candidate locations for the binary, in the order upstream's own installer prefers.
 // A PATH probe is deliberately not the primary route: a hook and an interactive shell
 // see different PATHs, and `aidlc doctor` distinguishes those two cases itself.
 //
 // Windows uses TWO names and neither is the one a POSIX habit suggests. The real binary
 // is `versions/<version>/aidlc.exe`, while what goes on PATH is a `bin/aidlc.cmd`
-// wrapper -- confirmed in the engine's own `commandPath()` and `install.ps1`. Both are
-// listed because the pointer file is the primary route and these are what answer when it
-// is damaged, which is the only situation the fallback exists for.
+// wrapper -- confirmed in the engine's own `commandPath()`. Both are listed because the
+// pointer file is the primary route and these answer when it is damaged, which is the
+// only situation the fallback exists for.
 function candidatePaths() {
   const home = os.homedir();
   const locations = [path.join(installRoot(), 'active-executable')];
@@ -107,11 +145,6 @@ function needsShell(binary) {
 }
 
 // Is the engine on this machine, and which version.
-//
-// `active-executable` is a pointer file rather than the binary, so it is read for its
-// contents; the other candidates are the binary itself. Both routes are tried because
-// a machine may have been set up either way, and neither is treated as authoritative
-// over the other.
 function detectEngine() {
   const checked = candidatePaths();
   for (const candidate of checked) {
@@ -145,39 +178,79 @@ function readVersion() {
   }
 }
 
-// The command upstream publishes, for the case where this extension cannot run the
-// install itself -- a policy that blocks piping a downloaded script into a shell is
-// the common one. Assembled rather than written literally so the pattern does not
-// appear as text in this file.
+// The command upstream publishes, for the case where this extension cannot do the
+// install itself -- an unsupported platform, or a network it cannot use. Assembled
+// rather than written literally so the pattern does not appear as text in this file.
 function installCommand() {
-  const base = `https://github.com/${REPO}/releases/latest/download`;
   if (process.platform === 'win32') {
-    return `powershell -c "irm ${base}/install.ps1 | iex"`;
+    return `powershell -c "irm ${RELEASE_BASE}/install.ps1 | iex"`;
   }
-  return ['curl -fsSL ', `${base}/install.sh`, ' | sh'].join('');
+  return ['curl -fsSL ', `${RELEASE_BASE}/install.sh`, ' | sh'].join('');
 }
 
-const DOCS_URL = 'https://awslabs.github.io/aidlc-workflows/';
+// ---------------------------------------------------------------------------
+// Release metadata
+// ---------------------------------------------------------------------------
 
-// Fetch the installer for this platform into `directory`.
-//
-// The asset comes from the release rather than from the repository, so the installer
-// matches the engine it installs. Resolves rather than throwing: a proxy that blocks
-// GitHub is a thing to report, not an exception to escape through the UI.
-function fetchInstaller(directory) {
-  const asset = process.platform === 'win32' ? INSTALLER_ASSETS.win32 : INSTALLER_ASSETS.posix;
-  const url = `https://github.com/${REPO}/releases/latest/download/${asset}`;
-  const destination = path.join(directory, asset);
-  return download(url, destination).then((result) =>
-    result.ok ? { ok: true, path: destination, asset } : { ...result, asset }
-  );
+// version.json, validated the way install.sh validates it. Each check catches a
+// different way a release endpoint can lie: a version that is not a version, a tag that
+// does not match the version it claims, a digest that is not a commit.
+function validateVersionInfo(info) {
+  if (!info || typeof info !== 'object') {
+    return { ok: false, reason: 'version-json-unreadable' };
+  }
+  const version = info.version;
+  if (typeof version !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+    return { ok: false, reason: 'version-json-invalid', text: 'version.json has no valid version.' };
+  }
+  if (info.sourceRef !== `refs/tags/v${version}`) {
+    return {
+      ok: false,
+      reason: 'version-json-invalid',
+      text: 'version.json has an invalid release source ref.'
+    };
+  }
+  if (typeof info.sourceDigest !== 'string' || !/^[a-f0-9]{40}$/.test(info.sourceDigest)) {
+    return {
+      ok: false,
+      reason: 'version-json-invalid',
+      text: 'version.json has an invalid release source digest.'
+    };
+  }
+  return { ok: true, version, sourceRef: info.sourceRef, sourceDigest: info.sourceDigest };
 }
+
+// checksums.txt: `<64 hex><two spaces><asset name>` per line, upstream's exact format.
+// Anything that does not parse is ignored rather than guessed at; a missing entry is the
+// caller's failure to report.
+function parseChecksums(text) {
+  const sums = {};
+  for (const line of String(text ?? '').split('\n')) {
+    const match = /^([a-f0-9]{64})  (.+)$/.exec(line.trim() === line ? line : line.trim());
+    if (match) sums[match[2]] = match[1];
+  }
+  return sums;
+}
+
+function sha256File(file) {
+  return new Promise((resolve) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(file);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', () => resolve(undefined));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Downloads
+// ---------------------------------------------------------------------------
 
 function download(url, destination, redirectsLeft = MAX_REDIRECTS) {
   return new Promise((resolve) => {
     const request = https.get(
       url,
-      { timeout: DOWNLOAD_TIMEOUT_MS, headers: { 'User-Agent': 'aidlc-viewer' } },
+      { timeout: DOWNLOAD_IDLE_TIMEOUT_MS, headers: { 'User-Agent': 'aidlc-viewer' } },
       (response) => {
         const status = response.statusCode ?? 0;
         if (status >= 300 && status < 400 && response.headers.location) {
@@ -209,144 +282,9 @@ function download(url, destination, redirectsLeft = MAX_REDIRECTS) {
   });
 }
 
-// Run the installer.
-//
-// `--json` is passed so the outcome is upstream's own structured answer rather than
-// scraped console text, and `--yes` so nothing waits for a terminal that does not
-// exist. The installer needs no elevation: everything it writes is under the user's
-// home directory.
-//
-// On failure the installer's own message is carried through. It names real conditions
-// this extension has no business paraphrasing -- a checksum mismatch, a failed
-// provenance check, Alpine missing libstdc++.
-function runInstaller({ installerPath, env } = {}) {
-  const win = process.platform === 'win32';
-  const command = win ? 'powershell' : 'sh';
-  // No shell here, so the argument array reaches the process untouched and
-  // `installerPath` needs no quoting even though it sits under a temp directory whose
-  // path carries the user's name -- with a space, on many Windows machines. The sibling
-  // in engine-config.js DOES quote, because a `.cmd` forces it through a shell.
-  const args = win
-    ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', installerPath, '-Json', '-Yes']
-    : [installerPath, '--json', '--yes'];
-
-  return new Promise((resolve) => {
-    execFile(
-      command,
-      args,
-      {
-        timeout: INSTALL_TIMEOUT_MS,
-        maxBuffer: 4 * 1024 * 1024,
-        env: { ...process.env, ...(env ?? {}) }
-      },
-      (error, stdout, stderr) => {
-        const parsed = parseInstallerOutput(stdout);
-        if (parsed && parsed.ok === true) {
-          resolve({
-            ok: true,
-            // The two installers report success in different shapes. install.sh nests a
-            // `data` object carrying the version and bin directory; install.ps1 emits only
-            // schemaVersion, ok, code, status and message, and puts the version inside the
-            // message text. So this reads the structured field when it is there and falls
-            // back to the message, and a version that cannot be found stays undefined
-            // rather than being guessed at -- the caller renders that as "installed".
-            version: parsed.data?.version ?? versionFromMessage(parsed.message),
-            binDir: parsed.data?.binDir,
-            raw: parsed
-          });
-          return;
-        }
-        resolve({
-          ok: false,
-          reason: 'installer-failed',
-          // Upstream's own words, in the order it is most likely to have said them.
-          //
-          // `remediation` is joined on rather than dropped, because it is the only
-          // actionable half on Windows: the message names the condition ("existing aidlc
-          // at ... is outside the native install destination") and the remediation names
-          // what to do about it ("use its package manager, or set AIDLC_BIN_DIR ...").
-          text: describeInstallerResult(parsed, stdout, stderr, error),
-          raw: parsed
-        });
-      }
-    );
-  });
-}
-
-// The installer prints one JSON object under `--json`. Anything else -- a proxy's
-// HTML error page, a shell complaining -- is not it, and is left for the caller to
-// report as text.
-function parseInstallerOutput(stdout) {
-  const text = String(stdout ?? '').trim();
-  if (!text.startsWith('{')) return undefined;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
-
-function firstLine(value) {
-  const text = String(value ?? '').trim();
-  if (!text) return undefined;
-  return text.split('\n')[0];
-}
-
-// The version, when the installer reported it only inside its message. install.ps1's
-// success line is "installed AI-DLC 2.8.0; command: C:\...\aidlc.cmd", where install.sh
-// would have put it in a `data` object. Matched loosely and allowed to fail: a version
-// this cannot find is left undefined rather than approximated.
-function versionFromMessage(message) {
-  const match = /\b(\d+\.\d+\.\d+)\b/.exec(String(message ?? ''));
-  return match ? match[1] : undefined;
-}
-
-// One sentence a person can act on, from whichever channel the installer used.
-//
-// Both installers put a condition in `message` and, when there is one, the fix in
-// `remediation`. Reporting only the message loses the fix -- and on Windows the fix is the
-// half that matters, because the condition most likely to stop an install there is an
-// `aidlc` already on PATH from a package manager, where the message names the file and the
-// remediation names what to do about it.
-function describeInstallerResult(parsed, stdout, stderr, error) {
-  if (parsed?.message) {
-    return parsed.remediation ? `${parsed.message} — ${parsed.remediation}` : parsed.message;
-  }
-  return (
-    firstLine(stderr) ??
-    firstLine(stdout) ??
-    (error ? error.message : 'The installer exited without saying why.')
-  );
-}
-
-// Install the engine, end to end, into a temporary working directory that is cleaned
-// up whatever happens.
-async function installEngine({ workDir, env } = {}) {
-  const base = workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-installer-'));
-  try {
-    const fetched = await fetchInstaller(base);
-    if (!fetched.ok) {
-      return {
-        ok: false,
-        reason: fetched.reason,
-        text: describeInstallerFetchFailure(fetched)
-      };
-    }
-    if (process.platform !== 'win32') {
-      fs.chmodSync(fetched.path, 0o755);
-    }
-    return await runInstaller({ installerPath: fetched.path, env });
-  } finally {
-    if (!workDir) {
-      fs.rmSync(base, { recursive: true, force: true });
-    }
-  }
-}
-
-function describeInstallerFetchFailure(failure) {
-  const asset = failure.asset ?? 'the installer';
+function describeDownloadFailure(asset, failure) {
   if (failure.reason === 'http-status' && failure.status === 404) {
-    return `${REPO} publishes no ${asset} in its latest release. Upstream may have changed how it publishes.`;
+    return `${REPO}'s latest release carries no ${asset}. Upstream may have changed how it publishes.`;
   }
   if (failure.reason === 'timeout') {
     return `Timed out downloading ${asset} from GitHub.`;
@@ -356,31 +294,216 @@ function describeInstallerFetchFailure(failure) {
   }).`;
 }
 
+// ---------------------------------------------------------------------------
+// Guards
+// ---------------------------------------------------------------------------
+
+// Whether this Windows session is elevated. install.ps1 refuses an Administrator
+// install because it strands files the target user cannot manage, and dropping that
+// guard just because the script is no longer run would be a silent regression.
+//
+// `net session` succeeds only when elevated -- the standard probe where no API exists.
+// Every failure mode (not elevated, command missing, timeout) resolves to false, because
+// refusing a normal user by mistake blocks an install over nothing.
+function isElevatedWindows() {
+  if (process.platform !== 'win32') return Promise.resolve(false);
+  return new Promise((resolve) => {
+    execFile('net', ['session'], { timeout: 10 * 1000 }, (error) => resolve(!error));
+  });
+}
+
+// Whether `gh` can verify release provenance here. The official installers verify when
+// the tool exists and proceed when it does not; the same choice is made here for the
+// same reason -- provenance is worth checking and not worth making unownable machines
+// uninstallable over.
+function provenanceVerifierAvailable() {
+  return new Promise((resolve) => {
+    execFile('gh', ['--version'], { timeout: 10 * 1000 }, (error) => resolve(!error));
+  });
+}
+
+function verifyProvenance({ dir, sourceRef, sourceDigest }) {
+  return new Promise((resolve) => {
+    execFile(
+      'gh',
+      [
+        'attestation', 'verify', path.join(dir, 'checksums.txt'),
+        '--bundle', path.join(dir, 'aidlc-release.intoto.jsonl'),
+        '--repo', REPO,
+        '--signer-workflow', RELEASE_WORKFLOW,
+        '--source-ref', sourceRef,
+        '--source-digest', sourceDigest
+      ],
+      { timeout: 60 * 1000 },
+      (error, _stdout, stderr) =>
+        resolve(error ? { ok: false, text: firstLine(stderr) ?? error.message } : { ok: true })
+    );
+  });
+}
+
+function firstLine(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return undefined;
+  return text.split('\n')[0];
+}
+
+// ---------------------------------------------------------------------------
+// The install
+// ---------------------------------------------------------------------------
+
+// The subcommand both official installers hand the work to. What follows it is the
+// binary's own contract: it verifies the runtime against the checksums in --from and
+// lays out the machine itself.
+const APPLY_SUBCOMMAND = ['system', 'lifecycle', 'install-apply'];
+
+async function installEngine({ workDir, env, onProgress } = {}) {
+  const report = typeof onProgress === 'function' ? onProgress : () => {};
+
+  const binary = assetName({
+    platform: process.platform,
+    arch: process.arch,
+    musl: isMuslLinux()
+  });
+  if (!binary) {
+    return {
+      ok: false,
+      reason: 'unsupported-platform',
+      text:
+        `Upstream publishes no engine binary for ${process.platform}-${process.arch}. ` +
+        `The docs list what is supported: ${DOCS_URL}`
+    };
+  }
+
+  if (await isElevatedWindows()) {
+    // Upstream's own wording, so the condition is searchable.
+    return {
+      ok: false,
+      reason: 'elevated',
+      text: 'Refusing an Administrator install; run Kiro as the target user and set up again.'
+    };
+  }
+
+  const base = workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-provision-'));
+  try {
+    // Metadata first, so nothing big is downloaded for a release that fails validation.
+    report('checking the current release…');
+    for (const asset of ['version.json', 'checksums.txt', 'aidlc-release.intoto.jsonl']) {
+      const fetched = await download(`${RELEASE_BASE}/${asset}`, path.join(base, asset));
+      if (!fetched.ok) {
+        return { ok: false, reason: fetched.reason, text: describeDownloadFailure(asset, fetched) };
+      }
+    }
+
+    const sums = parseChecksums(fs.readFileSync(path.join(base, 'checksums.txt'), 'utf8'));
+
+    let info;
+    try {
+      info = JSON.parse(fs.readFileSync(path.join(base, 'version.json'), 'utf8'));
+    } catch {
+      return { ok: false, reason: 'version-json-unreadable', text: 'version.json is not JSON.' };
+    }
+    const release = validateVersionInfo(info);
+    if (!release.ok) return { ...release };
+
+    // version.json's own hash is in checksums.txt; a mismatch means the two files are
+    // not from the same release -- a truncated download or a tampering proxy.
+    const versionSum = await sha256File(path.join(base, 'version.json'));
+    if (!sums['version.json'] || versionSum !== sums['version.json']) {
+      return { ok: false, reason: 'checksum-mismatch', text: 'Checksum mismatch for version.json.' };
+    }
+
+    if (await provenanceVerifierAvailable()) {
+      // gh is present, so a provenance failure is a real refusal, exactly as the
+      // official installers treat it.
+      const verified = await verifyProvenance({
+        dir: base,
+        sourceRef: release.sourceRef,
+        sourceDigest: release.sourceDigest
+      });
+      if (!verified.ok) {
+        return {
+          ok: false,
+          reason: 'provenance-failed',
+          text:
+            `Release provenance verification failed: ${verified.text}. ` +
+            `Obtain the release from ${REPO}.`
+        };
+      }
+    }
+
+    const runtime = `aidlc-runtime-${release.version}.tar.gz`;
+    for (const asset of [binary, runtime]) {
+      report(`downloading ${asset}…`);
+      const fetched = await download(`${RELEASE_BASE}/${asset}`, path.join(base, asset));
+      if (!fetched.ok) {
+        return { ok: false, reason: fetched.reason, text: describeDownloadFailure(asset, fetched) };
+      }
+      const expected = sums[asset];
+      const actual = await sha256File(path.join(base, asset));
+      if (!expected || actual !== expected) {
+        return { ok: false, reason: 'checksum-mismatch', text: `Checksum mismatch for ${asset}.` };
+      }
+    }
+
+    const binaryPath = path.join(base, binary);
+    if (process.platform !== 'win32') {
+      fs.chmodSync(binaryPath, 0o755);
+    }
+
+    // The binary lays out the machine. Its own first line of output is the failure
+    // message when there is one -- upstream's words, which name conditions this
+    // extension has no business paraphrasing (Alpine's missing libstdc++, for one).
+    report(`installing AI-DLC ${release.version}…`);
+    const applied = await new Promise((resolve) => {
+      execFile(
+        binaryPath,
+        [...APPLY_SUBCOMMAND, '--from', base, '--version', release.version, '--quiet'],
+        {
+          timeout: APPLY_TIMEOUT_MS,
+          maxBuffer: 4 * 1024 * 1024,
+          env: { ...process.env, ...(env ?? {}) }
+        },
+        (error, stdout, stderr) => {
+          if (!error) return resolve({ ok: true });
+          resolve({
+            ok: false,
+            text:
+              firstLine(stdout) ??
+              firstLine(stderr) ??
+              `The engine's installer exited without saying why (${error.message}).`
+          });
+        }
+      );
+    });
+    if (!applied.ok) {
+      return { ok: false, reason: 'apply-failed', text: applied.text };
+    }
+
+    return { ok: true, version: release.version, binDir: defaultBinDir() };
+  } finally {
+    if (!workDir) {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  }
+}
+
 // What the installer leaves for the user to do, which differs by platform in a way that
 // decides whether the workflow runs at all.
 //
 // The project's hooks call `aidlc` by bare name, so the binary has to be resolvable from
-// the environment the harness runs hooks in -- not from an interactive shell. Neither
-// installer fully arranges that, and they fall short differently:
-//
-//   install.sh   takes `--profile <startup file>` and can write the PATH line into a shell
-//                rc file. That still is not the hook environment, which is why `aidlc
-//                doctor` reports "interactive-only" even after a clean install.
-//   install.ps1  has no equivalent flag at all. It prepends to PATH for its own process
-//                and prints "For each new PowerShell session, run: ..." -- nothing is
-//                persisted to the user or machine environment.
-//
-// So on Windows a successful install can leave a project that looks complete and whose
-// hooks cannot find the engine. Named here rather than discovered later, and surfaced
-// alongside the engine's own outstanding actions rather than instead of them.
+// the environment the harness runs hooks in -- not from an interactive shell. On POSIX
+// `aidlc doctor` reports "interactive-only" when that is the gap. On Windows nothing
+// persists PATH at all: upstream's own installer prepends to PATH for its own process
+// and prints a per-session command, so a successful install can leave a project that
+// looks complete and whose hooks cannot find the engine. Named here rather than
+// discovered later.
 function pathCaveat(binDir) {
-  const location = binDir ?? path.join(installRoot(), 'bin');
+  const location = binDir ?? defaultBinDir();
   if (process.platform === 'win32') {
     return (
-      `The installer did not make this permanent: it adds ${location} to PATH only for ` +
-      'its own session. Add that folder to your user PATH (Settings > Edit environment ' +
-      'variables for your account), then restart Kiro, or the workflow\'s hooks will not ' +
-      'find the engine.'
+      `The install did not change your PATH: the engine's command directory is ${location}. ` +
+      'Add that folder to your user PATH (Settings > Edit environment variables for your ' +
+      "account), then restart Kiro, or the workflow's hooks will not find the engine."
     );
   }
   return undefined;
@@ -388,20 +511,25 @@ function pathCaveat(binDir) {
 
 module.exports = {
   REPO,
+  RELEASE_BASE,
+  RELEASE_WORKFLOW,
   DOCS_URL,
-  INSTALLER_ASSETS,
+  APPLY_SUBCOMMAND,
+  assetName,
+  isMuslLinux,
   installRoot,
+  defaultBinDir,
   candidatePaths,
   needsShell,
   detectEngine,
   readVersion,
   installCommand,
-  fetchInstaller,
-  runInstaller,
-  parseInstallerOutput,
-  versionFromMessage,
-  describeInstallerResult,
+  validateVersionInfo,
+  parseChecksums,
+  sha256File,
+  download,
+  describeDownloadFailure,
+  isElevatedWindows,
   installEngine,
-  pathCaveat,
-  describeInstallerFetchFailure
+  pathCaveat
 };

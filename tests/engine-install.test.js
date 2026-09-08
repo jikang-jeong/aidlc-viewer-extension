@@ -31,16 +31,6 @@ const engineManifest = require('../src/aidlc/engine-manifest');
 // What is installed, and from where
 // ---------------------------------------------------------------------------
 
-test('the installer is fetched from the release, so it matches the engine it installs', () => {
-  // A repository copy of install.sh could install a different version than the release
-  // the extension read, and the mismatch would only show up as a version disagreement
-  // later.
-  assert.deepEqual(engineInstall.INSTALLER_ASSETS, {
-    posix: 'install.sh',
-    win32: 'install.ps1'
-  });
-  assert.equal(engineInstall.REPO, 'awslabs/aidlc-workflows');
-});
 
 test('the published install command is offered, not an equivalent of our own', () => {
   // A person who cannot let the extension run the install has to run something, and it
@@ -99,31 +89,8 @@ test('detection never throws on a broken or hostile pointer file', () => {
   }
 });
 
-test("the installer's own words survive, because it names things we should not paraphrase", () => {
-  // A checksum mismatch, a failed provenance check, Alpine missing libstdc++. Rewriting
-  // any of those into "install failed" throws away the only actionable part.
-  const parsed = engineInstall.parseInstallerOutput(
-    '{"ok":false,"message":"Checksum mismatch for aidlc-darwin-arm64."}'
-  );
-  assert.equal(parsed.message, 'Checksum mismatch for aidlc-darwin-arm64.');
-});
 
-test('non-JSON installer output is not mistaken for a result', () => {
-  // A proxy's HTML error page, or a shell complaining, must not parse into an outcome.
-  for (const text of ['', '   ', 'not json', '<html>blocked</html>', '{broken', undefined]) {
-    assert.equal(engineInstall.parseInstallerOutput(text), undefined, String(text));
-  }
-});
 
-test('a release without an installer is named as that, not as a network fault', () => {
-  const text = engineInstall.describeInstallerFetchFailure({
-    reason: 'http-status',
-    status: 404,
-    asset: 'install.sh'
-  });
-  assert.match(text, /install\.sh/);
-  assert.match(text, /publishes/i);
-});
 
 // ---------------------------------------------------------------------------
 // What the project gets
@@ -346,43 +313,9 @@ test('both Windows executable names are looked for, not the POSIX habit', () => 
   }
 });
 
-test('the version survives an installer that reports it only in prose', () => {
-  // install.sh nests {"data":{"version":"2.8.0"}}; install.ps1 emits no data object at all
-  // and puts the version in its message. Reading only the structured field would have
-  // reported every Windows install as an unknown version.
-  assert.equal(engineInstall.versionFromMessage('installed AI-DLC 2.8.0; command: C:\\x\\aidlc.cmd'), '2.8.0');
-  assert.equal(engineInstall.versionFromMessage('installed AI-DLC 10.20.30'), '10.20.30');
-  // And it never invents one.
-  for (const text of ['installed AI-DLC', '', undefined, 'v2 branch']) {
-    assert.equal(engineInstall.versionFromMessage(text), undefined, String(text));
-  }
-});
 
-test("the installer's remediation is kept, because on Windows it is the actionable half", () => {
-  // install.ps1 refuses when an `aidlc` from a package manager already sits on PATH. The
-  // message names the file; only the remediation says what to do about it.
-  const text = engineInstall.describeInstallerResult({
-    message: 'existing aidlc at C:\\ProgramData\\choco\\bin\\aidlc.exe is outside the native install destination',
-    remediation: 'use its package manager, or set AIDLC_BIN_DIR to an explicit empty directory'
-  });
-  assert.match(text, /existing aidlc at/);
-  assert.match(text, /AIDLC_BIN_DIR/);
-});
 
-test('a result with no remediation is reported unchanged, not padded', () => {
-  assert.equal(
-    engineInstall.describeInstallerResult({ message: 'Checksum mismatch for aidlc-windows-x64.exe.' }),
-    'Checksum mismatch for aidlc-windows-x64.exe.'
-  );
-});
 
-test('a silent installer failure still produces a sentence', () => {
-  // Under --json the structured result goes to stdout, so a run that dies before printing
-  // it leaves only stderr or an exec error. None of those may surface as undefined.
-  assert.match(engineInstall.describeInstallerResult(undefined, '', 'powershell: not found', undefined), /powershell/);
-  assert.ok(engineInstall.describeInstallerResult(undefined, '', '', new Error('spawn EINVAL')));
-  assert.ok(engineInstall.describeInstallerResult(undefined, '', '', undefined));
-});
 
 test('Windows is told its PATH change is not permanent, because nothing else will say so', () => {
   // install.sh can write a shell rc file with --profile. install.ps1 has no such flag: it
@@ -409,20 +342,6 @@ test('the install root follows the platform upstream documents', () => {
   assert.equal(path.basename(root), 'aidlc');
 });
 
-test('the Windows installer is a .ps1, invoked with switches it actually declares', () => {
-  // install.ps1 declares [switch]$Json and [switch]$Yes. Passing --json/--yes, or a flag it
-  // does not declare, would fail on argument binding rather than on anything to do with
-  // AI-DLC.
-  assert.equal(engineInstall.INSTALLER_ASSETS.win32, 'install.ps1');
-  const command = engineInstall.installCommand();
-  if (process.platform === 'win32') {
-    assert.match(command, /install\.ps1/);
-    assert.match(command, /irm|Invoke-RestMethod/);
-    // Never curl on Windows: irm is built into PowerShell 3.0 and later, so "what if there
-    // is no curl" does not arise there.
-    assert.equal(/curl/.test(command), false);
-  }
-});
 
 test('a .cmd path with a space survives the shell it is forced through', async () => {
   // Under shell:true Node concatenates rather than quotes, and the wrapper lives beneath
@@ -439,4 +358,143 @@ test('a .cmd path with a space survives the shell it is forced through', async (
     'utf8'
   );
   assert.match(source, /shell \? `"\$\{binary\}"` : binary/, 'the quoting must follow the shell decision');
+});
+
+// ---------------------------------------------------------------------------
+// The single-path install: what the scripts did, done here, testable here
+// ---------------------------------------------------------------------------
+//
+// The install no longer runs upstream's install.sh or install.ps1. Reading them showed
+// the machine layout was never theirs: both end by handing the downloaded binary its own
+// `system lifecycle install-apply`. Everything before that is orchestration, which is the
+// part reimplemented here -- identical code on every platform, so verifying it on this
+// machine verifies what a Windows machine will run, down to the asset name.
+
+test('every platform maps to the asset upstream actually publishes', () => {
+  // Names taken from the release's own checksums.txt, not invented. An unsupported
+  // platform maps to nothing and is refused by name before any download.
+  const { assetName } = engineInstall;
+  assert.equal(assetName({ platform: 'darwin', arch: 'arm64' }), 'aidlc-darwin-arm64');
+  assert.equal(assetName({ platform: 'darwin', arch: 'x64' }), 'aidlc-darwin-x64');
+  assert.equal(assetName({ platform: 'linux', arch: 'x64' }), 'aidlc-linux-x64');
+  assert.equal(assetName({ platform: 'linux', arch: 'x64', musl: true }), 'aidlc-linux-x64-musl');
+  assert.equal(assetName({ platform: 'linux', arch: 'arm64', musl: true }), 'aidlc-linux-arm64-musl');
+  assert.equal(assetName({ platform: 'win32', arch: 'x64' }), 'aidlc-windows-x64.exe');
+  // musl must never leak outside Linux: there is no darwin-musl and inventing one would
+  // turn a working Mac into a 404.
+  assert.equal(assetName({ platform: 'darwin', arch: 'arm64', musl: true }), undefined);
+  for (const unsupported of [
+    { platform: 'win32', arch: 'arm64' },
+    { platform: 'linux', arch: 'ia32' },
+    {},
+    undefined
+  ]) {
+    assert.equal(assetName(unsupported), undefined, JSON.stringify(unsupported));
+  }
+});
+
+test('version.json is validated the way install.sh validates it', () => {
+  // Each check catches a different way a release endpoint can lie. The shapes and the
+  // rejected values mirror the sh script's own regexes.
+  const { validateVersionInfo } = engineInstall;
+  const good = {
+    version: '2.8.0',
+    sourceRef: 'refs/tags/v2.8.0',
+    sourceDigest: '0d399dd828b59e84d90f7cc198c69fab9ad8f1a7'
+  };
+  assert.equal(validateVersionInfo(good).ok, true);
+  assert.equal(validateVersionInfo(good).version, '2.8.0');
+
+  // A version that is not a version.
+  for (const version of ['2.8', '02.8.0', 'v2.8.0', '2.8.0-rc1', '', undefined]) {
+    assert.equal(validateVersionInfo({ ...good, version }).ok, false, String(version));
+  }
+  // A tag that does not match the version it claims.
+  assert.equal(validateVersionInfo({ ...good, sourceRef: 'refs/tags/v9.9.9' }).ok, false);
+  assert.equal(validateVersionInfo({ ...good, sourceRef: 'refs/heads/main' }).ok, false);
+  // A digest that is not a commit.
+  for (const sourceDigest of ['abc', 'Z'.repeat(40), '', undefined]) {
+    assert.equal(validateVersionInfo({ ...good, sourceDigest }).ok, false, String(sourceDigest));
+  }
+  // And garbage in, refusal out -- never a throw on the UI path.
+  for (const junk of [undefined, null, [], 'text', 42]) {
+    assert.equal(validateVersionInfo(junk).ok, false, String(junk));
+  }
+});
+
+test("checksums.txt is parsed in upstream's exact format, and only that", () => {
+  // `<64 hex><two spaces><name>`. One space is a different format and ignoring it is the
+  // point: a checksum matched loosely is a checksum that can be spoofed by a lookalike
+  // line.
+  const { parseChecksums } = engineInstall;
+  const hex = 'c2d21dcb5afb4fee673892029422a2537cc2fa010dfe9056d67b5d71c80a3232';
+  const sums = parseChecksums(
+    [
+      `${hex}  version.json`,
+      `${hex}  aidlc-windows-x64.exe`,
+      `${hex} single-space.txt`,
+      'not a checksum line',
+      ''
+    ].join('\n')
+  );
+  assert.equal(sums['version.json'], hex);
+  assert.equal(sums['aidlc-windows-x64.exe'], hex);
+  assert.equal(sums['single-space.txt'], undefined);
+  assert.deepEqual(parseChecksums(''), {});
+  assert.deepEqual(parseChecksums(undefined), {});
+});
+
+test('a corrupted download is refused by its hash, before anything runs', async () => {
+  // The one security property this module now owns. Exercised with a real hash rather
+  // than a mock: the file's actual sha256 must match the expectation, and one flipped
+  // byte must not.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sum-'));
+  try {
+    const file = path.join(dir, 'asset');
+    fs.writeFileSync(file, 'the engine binary');
+    const actual = await engineInstall.sha256File(file);
+    assert.match(actual, /^[a-f0-9]{64}$/);
+    fs.writeFileSync(file, 'the engine binarY');
+    assert.notEqual(await engineInstall.sha256File(file), actual);
+    // A missing file hashes to nothing rather than throwing.
+    assert.equal(await engineInstall.sha256File(path.join(dir, 'absent')), undefined);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('install-apply is what runs, because it is the contract both official installers use', () => {
+  // The scripts differ in language, schema and flags, but both end at
+  // `<binary> system lifecycle install-apply --from <dir> --version <v>`. Coupling to
+  // that subcommand rather than to either script is the design decision this test pins.
+  assert.deepEqual(engineInstall.APPLY_SUBCOMMAND, ['system', 'lifecycle', 'install-apply']);
+});
+
+test('a failed download names the asset and the condition, not just "failed"', () => {
+  const { describeDownloadFailure } = engineInstall;
+  assert.match(
+    describeDownloadFailure('aidlc-windows-x64.exe', { reason: 'http-status', status: 404 }),
+    /aidlc-windows-x64\.exe/
+  );
+  assert.match(
+    describeDownloadFailure('version.json', { reason: 'http-status', status: 404 }),
+    /publishes/i
+  );
+  assert.match(describeDownloadFailure('x', { reason: 'timeout' }), /Timed out/);
+  assert.ok(describeDownloadFailure('x', { reason: 'request-failed' }));
+});
+
+test('the elevation guard cannot refuse anyone off Windows', async () => {
+  // install.ps1 refuses an Administrator install and this module keeps that guard. But
+  // `net session` exists only on Windows, so everywhere else the probe must resolve
+  // false immediately -- a thrown error or a hang here would block every install.
+  assert.equal(await engineInstall.isElevatedWindows(), false);
+});
+
+test('musl detection is a Linux question, answered no everywhere else', () => {
+  if (process.platform !== 'linux') {
+    assert.equal(engineInstall.isMuslLinux(), false);
+  } else {
+    assert.equal(typeof engineInstall.isMuslLinux(), 'boolean');
+  }
 });

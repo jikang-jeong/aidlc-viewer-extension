@@ -259,8 +259,12 @@ async function installV2(root, state) {
         // provenance when the tooling for that is present, and lets the verified binary
         // lay out the machine. Reimplementing that would mean owning a security boundary
         // to save a subprocess.
-        progress.report({ message: 'installing the AI-DLC engine (about 110MB)…' });
-        const installed = await installEngine();
+        // The engine names its own steps: metadata, each download, the apply. Passed
+        // through so a person watching a 75MB download sees which part is slow.
+        progress.report({ message: 'installing the AI-DLC engine (about 80MB)…' });
+        const installed = await installEngine({
+          onProgress: (message) => progress.report({ message })
+        });
         if (!installed.ok) {
           return { engineFailed: installed.text ?? installed.reason };
         }
