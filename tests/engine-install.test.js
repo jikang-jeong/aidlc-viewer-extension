@@ -498,3 +498,14 @@ test('musl detection is a Linux question, answered no everywhere else', () => {
     assert.equal(typeof engineInstall.isMuslLinux(), 'boolean');
   }
 });
+
+test('provenance verification is gated on the flags, not on gh existing', async () => {
+  // install.sh greps `gh attestation verify --help` for the three flags it passes: an
+  // older gh has the subcommand without them and upstream SKIPS verification there
+  // rather than failing on argument binding. Probing existence alone was a refusal
+  // upstream does not make -- found by comparing this module against the script it
+  // mirrors. The outcome is machine-dependent, so what is pinned is that the probe
+  // answers a boolean without throwing or hanging.
+  const available = await engineInstall.provenanceVerifierAvailable();
+  assert.equal(typeof available, 'boolean');
+});

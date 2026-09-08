@@ -316,9 +316,28 @@ function isElevatedWindows() {
 // the tool exists and proceed when it does not; the same choice is made here for the
 // same reason -- provenance is worth checking and not worth making unownable machines
 // uninstallable over.
+//
+// The probe asks about the FLAGS, not about gh: install.sh greps
+// `gh attestation verify --help` for the three flags it passes, because an older gh has
+// the subcommand without them and would fail on the arguments rather than on the
+// attestation. Probing existence alone would turn that machine's install into a refusal
+// upstream itself does not make.
 function provenanceVerifierAvailable() {
   return new Promise((resolve) => {
-    execFile('gh', ['--version'], { timeout: 10 * 1000 }, (error) => resolve(!error));
+    execFile(
+      'gh',
+      ['attestation', 'verify', '--help'],
+      { timeout: 10 * 1000, maxBuffer: 1024 * 1024 },
+      (error, stdout) => {
+        if (error) return resolve(false);
+        const help = String(stdout ?? '');
+        resolve(
+          ['--signer-workflow', '--source-ref', '--source-digest'].every((flag) =>
+            help.includes(flag)
+          )
+        );
+      }
+    );
   });
 }
 
@@ -530,6 +549,7 @@ module.exports = {
   download,
   describeDownloadFailure,
   isElevatedWindows,
+  provenanceVerifierAvailable,
   installEngine,
   pathCaveat
 };
