@@ -63,6 +63,14 @@ const MAX_REDIRECTS = 5;
 //
 // `musl` matters only on Linux: upstream ships separate musl builds because the glibc
 // ones fail there with a missing libstdc++.
+//
+// ARM64 Windows gets the x64 binary ON PURPOSE. Upstream publishes no Windows ARM64
+// build, and install.ps1 does not even probe the architecture -- it hardcodes
+// aidlc-windows-x64.exe, relying on the x64 emulation Windows 11 ships on ARM. Refusing
+// here was a divergence from upstream's own behavior, found by a real test on ARM64
+// Windows: the extension declined an install that install.ps1 performs. (Windows 10 on
+// ARM cannot emulate x64; there the binary fails to start with the OS's own error, which
+// is also exactly what running install.ps1 gets.)
 function assetName({ platform, arch, musl } = {}) {
   const key = `${platform}-${arch}${musl ? '-musl' : ''}`;
   const names = {
@@ -72,7 +80,8 @@ function assetName({ platform, arch, musl } = {}) {
     'linux-arm64-musl': 'aidlc-linux-arm64-musl',
     'linux-x64': 'aidlc-linux-x64',
     'linux-x64-musl': 'aidlc-linux-x64-musl',
-    'win32-x64': 'aidlc-windows-x64.exe'
+    'win32-x64': 'aidlc-windows-x64.exe',
+    'win32-arm64': 'aidlc-windows-x64.exe'
   };
   return names[key];
 }

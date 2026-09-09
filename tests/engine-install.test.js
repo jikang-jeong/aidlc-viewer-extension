@@ -380,11 +380,15 @@ test('every platform maps to the asset upstream actually publishes', () => {
   assert.equal(assetName({ platform: 'linux', arch: 'x64', musl: true }), 'aidlc-linux-x64-musl');
   assert.equal(assetName({ platform: 'linux', arch: 'arm64', musl: true }), 'aidlc-linux-arm64-musl');
   assert.equal(assetName({ platform: 'win32', arch: 'x64' }), 'aidlc-windows-x64.exe');
+  // ARM64 Windows gets the x64 binary, because that is what upstream itself does:
+  // install.ps1 probes no architecture and hardcodes aidlc-windows-x64.exe, relying on
+  // Windows 11's x64 emulation. This build refused instead, and a real test on ARM64
+  // Windows hit the refusal -- the extension declined an install upstream performs.
+  assert.equal(assetName({ platform: 'win32', arch: 'arm64' }), 'aidlc-windows-x64.exe');
   // musl must never leak outside Linux: there is no darwin-musl and inventing one would
   // turn a working Mac into a 404.
   assert.equal(assetName({ platform: 'darwin', arch: 'arm64', musl: true }), undefined);
   for (const unsupported of [
-    { platform: 'win32', arch: 'arm64' },
     { platform: 'linux', arch: 'ia32' },
     {},
     undefined
