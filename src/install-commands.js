@@ -146,7 +146,7 @@ async function chooseGeneration(state) {
         detail:
           'An engine drives the workflow, enforces the gates and keeps an audit ' +
           'ledger. The agent reads the artifacts and you approve a summary; the run ' +
-          'continues whether or not you read them yourself. Needs bun.'
+          'continues whether or not you read them yourself. Installs its engine on this machine.'
       }
     ],
     {
@@ -201,7 +201,18 @@ function installHeadline(harness) {
 // extension.js and depends on the extension's own bundle path. Keeping the call
 // here means one button covers both generations without this file knowing how v1
 // works.
-async function setup(folderUri, installV1) {
+// `preselected` lets a caller that has ALREADY asked the generation question skip it.
+//
+// The auto-detect toast asked "Set up the AI-DLC workflow for this folder?" with one
+// "Choose a version" button, which then opened the generation list somewhere else on
+// screen, which then came back here. Two decisions, three surfaces. The toast now
+// carries the two generations as its own buttons, so a person answers once where the
+// question was asked. Anything that cannot say which generation it wants -- the toolbar
+// button, the command palette -- still gets the full list with its explanations.
+//
+// The value is checked rather than trusted: a caller passing something that is not a
+// generation falls back to asking, never to installing a guess.
+async function setup(folderUri, installV1, preselected) {
   if (!folderUri) {
     vscode.window.showWarningMessage('Select a folder to watch first.');
     return;
@@ -213,7 +224,8 @@ async function setup(folderUri, installV1) {
     return;
   }
 
-  const generation = await chooseGeneration(state);
+  const generation =
+    preselected === 'v1' || preselected === 'v2' ? preselected : await chooseGeneration(state);
   if (!generation) return;
   if (generation === 'v1') {
     // Unchanged from what it has always done, including its own confirmation.
@@ -425,7 +437,7 @@ function hasRemovableInstall(folderUri) {
 //
 // There are three separate reasons for that and they are indistinguishable from
 // the chat: the folder has v1 rather than v2, the engine files are there but Kiro
-// does not have the folder open as a workspace, or bun is missing so the hooks
+// does not have the folder open as a workspace, or the engine is missing so the hooks
 // cannot run. Each has a different fix, so the check names which one it is rather
 // than reporting a generic problem.
 // The vocabulary this build met and had no meaning for, as display lines.
@@ -512,12 +524,15 @@ async function checkV2(folderUri) {
         'workspace root. Open this folder with File > Open Folder, in a new ' +
         'window, and /aidlc will be there.'
     );
-  } else if (!bun.found) {
+  } else if (!engine.found) {
+    // The hooks call the engine by name. Without it, /aidlc appears and nothing
+    // behind it runs -- the same silent failure the old bun gate guarded against,
+    // now attached to the thing that actually matters.
     lines.push(
-      'Everything is in place except bun, which the engine runs its hooks and ' +
-        'tools through. /aidlc will appear but its gates will not fire.'
+      'Everything is in place except the AI-DLC engine, which the project\'s hooks ' +
+        'run through. /aidlc will appear but its gates will not fire. Run "Set up ' +
+        'AI-DLC" and pick v2 to install it.'
     );
-    lines.push(bun.installCommand);
   } else {
     lines.push('Everything needed is in place. /aidlc should be available.');
   }
@@ -548,7 +563,7 @@ async function checkV2(folderUri) {
 
   const copyLabel = 'Copy this report';
   const choice = await vscode.window.showInformationMessage(
-    hasAgent && isWorkspace && bun.found
+    hasAgent && isWorkspace && engine.found
       ? 'AI-DLC v2 looks ready.'
       : 'AI-DLC v2 is not ready yet.',
     { modal: true, detail: lines.join('\n') },

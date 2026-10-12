@@ -214,14 +214,22 @@ class WatchController {
       if (!(await aidlcSetupNeeded(folderUri, this.context.extensionUri))) {
         return; // already set up, or bundle missing — stay quiet here
       }
-      const yes = 'Choose a version';
+      // The two generations are the buttons. The toast used to offer "Choose a version",
+      // which opened a list elsewhere on screen and then returned here -- one decision
+      // spread over three surfaces. v1 is first, as it is in the full list, for the same
+      // reason: it is the answer most people opening this are looking for.
+      const v1 = 'AI-DLC v1';
+      const v2 = 'AI-DLC v2';
       const choice = await vscode.window.showInformationMessage(
         'Set up the AI-DLC workflow for this folder?',
-        yes,
+        v1,
+        v2,
         'Not now'
       );
-      if (choice === yes) {
-        await this.runSetup(folderUri);
+      if (choice === v1) {
+        await this.runSetup(folderUri, 'v1');
+      } else if (choice === v2) {
+        await this.runSetup(folderUri, 'v2');
       }
     } catch (err) {
       vscode.window.showErrorMessage(`AI-DLC setup failed: ${err && err.message ? err.message : err}`);
@@ -230,9 +238,9 @@ class WatchController {
 
   // The one place setup is decided. Every entry point goes through here so no path
   // can install a generation the user was never asked about.
-  async runSetup(folderUri) {
+  async runSetup(folderUri, preselected) {
     const target = folderUri ?? this.treeDataProvider.rootUri;
-    await installCommands.setup(target, () => this.installV1(target));
+    await installCommands.setup(target, () => this.installV1(target), preselected);
     this.refresh();
     this.refreshSupervision();
   }

@@ -192,13 +192,14 @@ test('no stage or phase count is quoted at the point of choosing', async () => {
   }
 });
 
-test('bun is named where it decides whether the choice can be completed', async () => {
-  // Not plumbing. Without bun the v2 install stops, so saying it here saves the
-  // round trip. v1 needs nothing, and says so.
+test('the engine install is named where it decides whether the choice can be completed', async () => {
+  // Not plumbing. Choosing v2 puts a program on the machine, so saying it here is fair
+  // warning. v1 needs nothing, and says so. bun is NOT named: the engine reports
+  // `bun: not-required` itself, and this list used to say the opposite.
   const shown = await captureGenerationPrompt({ generation: 'none' });
   const [v1, v2] = shown.items;
-  assert.match(v2.detail, /bun/i);
-  assert.doesNotMatch(v1.detail, /bun/i);
+  assert.match(v2.detail, /engine/i);
+  assert.match(v2.detail, /machine/i);
   assert.match(v1.detail, /offline/i);
 });
 
@@ -413,4 +414,64 @@ test('the engine install failure never mentions bun as the blocker', async () =>
   await api.handleEngineInstallFailure('a reason');
   const text = `${shown.modals[0].message} ${shown.modals[0].options.detail}`;
   assert.equal(/\bbun\b/i.test(text), false, text);
+});
+
+// ---------------------------------------------------------------------------
+// One question, answered where it was asked
+// ---------------------------------------------------------------------------
+
+test('a preselected generation skips the list, so the toast is the only question', async () => {
+  // The auto-detect toast used to offer "Choose a version", which opened the generation
+  // list elsewhere on screen and came back here: one decision over three surfaces. The
+  // toast now carries both generations as buttons and hands the answer straight in.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-'));
+  try {
+    fs.mkdirSync(path.join(root, '.git'));
+    let v1Installed = 0;
+    const { api, shown } = loadWithStub({ root });
+    await api.setup({ fsPath: root }, async () => { v1Installed += 1; }, 'v1');
+    assert.equal(shown.quickPicks.length, 0, 'the list must not be shown again');
+    assert.equal(v1Installed, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a preselection that is not a generation falls back to asking, never to guessing', async () => {
+  // The value is checked rather than trusted. A caller passing junk gets the question,
+  // not an install of whatever the junk happened to resemble.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pre2-'));
+  try {
+    fs.mkdirSync(path.join(root, '.git'));
+    let v1Installed = 0;
+    for (const junk of ['v3', '', 'V1', 42, null, { key: 'v1' }]) {
+      const { api, shown } = loadWithStub({ root, onQuickPick: () => undefined });
+      await api.setup({ fsPath: root }, async () => { v1Installed += 1; }, junk);
+      assert.equal(shown.quickPicks.length, 1, `must ask for ${JSON.stringify(junk)}`);
+    }
+    assert.equal(v1Installed, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('no preselection still asks, so the toolbar and palette keep their explanations', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pre3-'));
+  try {
+    fs.mkdirSync(path.join(root, '.git'));
+    const { api, shown } = loadWithStub({ root, onQuickPick: () => undefined });
+    await api.setup({ fsPath: root }, async () => {});
+    assert.equal(shown.quickPicks.length, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the generation list no longer claims v2 needs bun', async () => {
+  // The engine reports `bun: not-required` itself since 2.8.0. Telling a person they
+  // need bun sends them to install something the workflow does not use.
+  const pick = await captureGenerationPrompt({ generation: 'none' });
+  for (const item of pick.items) {
+    assert.equal(/\bbun\b/i.test(`${item.label} ${item.description} ${item.detail}`), false, item.label);
+  }
 });
