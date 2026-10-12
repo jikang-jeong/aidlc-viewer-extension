@@ -8,7 +8,7 @@ AI-DLC has your agent work through a lifecycle, producing Markdown artifacts as 
 
 **It sets AI-DLC up in one click.** Starting AI-DLC otherwise means cloning a repository and copying rule files into the right place for your editor. Press one button, answer which generation you want, and it is set up.
 
-**It shows you where the workflow actually is.** The furthest stage reached, which file needs you next, and each artifact opened in a readable split view, so you are not digging through folders to find out what your agent has been doing.
+**It shows you where the workflow actually is.** The furthest stage reached, which file needs you next, and each artifact opened rendered, so you are not digging through folders to find out what your agent has been doing.
 
 Works in **Kiro** and in VS Code and its forks. This extension's v2 setup targets Kiro IDE or Kiro CLI, which are the two it has verified against a real run; upstream also ships definitions for other agents, which you can install yourself. v1 works with Kiro, Claude Code and your editor's own convention.
 
@@ -40,7 +40,7 @@ New artifacts are marked `NEW` until you open them, then `READ`, with counts rol
 
 ### The artifact itself
 
-Each `.md` file opens with the source on the left and a styled preview on the right. Mermaid diagrams render inline. You can edit and save back to the file, resize or reset the split, sync the scrolling, and zoom the preview.
+Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit** to swap the same pane for the Markdown source, change it, and save back to the file; press **Read** to return. The view never rewrites your Markdown from the rendering, so what you type is exactly what is saved. Zoom works in both modes.
 
 ### Supervision, on AI-DLC v2
 
@@ -170,7 +170,7 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 - **State-file-based progress** — when the workflow keeps its own state file, progress is read from it and the in-progress step is named.
 - **Auto-expand new artifacts**, so freshly generated files are visible without digging.
 - **Workspace auto-detect** — if the open workspace already contains AI-DLC artifacts, the extension offers to watch it.
-- **Open in Text Editor** from the right-click menu, for a regular editor instead of the split viewer.
+- **Open in Text Editor** from the right-click menu, for a regular editor instead of this viewer.
 - **Unread badge** on the activity bar icon.
 - **Viewer guide** rewritten, in English and Korean, and it opens automatically the first time.
 - **Webview hardening** — a content security policy, sanitised link and image URLs, and Mermaid restricted to its safe mode.

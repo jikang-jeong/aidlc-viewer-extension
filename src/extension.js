@@ -1977,12 +1977,32 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         height: 100vh;
       }
 
+      /* One pane. The split view -- raw on the left, rendered on the right -- was
+         replaced by a single rendered pane with an Edit mode that swaps the same space
+         for the source. Two panes showed everything twice and left too little room for
+         either; editing the raw file while reading the rendering elsewhere was the
+         complaint. The source is never rewritten from the rendering, so nothing a
+         person typed can be altered by the view. */
       .shell {
-        display: grid;
-        grid-template-columns: var(--split-left, 33%) 6px 1fr;
+        display: flex;
         flex: 1 1 auto;
         min-height: 0;
       }
+      .pane.single {
+        flex: 1 1 auto;
+        min-width: 0;
+        background: color-mix(in srgb, var(--bg) 96%, #fff 4%);
+      }
+      .mode { display: inline-flex; gap: 2px; margin: 0 10px; }
+      .mode-btn {
+        background: transparent; color: var(--muted); border: 1px solid var(--border);
+        padding: 2px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+      }
+      .mode-btn.active { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+      .mode-btn:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
+      body.editing .preview-scroll { display: none; }
+      body.editing #editor { display: block; }
+      body:not(.editing) #editor { display: none; }
 
       /* ---------- AI-DLC journey strip ----------
          Purple is the product's tone and the existing colour for the Construction
@@ -2120,60 +2140,6 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         display: flex;
         flex-direction: column;
         overflow: hidden;
-      }
-
-      .pane.raw {
-        background: color-mix(in srgb, var(--bg) 86%, #000 14%);
-      }
-
-      .pane.preview-pane {
-        background: color-mix(in srgb, var(--bg) 96%, #fff 4%);
-      }
-
-      .splitter {
-        cursor: col-resize;
-        background: var(--vscode-focusBorder, #569cd6);
-        position: relative;
-        user-select: none;
-        transition: background 120ms ease;
-      }
-
-      .splitter::before {
-        content: '';
-        position: absolute;
-        left: -4px;
-        right: -4px;
-        top: 0;
-        bottom: 0;
-      }
-
-      .splitter::after {
-        content: '';
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 2px;
-        height: 40px;
-        transform: translate(-50%, -50%);
-        background: color-mix(in srgb, var(--bg) 40%, #fff 60%);
-        border-radius: 2px;
-        opacity: 0.7;
-      }
-
-      .splitter:hover,
-      .splitter.dragging {
-        background: color-mix(in srgb, var(--vscode-focusBorder, #569cd6) 80%, #fff 20%);
-      }
-
-      body.dragging {
-        cursor: col-resize;
-      }
-      body.dragging * {
-        user-select: none !important;
-        pointer-events: none !important;
-      }
-      body.dragging .splitter {
-        pointer-events: auto !important;
       }
 
       .header {
@@ -2491,30 +2457,28 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       <div class="j-expanded" id="jExpanded"></div>
     </div>
     <div class="shell">
-      <section class="pane raw">
+      <section class="pane single">
         <div class="header">
           <div class="title">${title}</div>
-          <div class="actions">
-            <button class="secondary" id="reload">Reload</button>
-            <button id="save">Save</button>
+          <div class="mode" role="tablist" aria-label="View mode">
+            <button class="mode-btn active" id="modeRead" role="tab" aria-selected="true" title="Rendered view">Read</button>
+            <button class="mode-btn" id="modeEdit" role="tab" aria-selected="false" title="Edit the Markdown source">Edit</button>
           </div>
-        </div>
-        <textarea id="editor" spellcheck="false"></textarea>
-      </section>
-      <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
-      <section class="pane preview-pane">
-        <div class="header">
-          <div class="title">Preview</div>
           <div class="zoom-controls">
             <button class="zoom-btn" id="zoomOut" title="Zoom out (Ctrl/Cmd + -)">−</button>
             <span class="zoom-level" id="zoomLevel" title="Click to reset (Ctrl/Cmd + 0)">100%</span>
             <button class="zoom-btn" id="zoomIn" title="Zoom in (Ctrl/Cmd + +)">+</button>
+          </div>
+          <div class="actions">
+            <button class="secondary" id="reload">Reload</button>
+            <button id="save">Save</button>
           </div>
           <div class="status" id="status">Ready</div>
         </div>
         <div class="preview-scroll" id="previewScroll">
           <div id="preview" class="preview"></div>
         </div>
+        <textarea id="editor" spellcheck="false" hidden></textarea>
       </section>
     </div>
 
@@ -2829,48 +2793,39 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         vscode.setState(s);
       });
 
-      // Splitter: drag to resize raw/preview panes
-      const splitter = document.getElementById('splitter');
+      // Read / Edit are two states of one pane, not two panes.
+      //
+      // Edit shows the raw Markdown in the textarea the split view always used, so
+      // what a person types is exactly what is saved -- the rendering is never turned
+      // back into Markdown, which is the one way a view can silently corrupt a file.
+      // Unsaved edits survive a mode switch, and the mode itself is remembered so
+      // reopening lands where the person left.
+      const modeRead = document.getElementById('modeRead');
+      const modeEdit = document.getElementById('modeEdit');
       const shell = document.querySelector('.shell');
-      const previousState = (typeof vscode.getState === 'function' ? vscode.getState() : null) || {};
-      const savedSplit = typeof previousState.splitPct === 'number' ? previousState.splitPct : 33;
-      let splitPct = Math.min(80, Math.max(15, savedSplit));
-      shell.style.setProperty('--split-left', splitPct + '%');
-
-      function setSplit(pct) {
-        splitPct = Math.min(80, Math.max(15, pct));
-        shell.style.setProperty('--split-left', splitPct + '%');
+      function setMode(mode) {
+        const editing = mode === 'edit';
+        document.body.classList.toggle('editing', editing);
+        modeRead.classList.toggle('active', !editing);
+        modeEdit.classList.toggle('active', editing);
+        modeRead.setAttribute('aria-selected', String(!editing));
+        modeEdit.setAttribute('aria-selected', String(editing));
+        if (editing) editor.focus();
         if (typeof vscode.setState === 'function') {
-          vscode.setState(Object.assign({}, vscode.getState() || {}, { splitPct: splitPct }));
+          vscode.setState(Object.assign({}, vscode.getState() || {}, { mode: mode }));
         }
       }
-
-      let dragging = false;
-      splitter.addEventListener('pointerdown', (e) => {
-        dragging = true;
-        splitter.classList.add('dragging');
-        document.body.classList.add('dragging');
-        splitter.setPointerCapture(e.pointerId);
-        e.preventDefault();
-      });
-      splitter.addEventListener('pointermove', (e) => {
-        if (!dragging) return;
-        const rect = shell.getBoundingClientRect();
-        const pct = ((e.clientX - rect.left) / rect.width) * 100;
-        setSplit(pct);
-      });
-      function endDrag(e) {
-        if (!dragging) return;
-        dragging = false;
-        splitter.classList.remove('dragging');
-        document.body.classList.remove('dragging');
-        if (e && e.pointerId !== undefined) {
-          try { splitter.releasePointerCapture(e.pointerId); } catch {}
+      modeRead.addEventListener('click', () => setMode('read'));
+      modeEdit.addEventListener('click', () => setMode('edit'));
+      // Ctrl/Cmd+E toggles, the way an editor's own preview toggle does.
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
+          e.preventDefault();
+          setMode(document.body.classList.contains('editing') ? 'read' : 'edit');
         }
-      }
-      splitter.addEventListener('pointerup', endDrag);
-      splitter.addEventListener('pointercancel', endDrag);
-      splitter.addEventListener('dblclick', () => setSplit(33));
+      });
+      const previousState = (typeof vscode.getState === 'function' ? vscode.getState() : null) || {};
+      setMode(previousState.mode === 'edit' ? 'edit' : 'read');
 
       const ZOOM_MIN = 0.5;
       const ZOOM_MAX = 3.0;
@@ -3216,13 +3171,12 @@ function getHelpHtml() {
 </div>
 
 <div class="stage-card operations">
-  <h3>📝 Split Editor / Preview</h3>
+  <h3>📝 Viewer</h3>
   <ul>
-    <li>Click any file to open a <strong>raw Markdown editor</strong> (left) with a <strong>styled live preview</strong> (right).</li>
+    <li>Click any file to open it <strong>rendered</strong>, with Mermaid diagrams drawn inline.</li>
+    <li>Press <strong>Edit</strong> (or <code>Ctrl/Cmd + E</code>) to swap the same pane for the <strong>Markdown source</strong>; press <strong>Read</strong> to go back. What you type is exactly what is saved, so the view can never alter your file.</li>
     <li><strong>Save</strong> with the Save button or <code>Ctrl/Cmd + S</code>; <strong>Reload</strong> discards local edits and re-reads the file.</li>
-    <li><strong>Mermaid diagrams</strong> render inline in the preview.</li>
-    <li><strong>Zoom</strong> the preview: +/− buttons, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, mouse wheel with <code>Ctrl/Cmd</code>, or trackpad pinch.</li>
-    <li><strong>Drag the splitter</strong> to resize panes (double-click resets); editor and preview <strong>scroll in sync</strong>.</li>
+    <li><strong>Zoom</strong>: +/− buttons, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, mouse wheel with <code>Ctrl/Cmd</code>, or trackpad pinch.</li>
   </ul>
 </div>
 
@@ -3295,13 +3249,12 @@ function getHelpHtml() {
 </div>
 
 <div class="stage-card operations">
-  <h3>📝 분할 에디터 / 프리뷰</h3>
+  <h3>📝 뷰어</h3>
   <ul>
-    <li>파일을 클릭하면 <strong>Markdown 원본 에디터</strong>(왼쪽)와 <strong>스타일 적용 실시간 프리뷰</strong>(오른쪽)가 열립니다.</li>
+    <li>파일을 클릭하면 <strong>렌더링된 화면</strong>으로 열리고 Mermaid 다이어그램이 인라인으로 그려집니다.</li>
+    <li><strong>Edit</strong>(또는 <code>Ctrl/Cmd + E</code>)를 누르면 같은 자리에 <strong>Markdown 원본</strong>이 나타나고, <strong>Read</strong>로 돌아옵니다. 입력한 그대로 저장되므로 뷰어가 파일을 바꾸는 일은 없습니다.</li>
     <li>Save 버튼 또는 <code>Ctrl/Cmd + S</code>로 <strong>저장</strong>, <strong>Reload</strong>로 로컬 편집을 버리고 파일을 다시 읽습니다.</li>
-    <li><strong>Mermaid 다이어그램</strong>이 프리뷰에 인라인 렌더링됩니다.</li>
-    <li>프리뷰 <strong>줌</strong>: +/− 버튼, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, <code>Ctrl/Cmd</code> + 휠, 트랙패드 핀치.</li>
-    <li><strong>스플리터 드래그</strong>로 패널 크기 조절(더블클릭 시 초기화), 에디터와 프리뷰는 <strong>스크롤 동기화</strong>됩니다.</li>
+    <li><strong>줌</strong>: +/− 버튼, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, <code>Ctrl/Cmd</code> + 휠, 트랙패드 핀치.</li>
   </ul>
 </div>
 
