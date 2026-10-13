@@ -110,8 +110,8 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
   instead of a "Choose a version" step that opened a list elsewhere and came back, and a
   second list for the harness after that. A project that already recorded a harness keeps it.
 - **Setup ends on what to do next.** When setup finishes, a page opens in the editor with
-  the one thing to type, large: `/aidlc` on v2, `"Using AI-DLC, build …"` on v1, with a
-  button that copies it and, on v2, one that opens Kiro's chat. The completion toast used to
+  the one thing to type, large: `/aidlc` on v2, `"Using AI-DLC, build …"` on v1, and, on v2,
+  a button that opens Kiro's chat with `/aidlc` already typed. The completion toast used to
   lead with which files were written and say this in a trailing sentence that was gone in
   seconds. Until the first stage is reached, the row at the top of the tree and the strip
   above an open file read **Not started** with the same command beside it, instead of v1's

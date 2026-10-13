@@ -89,7 +89,6 @@ function activate(context) {
     vscode.commands.registerCommand('markdownWatchViewer.showCredits', () => controller.showCredits()),
     vscode.commands.registerCommand('markdownWatchViewer.showWaiting', () => controller.showWaiting()),
     vscode.commands.registerCommand('markdownWatchViewer.showEngineRecords', () => controller.showEngineRecords()),
-    vscode.commands.registerCommand('markdownWatchViewer.copyStartPhrase', (phrase) => controller.copyStartPhrase(phrase)),
     vscode.commands.registerCommand('markdownWatchViewer.openChatToStart', () => controller.openChatToStart()),
     // One setup button. It asks which generation, because it used to install v1
     // unconditionally and a second button for v2 beside it did not help: pressing
@@ -410,7 +409,7 @@ class WatchController {
       // for exactly the commands they name, and nothing else.
       {
         enableScripts: false,
-        enableCommandUris: ['markdownWatchViewer.copyStartPhrase', 'markdownWatchViewer.openChatToStart', 'markdownWatchViewer.showHelp']
+        enableCommandUris: ['markdownWatchViewer.openChatToStart', 'markdownWatchViewer.showHelp']
       }
     );
     const installed = generation === 'v2'
@@ -419,28 +418,18 @@ class WatchController {
     panel.webview.html = renderStartPage({ webview: panel.webview, root: folderUri.fsPath, project, generation, installed });
   }
 
-  async copyStartPhrase(phrase) {
-    const text = typeof phrase === 'string' && phrase ? phrase : 'Using AI-DLC, build ';
-    await vscode.env.clipboard.writeText(text);
-    vscode.window.setStatusBarMessage(`Copied: ${text}`, 4000);
-  }
-
-  // Kiro's chat. The command id is Kiro's, not VS Code's, and could change between Kiro
-  // releases; each candidate is tried and the fallback is the clipboard with a note, so
-  // the button never does nothing.
+  // Kiro's chat, with /aidlc already in the input. Kiro's own commands do exactly this:
+  // sendTerminalToChat calls focusChatInput with { prompt, reference, clear } (read from
+  // the installed Kiro, 2026-10-13), so the same payload is used here. The clipboard is
+  // not involved: writing to it from a command fired by a webview link did nothing in
+  // the field, and a person who has to paste has not been helped much anyway. Without
+  // Kiro's command the button says so rather than appearing to work.
   async openChatToStart() {
-    for (const id of ['kiroAgent.focusChatInput', 'kiroAgent.chatFocus', 'kiroAgent.openChatSession', 'workbench.action.chat.open']) {
-      try {
-        await vscode.commands.executeCommand(id);
-        await vscode.env.clipboard.writeText('/aidlc ');
-        vscode.window.setStatusBarMessage('Chat is open. /aidlc is on your clipboard: paste it and describe what to build.', 6000);
-        return;
-      } catch {
-        // next candidate
-      }
+    try {
+      await vscode.commands.executeCommand('kiroAgent.focusChatInput', { prompt: '/aidlc ', clear: true });
+    } catch {
+      vscode.window.showInformationMessage('This button opens Kiro\u2019s chat and is not available here. Open the chat yourself and type /aidlc followed by what you want to build.');
     }
-    await vscode.env.clipboard.writeText('/aidlc ');
-    vscode.window.showInformationMessage('Could not open the chat from here. /aidlc is on your clipboard: open Kiro\u2019s chat and paste it.');
   }
 
   // v1's installer. Kept as a method so the generation chooser can call it without
@@ -3514,7 +3503,7 @@ function getHelpHtml() {
 <ol>
   <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root.</li>
   <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want — <strong>v1</strong>, <strong>v2 · Kiro IDE</strong> or <strong>v2 · Kiro CLI</strong>, as three buttons on one prompt. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
-  <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Right after setup a page opens in the editor with this command large and a button that copies it (on v2, one that opens Kiro\u2019s chat). Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with the same command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
+  <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Right after setup a page opens in the editor with this command large and, on v2, a button that opens Kiro\u2019s chat with <code>/aidlc</code> already typed. Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with the same command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
 </ol>
 
 <h2>Key Features</h2>
@@ -3610,7 +3599,7 @@ function getHelpHtml() {
 <ol>
   <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트를 선택합니다.</li>
   <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>, <strong>v2 · Kiro IDE</strong>, <strong>v2 · Kiro CLI</strong> 세 버튼이 한 알림에 함께 있습니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
-  <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 설치 직후 에디터에 이 명령을 크게 보여주는 페이지가 열리고, 복사 버튼(v2에서는 Kiro 채팅을 여는 버튼)이 함께 있습니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 같은 명령을 보여줍니다.</li>
+  <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 설치 직후 에디터에 이 명령을 크게 보여주는 페이지가 열리고, v2에서는 <code>/aidlc</code>가 입력된 상태로 Kiro 채팅을 여는 버튼이 함께 있습니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 같은 명령을 보여줍니다.</li>
 </ol>
 
 <h2>주요 기능</h2>

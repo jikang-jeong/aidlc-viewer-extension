@@ -525,8 +525,6 @@ function renderEngineRecordsPage({ webview, root, project, nonce: fixedNonce }) 
 function renderStartPage({ webview, root, project, nonce: fixedNonce, generation, installed = [], notices = [] }) {
   const gen = generation === 'both' ? 'v2' : generation;
   const isV2 = gen === 'v2';
-  const phrase = isV2 ? '/aidlc' : 'Using AI-DLC, build …';
-  const copyHref = `command:markdownWatchViewer.copyStartPhrase?${encodeURIComponent(JSON.stringify([phrase]))}`;
   const chatHref = 'command:markdownWatchViewer.openChatToStart';
   const guideHref = 'command:markdownWatchViewer.showHelp';
   const what = isV2
@@ -534,9 +532,13 @@ function renderStartPage({ webview, root, project, nonce: fixedNonce, generation
        <p class="quiet">Setup installed a conductor agent and a set of role agents, so <code>/aidlc</code> starts or resumes the workflow; the others are there when you want a specific one.</p>`
     : `<p class="lead">Tell your agent: <code class="big">Using AI-DLC, build \u2026</code> and describe what you want.</p>
        <p class="quiet">The rules your agent reads are in the project now. Any agent that reads them works: Kiro, Claude Code, or your editor\u2019s own.</p>`;
+  // v2: one button that opens Kiro's chat with /aidlc already typed. v1: no button for
+  // the phrase, because v1 has no single chat to open (any agent reads the rules) and a
+  // copy button did not work from a webview link in the field; the phrase is large on the
+  // page and short enough to type.
   const buttons = isV2
-    ? `<a class="btn primary" href="${chatHref}">Open chat</a><a class="btn" href="${copyHref}">Copy /aidlc</a><a class="btn" href="${guideHref}">Guide</a>`
-    : `<a class="btn primary" href="${copyHref}">Copy the phrase</a><a class="btn" href="${guideHref}">Guide</a>`;
+    ? `<a class="btn primary" href="${chatHref}">Open chat with /aidlc</a><a class="btn" href="${guideHref}">Guide</a>`
+    : `<a class="btn" href="${guideHref}">Guide</a>`;
   const installedList = installed.length
     ? `<section><h2>What was set up</h2><ul class="plain">${installed.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul></section>`
     : '';

@@ -239,7 +239,10 @@ groups and the rows. Pin: v1-isolation "every phase is listed".
 **Setup's installers return nothing, so "did setup happen" is read from the folder.**
 `runSetup` compares `detectGeneration` before and after; a generation present after that was
 not present before is what was just set up, and only then does the start page open. A re-run
-over an installed project opens nothing. The page is script-free like the others; its
+over an installed project opens nothing. A copy-to-clipboard button on it did nothing in the field (`vscode.env.clipboard` from a
+command fired by a webview link), and was removed; Kiro's own `kiroAgent.focusChatInput`
+takes `{ prompt, clear }` and puts the text in the input directly, which is what Kiro's
+`sendTerminalToChat` does. The page is script-free like the others; its
 buttons are `command:` links, and the panel's `enableCommandUris` names exactly those
 commands. A test parses both and requires the sets to match, because a link to a command
 the panel does not enable fails silently. Pins: credits-page "the start page" (two tests),

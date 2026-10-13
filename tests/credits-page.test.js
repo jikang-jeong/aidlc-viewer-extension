@@ -347,8 +347,7 @@ test('the start page leads with the one thing to type, per generation, with butt
   const v1 = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v1' }, generation: 'v1', installed: ['Kiro', 'Claude Code'] });
   assert.match(v1, /<h2>AI-DLC v1 is set up\. Start it:<\/h2>/);
   assert.match(v1, /Using AI-DLC, build/);
-  assert.match(v1, /href="command:markdownWatchViewer\.copyStartPhrase\?/);
-  assert.doesNotMatch(v1, /openChatToStart/, 'v1 has no chat to open: any agent reads the rules');
+  assert.doesNotMatch(v1, /openChatToStart|copyStartPhrase/, 'v1 has no chat to open (any agent reads the rules), and no copy button (it did not work from a webview link)');
   assert.match(v1, /What was set up[\s\S]*Claude Code/);
 
   const v2 = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v2' }, generation: 'v2', notices: ['PATH note'] });

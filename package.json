@@ -96,10 +96,6 @@
         "title": "AI-DLC: v2 Engine Log"
       },
       {
-        "command": "markdownWatchViewer.copyStartPhrase",
-        "title": "AI-DLC: Copy the start phrase"
-      },
-      {
         "command": "markdownWatchViewer.openChatToStart",
         "title": "AI-DLC: Open chat to start"
       }
@@ -184,10 +180,6 @@
         {
           "command": "markdownWatchViewer.showEngineRecords",
           "when": "aidlcViewer.v2Detected"
-        },
-        {
-          "command": "markdownWatchViewer.copyStartPhrase",
-          "when": "false"
         },
         {
           "command": "markdownWatchViewer.openChatToStart",
