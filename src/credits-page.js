@@ -1,0 +1,447 @@
+'use strict';
+
+// The Credits page: one place for what Kiro spent on this project and, on v2, what the
+// engine is waiting on you for.
+//
+// WHY A PAGE AND NOT A PANEL
+//
+// v2 had a Supervision panel under the tree; v1 had nothing there. Two generations, two
+// sidebars. The page is opened from one row in the tree that both generations have, so
+// the sidebar is the same shape for everyone and the detail lives where there is room
+// for it. On v1 the page is Credits; on v2 it is Credits, then Waiting for you, then the
+// engine's other records folded below.
+//
+// WHAT IS SHOWN, AND WHAT IS REFUSED
+//
+// Every number here is one Kiro or the engine recorded. Credits are summed from Kiro's
+// per-turn record; the price of a credit depends on the plan, so no dollar amount is
+// computed. Tokens appear only where Kiro wrote them (the CLI store) and are never
+// estimated. Attribution of turns to stages is by time and is labelled as such. A turn
+// that falls outside every stage window is shown with its credits, not hidden, so the
+// total adds up on the page the way it does on the bill.
+//
+// The figure a person can act on is the credits spent on turns Kiro marked aborted or
+// failed -- work that was paid for and produced nothing -- and it is the first number.
+
+const path = require('path');
+const { readKiroUsage, attributeTurns, summariseSessions, stageWindowsFromLedger, stageWindowsFromArtifacts } = require('./aidlc/kiro-usage');
+const auditReader = require('./aidlc/audit');
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function nonce() {
+  let out = '';
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < 32; i += 1) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+function fmtCredits(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+  return n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
+}
+
+function fmtDuration(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return '—';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function fmtWhen(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '—';
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// Gathers everything the page needs for one project. Pure data, so it is testable
+// without a webview and the page body is a function of it.
+function collectCreditsModel(root, project) {
+  const usage = readKiroUsage(root);
+  const sessions = summariseSessions(usage.sessions);
+
+  let windows = [];
+  let windowSource;
+  const isV2 = project && project.generation === 'v2' || project?.generation === 'both';
+  if (isV2 && project.v2?.active?.dir) {
+    windows = stageWindowsFromLedger(auditReader.readEvents(project.v2.active.dir));
+    windowSource = 'ledger';
+  } else if (project && (project.generation === 'v1' || project.generation === 'both')) {
+    windows = stageWindowsFromArtifacts(path.join(root, 'aidlc-docs'));
+    windowSource = 'artifacts';
+  }
+  const attribution = attributeTurns(usage.turns, windows);
+
+  // Per stage, merged across restarts of the same stage so the table has one row per
+  // stage name. The per-attempt windows are kept in the model for anyone who needs them.
+  const byStage = new Map();
+  for (const w of attribution.byWindow) {
+    const slot = byStage.get(w.label) ?? { stage: w.label, phase: w.phase, credits: 0, turns: 0, open: false };
+    slot.credits += w.credits;
+    slot.turns += w.turns;
+    slot.open = slot.open || w.open === true;
+    byStage.set(w.label, slot);
+  }
+
+  return {
+    ok: usage.ok,
+    reason: usage.reason,
+    storePath: usage.storePath,
+    generation: project?.generation,
+    sessions,
+    attribution,
+    byStage: [...byStage.values()].filter((s) => s.turns > 0).sort((a, b) => b.credits - a.credits),
+    windowSource,
+    gaps: usage.gaps,
+    hasTokens: sessions.some((s) => s.tokens)
+  };
+}
+
+
+// Paths the engine records are relative to the project; links on the page need absolute.
+function absolute(root, target) {
+  if (!root) return target;
+  return path.isAbsolute(target) ? target : path.join(root, target);
+}
+
+// ---------------------------------------------------------------------------
+// The engine's own records (formerly the Supervision panel)
+// ---------------------------------------------------------------------------
+//
+// Moved here verbatim from the panel these replaced, with `this.absolute` made a free
+// function. Their facts are unchanged and still the engine's: refusals the ledger shows
+// as unresolved, sensor findings per stage, and the agent's self-record beside the
+// engine's check of the same artifact. They sit below the fold because the two sections
+// above them are what a person acts on.
+
+function blocking(intent, root) {
+  const live = intent.diagnosis.live;
+  if (live.length === 0) {
+    return `<h2>Anything stuck</h2><p class="quiet">No. The engine refused an action ${
+      intent.diagnosis.refusals.length
+    } time(s) during this run &mdash; usually a step running out of order &mdash; and every one was resolved. Nothing is waiting on you here.</p>`;
+  }
+  const blocks = live
+    .map((entry) => {
+      const sequence = entry.context
+        .map((row) => {
+          const isHit = row.event === 'ERROR_LOGGED' && row.timestamp === entry.timestamp;
+          return `<div class="${isHit ? 'hit' : 'quiet'}">${escapeHtml(
+            String(row.timestamp ?? '').slice(11, 19)
+          )}  ${escapeHtml(row.event)}${row.unit ? `  ${escapeHtml(row.unit)}` : ''}</div>`;
+        })
+        .join('');
+      return `<div class="block">
+<div class="msg">${escapeHtml(entry.message)}</div>
+${entry.command ? `<div class="quiet" style="margin-top:4px"><code>${escapeHtml(entry.command)}</code></div>` : ''}
+<div class="quiet" style="margin-top:6px">What led here, oldest first:</div>
+<div class="seq">${sequence}</div>
+</div>`;
+    })
+    .join('');
+  // The sequence is the point. The engine's message states the remedy but not
+  // how the workflow reached the state it refuses, and that is only visible as
+  // an ordering of events.
+  return `<h2 class="warn">Anything stuck</h2>
+<p class="quiet">The engine is refusing an action. Its own words are below, with the events that led to it.</p>${blocks}`;
+}
+
+// What the agent said about its own coverage, next to what the engine's sensor
+// found in the same file. Two numbers, no verdict.
+//
+// The pairing is worth surfacing because only one side of it ever reached the
+// user: an agent recorded 45 of 46 requirements covered while the sensor
+// reported 89 findings in that same record, and the summary shown in chat was
+// the agent's. Which is right is not decided here -- the two answer slightly
+// different questions, and a computed difference would look authoritative
+// without being true.
+function contrast(intent, root) {
+  const { rows, faultedWithoutRecord } = intent.contrast;
+  if (rows.length === 0 && faultedWithoutRecord.length === 0) return '';
+
+  const body = rows
+    .map((row) => {
+      if (!row.readable) {
+        return `<tr><td class="k">${escapeHtml(
+          row.filePath.split('/').slice(-2).join('/')
+        )}</td><td class="n warn">unreadable</td></tr>`;
+      }
+      const claim = [...row.byStatus]
+        .map(([status, count]) => `${count} ${escapeHtml(status)}`)
+        .join(', ');
+      const detail = row.detailPaths[0]
+        ? `<a data-path="${escapeHtml(absolute(root, row.detailPaths[0]))}">read what the engine could not account for</a>`
+        : '<span class="quiet">no detail recorded</span>';
+      return `<tr><td class="k">${escapeHtml(row.stage ?? '(stage unstated)')}</td><td class="n">${
+        row.itemCount
+      } requirement(s)${row.recordCount > 1 ? ` in ${row.recordCount} records` : ''}</td></tr>
+<tr><td class="quiet indent">agent says</td><td class="n quiet">${claim || '&mdash;'}</td></tr>
+<tr><td class="quiet indent">engine found</td><td class="n warn">${
+        row.sensorFindings
+      } unaccounted, over ${row.sensorFirings} check(s)</td></tr>
+<tr><td colspan="2" class="indent" style="padding-bottom:6px">${detail}</td></tr>`;
+    })
+    .join('');
+
+  const orphans = faultedWithoutRecord.length
+    ? `<p class="quiet">Sensor faulted with no record found: ${escapeHtml(
+        faultedWithoutRecord.join(', ')
+      )}.</p>`
+    : '';
+
+  return `<h2 class="warn">The agent's claim, and the engine's check of it</h2>
+<p class="quiet">At some stages the agent writes a record of which requirements it covered. The engine then reads that same file and reports what it could not account for. The chat showed you the agent's version. Both numbers are below and neither is corrected against the other &mdash; they answer slightly different questions, so the judgement is yours.</p>
+<table>${body}</table>${orphans}`;
+}
+
+// What the engine's own checks flagged and nobody was told.
+//
+// "Sensor" is the engine's word for an automatic check it runs over each
+// artifact as it is written: whether the required sections are present, whether
+// every upstream requirement is accounted for, whether the traceability record
+// adds up, whether the code lints. They are advisory by design, so a failing one
+// never stops the workflow and never appears in chat.
+//
+// Findings are counted per sensor rather than listed one per row. A first
+// version repeated the sensor's name once per finding, so a stage with fifteen
+// findings from one check printed that check's name fifteen times, and the six
+// that fitted looked like an arbitrary subset.
+function sensors(intent, root) {
+  const byStage = intent.diagnosis.sensorFailures;
+  if (byStage.size === 0) {
+    return `<h2>Checks the engine ran</h2>
+<p class="quiet">Nothing was flagged. The engine checks each artifact as it is written and records the result; none of those checks failed in this run.</p>`;
+  }
+
+  const rows = [...byStage]
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([stage, failures]) => {
+      // Group by sensor so a name appears once with its count, and keep the
+      // first detail file per sensor as the thing to open.
+      const bySensor = new Map();
+      for (const failure of failures) {
+        const key = failure.sensorId ?? 'unnamed check';
+        if (!bySensor.has(key)) bySensor.set(key, { count: 0, detail: undefined });
+        const entry = bySensor.get(key);
+        entry.count += 1;
+        entry.detail = entry.detail ?? failure.detailPath ?? failure.outputPath;
+      }
+      const detailRows = [...bySensor]
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([name, entry]) => {
+          const label = `${escapeHtml(name)}${entry.count > 1 ? ` ×${entry.count}` : ''}`;
+          // Every finding observed so far had a detail file, so a name without a
+          // link means the engine did not record one — worth being able to tell
+          // apart at a glance rather than guessing.
+          const cell = entry.detail
+            ? `<a data-path="${escapeHtml(absolute(root, entry.detail))}">${label}</a>`
+            : `${label} <span class="quiet">(no detail recorded)</span>`;
+          return `<tr><td colspan="2" class="indent">${cell}</td></tr>`;
+        })
+        .join('');
+      return `<tr><td class="k">${escapeHtml(stage)}</td><td class="n warn">${failures.length}</td></tr>
+${detailRows}`;
+    })
+    .join('');
+
+  return `<h2 class="warn">Checks the engine ran</h2>
+<p class="quiet">The engine checks each artifact as it is written &mdash; required sections, upstream coverage, traceability, linting. These are advisory, so the workflow continued and the chat said nothing. Click a check to read exactly what it found.</p>
+<table>${rows}</table>`;
+}
+
+// ---------------------------------------------------------------------------
+// Sections
+// ---------------------------------------------------------------------------
+
+function creditsHeadline(model) {
+  if (!model.ok) {
+    return `<section><h2>Credits</h2><p class="quiet">Kiro's session store was not found at <code>${escapeHtml(model.storePath)}</code>. Kiro writes credit usage there per prompt turn; until it exists there is nothing to show.</p></section>`;
+  }
+  const a = model.attribution;
+  if (a.totalTurns === 0) {
+    return `<section><h2>Credits</h2><p class="quiet">No Kiro session has been opened on this folder yet. Sessions opened on a parent folder are not counted, because nothing in Kiro's record says which project their turns were about.</p></section>`;
+  }
+  const wastedPct = a.total > 0 ? Math.round((a.wasted / a.total) * 100) : 0;
+  return `<section>
+  <h2>Credits</h2>
+  <div class="tiles">
+    <div class="tile"><div class="big">${fmtCredits(a.total)}</div><div class="label">credits on this project</div><div class="sub">${a.totalTurns} prompt turn${a.totalTurns === 1 ? '' : 's'} across ${model.sessions.length} session${model.sessions.length === 1 ? '' : 's'}</div></div>
+    <div class="tile ${a.wasted > 0 ? 'warn' : ''}"><div class="big">${fmtCredits(a.wasted)}</div><div class="label">spent on turns that were aborted or failed</div><div class="sub">${a.wastedTurns} turn${a.wastedTurns === 1 ? '' : 's'}${a.total > 0 ? `, ${wastedPct}% of the total` : ''}</div></div>
+  </div>
+  <p class="quiet">Credits are what Kiro recorded for each turn. The price of a credit depends on your plan, so no amount in money is shown. ${model.hasTokens ? 'Token counts appear where Kiro CLI recorded them.' : 'Kiro IDE records credits but not token counts, so none are shown.'}</p>
+</section>`;
+}
+
+function creditsByStage(model) {
+  if (!model.ok || model.attribution.totalTurns === 0) return '';
+  const rows = model.byStage;
+  const outside = model.attribution.outside;
+  if (rows.length === 0 && outside.turns === 0) return '';
+  const note =
+    model.windowSource === 'ledger'
+      ? 'A turn is placed in a stage when its time falls inside that stage\u2019s window in the engine\u2019s audit ledger. A turn that spans several short stages is counted in each, so this column is a view, not a split of the total.'
+      : model.windowSource === 'artifacts'
+        ? 'v1 keeps no ledger this extension reads, so a stage\u2019s window is the span of its artifacts\u2019 modification times. That is coarse: a stage revisited later stretches its window.'
+        : '';
+  const body = rows
+    .map(
+      (s) =>
+        `<tr><td>${escapeHtml(s.stage)}${s.open ? ' <span class="pill">in progress</span>' : ''}</td><td class="num">${fmtCredits(s.credits)}</td><td class="num">${s.turns}</td></tr>`
+    )
+    .join('');
+  const outsideRow =
+    outside.turns > 0
+      ? `<tr class="outside"><td>Outside any stage window</td><td class="num">${fmtCredits(outside.credits)}</td><td class="num">${outside.turns}</td></tr>`
+      : '';
+  return `<section>
+  <h2>By stage</h2>
+  <table><thead><tr><th>Stage</th><th class="num">Credits</th><th class="num">Turns</th></tr></thead><tbody>${body}${outsideRow}</tbody></table>
+  <p class="quiet">${note}${outside.turns > 0 ? ' Turns outside every window are shown, not hidden, so the total still adds up.' : ''}</p>
+</section>`;
+}
+
+function creditsBySession(model) {
+  if (!model.ok || model.sessions.length === 0) return '';
+  const rows = model.sessions
+    .map((s) => {
+      const tokens = s.tokens ? `${(s.tokens.input + s.tokens.output).toLocaleString()} tok` : '';
+      const ctx = typeof s.lastContextPercent === 'number' ? `${Math.round(s.lastContextPercent)}%` : '—';
+      const wasted = s.wasted > 0 ? `<span class="warn-text">${fmtCredits(s.wasted)} lost</span>` : '';
+      return `<tr>
+        <td><div>${escapeHtml(s.title || s.id)}</div><div class="sub">${escapeHtml(s.model ?? 'model not recorded')} · ${escapeHtml(s.source === 'cli' ? 'Kiro CLI' : 'Kiro IDE')}</div></td>
+        <td class="num">${fmtCredits(s.credits)}${wasted ? `<div class="sub">${wasted}</div>` : ''}</td>
+        <td class="num">${s.turns}</td>
+        <td class="num">${fmtDuration(s.elapsedMs)}</td>
+        <td class="num">${ctx}</td>
+        <td class="num">${tokens}</td>
+        <td class="when">${fmtWhen(s.lastAt)}</td>
+      </tr>`;
+    })
+    .join('');
+  return `<section>
+  <h2>By session</h2>
+  <table><thead><tr><th>Session</th><th class="num">Credits</th><th class="num">Turns</th><th class="num">Time</th><th class="num" title="Context window in use after the last turn">Context</th><th class="num">Tokens</th><th>Last turn</th></tr></thead><tbody>${rows}</tbody></table>
+  <p class="quiet">Context is how much of the model\u2019s window the session was using after its last turn; a session near full is one to start fresh. Tokens are shown only where Kiro recorded them.</p>
+</section>`;
+}
+
+function waitingSection(project) {
+  const intent = project?.v2?.active;
+  if (!intent) return '';
+  const waits = intent.diagnosis?.waitingOnYou ?? [];
+  if (waits.length === 0) {
+    return `<section><h2>Waiting for you</h2><p class="quiet">Nothing is waiting on your decision. The engine recorded no refusal that needs you, no parked plan, and no gate left open.</p></section>`;
+  }
+  const items = waits
+    .map((w) => {
+      const who = w.stated ? '<span class="pill stated">engine says</span>' : '<span class="pill inferred">inferred from the ledger</span>';
+      const remedies = (w.remedies ?? [])
+        .map((m) => `<li>${escapeHtml(m.label ?? m.op ?? '')}${m.action ? ` <span class="sub">${escapeHtml(m.action)}</span>` : ''}</li>`)
+        .join('');
+      const head =
+        w.kind === 'plan-approval'
+          ? `Plan approval${w.unit ? ` · unit ${escapeHtml(w.unit)}` : ''}`
+          : `${escapeHtml(w.stage ?? 'unknown stage')}${w.code ? ` · ${escapeHtml(w.code)}` : ''}`;
+      return `<li class="wait">
+        <div class="wait-head">${head} ${who}${typeof w.count === 'number' && w.count > 1 ? ` <span class="sub">×${w.count}</span>` : ''}</div>
+        ${w.message ? `<div class="wait-msg">${escapeHtml(w.message)}</div>` : ''}
+        ${remedies ? `<ul class="remedies">${remedies}</ul>` : ''}
+      </li>`;
+    })
+    .join('');
+  return `<section class="urgent"><h2>Waiting for you</h2><ul class="waits">${items}</ul><p class="quiet">A stage at its gate is stopped, not slow. "Engine says" is the engine\u2019s own record; "inferred" is this extension\u2019s reading of the ledger\u2019s order.</p></section>`;
+}
+
+// The former Supervision panel, folded. Its facts are still true and still the engine's;
+// they are below the fold because the two sections above are what a person acts on.
+function engineRecordsSection(project, root) {
+  const intent = project?.v2?.active;
+  if (!intent) return '';
+  const parts = [blocking(intent, root), sensors(intent, root), contrast(intent, root)].filter(Boolean);
+  if (parts.length === 0) return '';
+  return `<details class="records"><summary><h2>Engine records</h2><span class="sub">refusals, sensor findings, the agent\u2019s record beside the engine\u2019s check</span></summary>${parts.join('\n')}</details>`;
+}
+
+function gapsSection(model) {
+  const gaps = [];
+  if (model.gaps?.unknownStatuses?.length) gaps.push(`turn status not recognised: ${model.gaps.unknownStatuses.join(', ')}`);
+  if (gaps.length === 0) return '';
+  return `<p class="quiet gaps">Read but not understood by this build: ${escapeHtml(gaps.join('; '))}. Counted in totals, named so a change in Kiro is visible rather than silent.</p>`;
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+function renderCreditsPage({ webview, root, project }) {
+  const model = collectCreditsModel(root, project);
+  const n = nonce();
+  const folder = path.basename(root);
+  const body = [
+    `<h1>${escapeHtml(folder)} <span class="gen">${escapeHtml(project?.generation === 'both' ? 'v2' : project?.generation ?? '')}</span></h1>`,
+    waitingSection(project),
+    creditsHeadline(model),
+    creditsByStage(model),
+    creditsBySession(model),
+    engineRecordsSection(project, root),
+    gapsSection(model)
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${n}'; script-src 'nonce-${n}';">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Credits</title>
+<style nonce="${n}">
+  :root { --purple: var(--vscode-charts-purple, #a371f7); --warn: var(--vscode-editorWarning-foreground, #cca700); }
+  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px 28px 40px; max-width: 980px; margin: 0 auto; line-height: 1.5; }
+  h1 { font-size: 20px; margin: 0 0 18px; display: flex; align-items: baseline; gap: 10px; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--vscode-descriptionForeground); margin: 26px 0 10px; }
+  .gen { font-size: 12px; color: var(--purple); border: 1px solid var(--purple); border-radius: 10px; padding: 0 8px; }
+  .quiet { color: var(--vscode-descriptionForeground); font-size: 12.5px; }
+  .sub { color: var(--vscode-descriptionForeground); font-size: 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 14px 16px; background: color-mix(in srgb, var(--vscode-editor-background) 94%, var(--purple) 6%); }
+  .tile.warn { background: color-mix(in srgb, var(--vscode-editor-background) 92%, var(--warn) 8%); }
+  .big { font-size: 30px; font-weight: 600; line-height: 1.1; }
+  .label { margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--vscode-panel-border); vertical-align: top; }
+  th { color: var(--vscode-descriptionForeground); font-weight: 500; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .when { white-space: nowrap; color: var(--vscode-descriptionForeground); }
+  tr.outside td { color: var(--vscode-descriptionForeground); font-style: italic; }
+  .pill { font-size: 11px; border-radius: 9px; padding: 0 7px; border: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); }
+  .pill.stated { border-color: var(--purple); color: var(--purple); }
+  .warn-text { color: var(--warn); }
+  section.urgent { border-left: 3px solid var(--purple); padding-left: 14px; }
+  .waits { list-style: none; padding: 0; margin: 0; }
+  .wait { padding: 10px 0; border-bottom: 1px solid var(--vscode-panel-border); }
+  .wait-head { font-weight: 600; }
+  .wait-msg { margin: 4px 0; }
+  .remedies { margin: 6px 0 0 16px; padding: 0; font-size: 13px; }
+  details.records { margin-top: 26px; }
+  details.records summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; }
+  details.records summary h2 { margin: 0; display: inline; }
+  .gaps { margin-top: 30px; }
+</style>
+</head>
+<body>
+${body}
+</body>
+</html>`;
+}
+
+module.exports = { collectCreditsModel, renderCreditsPage, fmtCredits, fmtDuration };

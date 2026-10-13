@@ -322,7 +322,7 @@ test('nothing that waits on a person runs inside a progress scope', () => {
     'showOpenDialog'
   ];
 
-  for (const file of ['install-commands.js', 'extension.js', 'supervision-view.js']) {
+  for (const file of ['install-commands.js', 'extension.js', 'credits-page.js']) {
     const source = fs.readFileSync(path.join(__dirname, '..', 'src', file), 'utf8');
     let from = 0;
     for (;;) {

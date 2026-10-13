@@ -81,6 +81,11 @@
         "command": "markdownWatchViewer.openInTextEditor",
         "title": "Open in Text Editor",
         "icon": "$(go-to-file)"
+      },
+      {
+        "command": "markdownWatchViewer.showCredits",
+        "title": "AI-DLC: Credits",
+        "icon": "$(graph)"
       }
     ],
     "viewsContainers": {
@@ -94,12 +99,6 @@
     },
     "views": {
       "markdownWatchViewer": [
-        {
-          "id": "markdownWatchViewer.supervision",
-          "name": "SUPERVISION",
-          "type": "webview",
-          "when": "aidlcViewer.v2Detected"
-        },
         {
           "id": "markdownWatchViewer.tree",
           "name": "VIEWER"

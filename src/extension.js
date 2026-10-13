@@ -1,7 +1,11 @@
 const vscode = require('vscode');
 const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
-const { SupervisionViewProvider, VIEW_ID: SUPERVISION_VIEW_ID } = require('./supervision-view');
+const { renderCreditsPage } = require('./credits-page');
+
+// Drives the `when` clause on the v2-only command (Remove AI-DLC v2). Set from the
+// project the tree reads, since the panel that used to set it is gone.
+const V2_CONTEXT_KEY = 'aidlcViewer.v2Detected';
 const { readProject } = require('./aidlc/index');
 const { checkpointIndexForPath } = require('./aidlc/journey-v2');
 const { detectGeneration } = require('./aidlc/detect');
@@ -28,22 +32,11 @@ function activate(context) {
   controller.treeView = treeView;
   controller.updateBadge();
 
-  // v2 supervision panel. It renders above the tree and only for a project that
-  // has AI-DLC v2 installed: the view's `when` clause is driven by a context key
-  // this provider sets, so a v1 project shows no new UI whatsoever.
-  const supervision = new SupervisionViewProvider();
-  controller.supervisionView = supervision;
-
   context.subscriptions.push(
     // Ensure watchers/timers are cleaned up when the extension is deactivated
     // (disposeWatcher was previously only called on folder re-selection).
     controller,
     treeView,
-    vscode.window.registerWebviewViewProvider(SUPERVISION_VIEW_ID, supervision, {
-      // The panel is cheap to rebuild from disk and holds no unsaved state, so
-      // there is nothing to retain while it is hidden.
-      webviewOptions: { retainContextWhenHidden: false }
-    }),
     // Show the one-time "new setup feature" notice only when the user actually
     // opens the AI-DLC view, not on editor startup.
     treeView.onDidChangeVisibility((e) => {
@@ -136,13 +129,53 @@ class WatchController {
   // whether this is a v2 project and hides itself when it is not. Failures are
   // swallowed on purpose: nothing about the tree, the viewer or the v1 path may
   // depend on this succeeding.
+  // Keeps the v2 context key current and re-renders the Credits page if it is open.
+  //
+  // Named for the panel it used to refresh; every caller still means "the project's
+  // v2 facts may have changed", which is exactly when the page and the key should
+  // follow. Nothing here can throw into the caller: a page that cannot render is a
+  // stale page, not a broken extension.
   refreshSupervision() {
-    if (!this.supervisionView) return;
+    const root = this.treeDataProvider.rootUri;
+    let project;
     try {
-      this.supervisionView.update(this.treeDataProvider.rootUri);
+      project = root ? readProject(root.fsPath, {}) : undefined;
     } catch {
-      // A panel that cannot render is a missing panel, not a broken extension.
+      project = undefined;
     }
+    const isV2 = Boolean(project && (project.generation === 'v2' || project.generation === 'both'));
+    vscode.commands.executeCommand('setContext', V2_CONTEXT_KEY, isV2);
+    if (this.creditsPanel && root) {
+      try {
+        this.creditsPanel.webview.html = renderCreditsPage({ webview: this.creditsPanel.webview, root: root.fsPath, project });
+      } catch {
+        // Leave the last good render in place.
+      }
+    }
+  }
+
+  showCredits() {
+    const root = this.treeDataProvider.rootUri;
+    if (!root) {
+      vscode.window.showWarningMessage('Select a folder to watch first.');
+      return;
+    }
+    if (this.creditsPanel) {
+      this.creditsPanel.reveal(vscode.ViewColumn.One);
+      this.refreshSupervision();
+      return;
+    }
+    this.creditsPanel = vscode.window.createWebviewPanel(
+      'markdownWatchViewer.credits',
+      'AI-DLC Credits',
+      vscode.ViewColumn.One,
+      // No scripts: the page is a report, and a report that cannot run code cannot leak.
+      { enableScripts: false, retainContextWhenHidden: true }
+    );
+    this.creditsPanel.onDidDispose(() => {
+      this.creditsPanel = undefined;
+    });
+    this.refreshSupervision();
   }
 
   async restoreWatcher() {
@@ -768,6 +801,10 @@ class MarkdownTreeDataProvider {
       return [
         new StageItem(stageSummary),
         new ProgressItem(stageSummary),
+        // One row for both generations. Clicking opens the Credits page; on v2 the
+        // row also says when something is waiting on the person, because that is the
+        // one fact worth seeing without opening anything.
+        new CreditsItem(this.rootUri),
         ...entries
       ];
     }
@@ -1111,6 +1148,26 @@ class InfoItem extends vscode.TreeItem {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.description = description;
     this.contextValue = 'info';
+  }
+}
+
+class CreditsItem extends vscode.TreeItem {
+  constructor(rootUri) {
+    super('Credits', vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'credits';
+    this.iconPath = new vscode.ThemeIcon('graph', new vscode.ThemeColor('charts.purple'));
+    this.command = { command: 'markdownWatchViewer.showCredits', title: 'Open the Credits page' };
+    let waiting = 0;
+    try {
+      const project = rootUri ? readProject(rootUri.fsPath, {}) : undefined;
+      waiting = project?.v2?.active?.diagnosis?.waitingOnYou?.length ?? 0;
+    } catch {
+      waiting = 0;
+    }
+    this.description = waiting > 0 ? `${waiting} waiting for you` : 'Kiro credits, by stage and session';
+    this.tooltip = waiting > 0
+      ? `${waiting} item(s) are waiting on your decision. Open the page to see what the engine asked for.`
+      : 'What Kiro spent on this project. On v2, also what the engine is waiting on you for.';
   }
 }
 
@@ -3134,7 +3191,7 @@ function getHelpHtml() {
 <p>AI-DLC Viewer watches your <strong>AI-DLC workflow folder</strong>, visualizes stage progress, and lets you read and edit the generated Markdown artifacts — all inside VS Code.</p>
 
 <div class="callout">
-  <strong>Two generations of AI-DLC.</strong> <strong>v1</strong> is rule files your agent reads, with artifacts under <code>aidlc-docs/</code>. <strong>v2</strong> is an engine that drives the workflow itself, with enforced gates and an audit ledger. The viewer detects which one a project uses and shows the matching view — everything below about the tree, the strip and the editor applies to both. Only the <em>Supervision</em> section is v2-specific.
+  <strong>Two generations of AI-DLC.</strong> <strong>v1</strong> is rule files your agent reads, with artifacts under <code>aidlc-docs/</code>. <strong>v2</strong> is an engine that drives the workflow itself, with enforced gates and an audit ledger. The viewer detects which one a project uses. Everything below applies to both; only the <em>waiting for you</em> part of the Credits page is v2-specific.
 </div>
 
 <h2>Getting Started</h2>
@@ -3181,15 +3238,14 @@ function getHelpHtml() {
 </div>
 
 <div class="stage-card supervision">
-  <h3>🟣 Supervision — AI-DLC v2 only</h3>
-  <p>In v2 the agent reads the artifacts and you approve a summary. A summary is useful because it leaves things out; this panel surfaces <strong>what it left out</strong>. It appears in the sidebar only when a v2 project is open.</p>
+  <h3>🟣 Credits — both generations</h3>
+  <p>The <strong>Credits</strong> row at the top of the tree opens a page with what Kiro spent on this project. Every number is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.</p>
   <ul>
-    <li><strong>Where the run stopped, and why.</strong> Refusals are listed by what the engine would not let through, newest first, with the events either side so a refusal reads as a sequence rather than a verdict.</li>
-    <li><strong>What the engine's own sensors flagged</strong>, grouped per sensor with a count. These are the checks the workflow ran on itself; a link opens the finding.</li>
-    <li><strong>The agent's claim next to the engine's check of it</strong> — <em>agent says</em> against <em>engine found</em>, per stage. The two are shown side by side and never reconciled, because a disagreement is the thing worth seeing.</li>
-    <li><strong>Units of work</strong> and their dependency chain, including how many are still in flight.</li>
-    <li>Nothing is inferred from Markdown. Every figure comes from the engine's own compiled graph, its runtime record and its audit ledger — so a stage, phase or sensor this build has never heard of still shows up correctly, and anything unrecognised is <strong>reported rather than guessed at</strong>.</li>
+    <li><strong>Total credits</strong>, and beside it the credits spent on turns Kiro marked <strong>aborted or failed</strong> — work that was paid for and produced nothing. That second number is the one to act on.</li>
+    <li><strong>By stage.</strong> A turn is placed in a stage when its time falls inside that stage's window: the engine's audit ledger on v2, the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.</li>
+    <li><strong>By session</strong>: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro CLI recorded them (Kiro IDE records credits only).</li>
   </ul>
+  <p><strong>On v2 the page also shows what is waiting on you.</strong> A stage at its gate is stopped, not slow, and the chat said so once and scrolled away. The page lists each item with the engine's own message and the remedies it marked as yours, and says whether the engine stated the wait or this extension inferred it from the ledger. The engine's other records — refusals, sensor findings, the agent's claim beside the engine's check — are folded below. Only this v2 content is generation-specific; the sidebar is the same for both.</p>
 </div>
 
 <h2>Toolbar Reference</h2>
@@ -3259,15 +3315,14 @@ function getHelpHtml() {
 </div>
 
 <div class="stage-card supervision">
-  <h3>🟣 감독(Supervision) — AI-DLC v2 전용</h3>
-  <p>v2에서는 에이전트가 산출물을 읽고 사람은 요약을 받아 승인합니다. 요약은 무언가를 버리기 때문에 쓸모가 있고, 이 패널은 <strong>요약이 버린 것</strong>을 드러냅니다. v2 프로젝트를 열었을 때만 사이드바에 나타납니다.</p>
+  <h3>🟣 크레딧(Credits) — 두 세대 공통</h3>
+  <p>트리 맨 위의 <strong>Credits</strong> 행을 누르면 Kiro가 이 프로젝트에 쓴 크레딧 페이지가 열립니다. 모든 숫자는 Kiro가 기록한 그대로입니다. 추정하지 않고, 금액으로 환산하지 않습니다. 크레딧 가격은 요금제마다 다르기 때문입니다.</p>
   <ul>
-    <li><strong>어디서 멈췄고 왜 멈췄는지.</strong> 엔진이 통과시키지 않은 것을 최신 순으로 보여주며, 앞뒤 이벤트를 함께 실어 거부가 판결이 아니라 순서로 읽히게 합니다.</li>
-    <li><strong>엔진의 센서가 무엇을 걸었는지</strong>를 센서별로 묶어 개수와 함께 보여줍니다. 워크플로우가 스스로를 검사한 결과이며, 링크를 누르면 해당 발견을 엽니다.</li>
-    <li><strong>에이전트의 기록과 엔진의 판정을 나란히</strong> — 단계별로 <em>agent says</em>와 <em>engine found</em>를 함께 놓습니다. 둘을 화해시키지 않습니다. 어긋남 자체가 봐야 할 것이기 때문입니다.</li>
-    <li><strong>작업 유닛</strong>과 의존 관계, 그리고 아직 진행 중인 유닛 수.</li>
-    <li>Markdown에서 추론하는 것은 하나도 없습니다. 모든 수치는 엔진이 컴파일한 그래프, 런타임 기록, 감사 원장에서 나옵니다. 그래서 이 빌드가 한 번도 본 적 없는 단계·phase·센서도 정확히 표시되고, 알아볼 수 없는 것은 <strong>짐작하지 않고 그대로 알려줍니다</strong>.</li>
+    <li><strong>총 크레딧</strong>과 그 옆에 Kiro가 <strong>중단 또는 실패</strong>로 표시한 턴에 쓴 크레딧. 비용은 들었는데 결과가 없는 작업이고, 행동으로 이어질 수 있는 숫자는 이쪽입니다.</li>
+    <li><strong>단계별.</strong> 턴의 시각이 단계의 구간 안에 들면 그 단계에 귀속됩니다. 구간은 v2에서는 엔진의 감사 원장, v1에서는 산출물의 수정 시각에서 옵니다. 어느 구간에도 들지 않는 턴은 그렇다고 표시되어 합계가 항상 맞습니다.</li>
+    <li><strong>세션별</strong>: 크레딧, 턴 수, 소요 시간, 마지막 턴 뒤 컨텍스트 창 사용률, 그리고 Kiro CLI가 기록한 경우 토큰 수(Kiro IDE는 크레딧만 기록합니다).</li>
   </ul>
+  <p><strong>v2에서는 이 페이지가 당신을 기다리는 것도 보여줍니다.</strong> 게이트에 선 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 메시지와 엔진이 당신 몫으로 표시한 조치와 함께 보여주고, 그것이 엔진이 밝힌 것인지 이 익스텐션이 원장에서 추론한 것인지도 함께 적습니다. 엔진의 다른 기록(거부, 센서 발견, 에이전트의 주장과 엔진의 판정)은 아래에 접혀 있습니다. v2 전용인 것은 이 내용뿐이고, 사이드바는 두 세대가 같습니다.</p>
 </div>
 
 <h2>툴바 안내</h2>
