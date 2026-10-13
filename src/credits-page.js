@@ -47,6 +47,18 @@ function fmtCredits(n) {
   return n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
 }
 
+// A proportion drawn as a bar, beside the number it belongs to. Pure CSS: the page
+// runs no script, so this is the whole of the visual language -- length, and one colour
+// for credits that bought nothing. Widths are rounded to whole percents so an unchanged
+// report renders byte-identical.
+function bar(value, max, { wasted = 0, label } = {}) {
+  if (!(max > 0) || !(value >= 0)) return '';
+  const pct = Math.max(0, Math.min(100, Math.round((value / max) * 100)));
+  const wastedPct = Math.max(0, Math.min(pct, Math.round((wasted / max) * 100)));
+  const title = label ? ` title="${escapeHtml(label)}"` : '';
+  return `<div class="bar"${title}><span class="bar-fill" style="width:${pct}%"></span>${wastedPct > 0 ? `<span class="bar-wasted" style="width:${wastedPct}%"></span>` : ''}</div>`;
+}
+
 function fmtTokens(n) {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -309,6 +321,7 @@ function creditsHeadline(model) {
     <div class="tile"><div class="big">${fmtCredits(a.total)}</div><div class="label">credits on this project</div><div class="sub">${a.totalTurns} prompt turn${a.totalTurns === 1 ? '' : 's'} across ${model.sessions.length} session${model.sessions.length === 1 ? '' : 's'}</div></div>
     <div class="tile ${a.wasted > 0 ? 'warn' : ''}"><div class="big">${fmtCredits(a.wasted)}</div><div class="label">spent on turns that were aborted or failed</div><div class="sub">${a.wastedTurns} turn${a.wastedTurns === 1 ? '' : 's'}${a.total > 0 ? `, ${wastedPct}% of the total` : ''}</div></div>
   </div>
+  ${a.total > 0 ? `<div class="split" title="${wastedPct}% of credits bought nothing"><span class="split-ok" style="width:${100 - wastedPct}%"></span><span class="split-wasted" style="width:${wastedPct}%"></span></div><div class="split-legend"><span><i class="sw ok"></i>completed</span><span><i class="sw wasted"></i>aborted or failed</span></div>` : ''}
   <p class="quiet">Credits are what Kiro recorded for each turn. The price of a credit depends on your plan, so no amount in money is shown. ${model.hasTokens ? 'Token counts appear where Kiro recorded them.' : 'Kiro recorded credits but no token counts for these sessions, so none are shown.'}</p>
 </section>`;
 }
@@ -324,25 +337,29 @@ function creditsByStage(model) {
       : model.windowSource === 'artifacts'
         ? 'v1 keeps no ledger this extension reads, so a stage\u2019s window is the span of its artifacts\u2019 modification times. That is coarse: a stage revisited later stretches its window.'
         : '';
+  // Bars are relative to the largest row, so the eye reads "which stage cost most"
+  // without doing the subtraction.
+  const max = Math.max(0, ...rows.map((s) => s.credits), outside.credits || 0);
   const body = rows
     .map(
       (s) =>
-        `<tr><td>${escapeHtml(s.stage)}${s.open ? ' <span class="pill">in progress</span>' : ''}</td><td class="num">${fmtCredits(s.credits)}</td><td class="num">${s.turns}</td></tr>`
+        `<tr><td>${escapeHtml(s.stage)}${s.open ? ' <span class="pill">in progress</span>' : ''}</td><td class="viz">${bar(s.credits, max)}</td><td class="num">${fmtCredits(s.credits)}</td><td class="num">${s.turns}</td></tr>`
     )
     .join('');
   const outsideRow =
     outside.turns > 0
-      ? `<tr class="outside"><td>Outside any stage window</td><td class="num">${fmtCredits(outside.credits)}</td><td class="num">${outside.turns}</td></tr>`
+      ? `<tr class="outside"><td>Outside any stage window</td><td class="viz">${bar(outside.credits, max)}</td><td class="num">${fmtCredits(outside.credits)}</td><td class="num">${outside.turns}</td></tr>`
       : '';
   return `<section>
   <h2>By stage</h2>
-  <table><thead><tr><th>Stage</th><th class="num">Credits</th><th class="num">Turns</th></tr></thead><tbody>${body}${outsideRow}</tbody></table>
+  <table><thead><tr><th>Stage</th><th class="viz"></th><th class="num">Credits</th><th class="num">Turns</th></tr></thead><tbody>${body}${outsideRow}</tbody></table>
   <p class="quiet">${note}${outside.turns > 0 ? ' Turns outside every window are shown, not hidden, so the total still adds up.' : ''}</p>
 </section>`;
 }
 
 function creditsBySession(model) {
   if (!model.ok || model.sessions.length === 0) return '';
+  const max = Math.max(0, ...model.sessions.map((s) => s.credits));
   const rows = model.sessions
     .map((s) => {
       // Where Kiro CLI recorded tokens, the four counts are shown in full on hover and
@@ -355,6 +372,7 @@ function creditsBySession(model) {
       const wasted = s.wasted > 0 ? `<span class="warn-text">${fmtCredits(s.wasted)} lost</span>` : '';
       return `<tr>
         <td><div>${escapeHtml(s.title || s.id)}</div><div class="sub">${escapeHtml(s.model ?? 'model not recorded')}</div></td>
+        <td class="viz">${bar(s.credits, max, { wasted: s.wasted, label: s.wasted > 0 ? `${fmtCredits(s.wasted)} of ${fmtCredits(s.credits)} on aborted or failed turns` : undefined })}</td>
         <td class="num">${fmtCredits(s.credits)}${wasted ? `<div class="sub">${wasted}</div>` : ''}</td>
         <td class="num">${s.turns}</td>
         <td class="num">${fmtDuration(s.elapsedMs)}</td>
@@ -366,7 +384,7 @@ function creditsBySession(model) {
     .join('');
   return `<section>
   <h2>By session</h2>
-  <table><thead><tr><th>Session</th><th class="num">Credits</th><th class="num">Turns</th><th class="num">Time</th><th class="num" title="Context window in use after the last turn">Context</th><th class="num">Tokens</th><th>Last turn</th></tr></thead><tbody>${rows}</tbody></table>
+  <table><thead><tr><th>Session</th><th class="viz"></th><th class="num">Credits</th><th class="num">Turns</th><th class="num">Time</th><th class="num" title="Context window in use after the last turn">Context</th><th class="num">Tokens</th><th>Last turn</th></tr></thead><tbody>${rows}</tbody></table>
   <p class="quiet">Context is how much of the model\u2019s window the session was using after its last turn; a session near full is one to start fresh. Tokens are shown only where Kiro recorded them.</p>
 </section>`;
 }
@@ -419,8 +437,6 @@ function historySection(model) {
     .slice(0, HISTORY_LIMIT)
     .map((t) => {
       const wasted = t.status === 'aborted' || t.status === 'failed';
-      const tokens = t.tokens ? `${fmtTokens(t.tokens.input)} in · ${fmtTokens(t.tokens.output)} out` : '';
-      const ctx = typeof t.contextPercent === 'number' ? `${Math.round(t.contextPercent)}%` : '';
       return `<tr class="${wasted ? 'wasted' : ''}">
         <td class="when">${fmtWhen(t.at)}</td>
         <td class="num">${fmtCredits(t.credits)}</td>
@@ -428,14 +444,12 @@ function historySection(model) {
         <td>${t.stages.length ? escapeHtml(t.stages.join(', ')) : '<span class="sub">outside any stage</span>'}</td>
         <td><div>${escapeHtml(t.session)}</div><div class="sub">${escapeHtml(t.model ?? '')}</div></td>
         <td class="num">${fmtDuration(t.elapsedMs)}</td>
-        <td class="num">${ctx}</td>
-        <td class="num">${tokens}</td>
       </tr>`;
     })
     .join('');
   const capped = model.history.length > HISTORY_LIMIT ? ` Showing the most recent ${HISTORY_LIMIT} of ${model.history.length}.` : '';
   return `<details class="history"><summary><h2>History</h2><span class="sub">${model.history.length} turn${model.history.length === 1 ? '' : 's'}, newest first</span></summary>
-  <table><thead><tr><th>When</th><th class="num">Credits</th><th>Status</th><th>Stage</th><th>Session</th><th class="num">Time</th><th class="num">Context</th><th class="num">Tokens</th></tr></thead><tbody>${rows}</tbody></table>
+  <table><thead><tr><th>When</th><th class="num">Credits</th><th>Status</th><th>Stage</th><th>Session</th><th class="num">Time</th></tr></thead><tbody>${rows}</tbody></table>
   <p class="quiet">Each row is one prompt turn as Kiro recorded it. The stage column is the same time-based attribution the By stage table uses.${capped}</p>
 </details>`;
 }
@@ -481,7 +495,7 @@ function renderCreditsPage({ webview, root, project, nonce: fixedNonce }) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Credits (Tokens)</title>
 <style nonce="${n}">
-  :root { --purple: var(--vscode-charts-purple, #a371f7); --warn: var(--vscode-editorWarning-foreground, #cca700); }
+  :root { --purple: var(--vscode-charts-purple, #a371f7); --warn: var(--vscode-editorWarning-foreground, #cca700); --muted: var(--vscode-descriptionForeground); }
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px 28px 40px; max-width: 980px; margin: 0 auto; line-height: 1.5; }
   h1 { font-size: 20px; margin: 0 0 18px; display: flex; align-items: baseline; gap: 10px; }
   h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--vscode-descriptionForeground); margin: 26px 0 10px; }
@@ -508,6 +522,18 @@ function renderCreditsPage({ webview, root, project, nonce: fixedNonce }) {
   .wait-head { font-weight: 600; }
   .wait-msg { margin: 4px 0; }
   .remedies { margin: 6px 0 0 16px; padding: 0; font-size: 13px; }
+  .viz { width: 26%; min-width: 110px; }
+  .bar { position: relative; height: 8px; background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent); border-radius: 4px; overflow: hidden; }
+  .bar-fill, .bar-wasted { position: absolute; left: 0; top: 0; bottom: 0; }
+  .bar-fill { background: var(--purple); opacity: 0.8; }
+  .bar-wasted { background: var(--warn); }
+  .split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 14px 0 6px; background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent); }
+  .split-ok { background: var(--purple); opacity: 0.8; }
+  .split-wasted { background: var(--warn); }
+  .split-legend { display: flex; gap: 18px; color: var(--muted); font-size: 12px; }
+  .split-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .sw.ok { background: var(--purple); opacity: 0.8; }
+  .sw.wasted { background: var(--warn); }
   details.records, details.history { margin-top: 26px; }
   details.history summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; list-style: none; }
   details.history summary::-webkit-details-marker { display: none; }

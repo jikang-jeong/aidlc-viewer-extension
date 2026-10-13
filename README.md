@@ -47,7 +47,7 @@ Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit
 The **Credits (Tokens)** row at the top of the tree opens a page. Every number on it is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
 
 - **Total credits on this project**, and beside it the credits spent on turns Kiro marked **aborted or failed**: work that was paid for and produced nothing. That second number is the one to act on.
-- **By stage.** A turn is placed in a stage when its time falls inside that stage's window, from the engine's audit ledger on v2 and from the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.
+- **By stage**, each with a bar relative to the costliest stage, and by session with the aborted share marked on the bar. A turn is placed in a stage when its time falls inside that stage's window, from the engine's audit ledger on v2 and from the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.
 - **By session**: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them. Each session names the store it was read from; Kiro IDE and current `kiro-cli` write to the same one, so the page does not guess which program it was. The page re-reads every few seconds while it is open.
 - **History**: every prompt turn, newest first, with its credits, status, stage and session, so any figure in the tables above can be traced to the turns that made it.
 
