@@ -40,3 +40,13 @@ test('the demo gif is not shipped: it was 5.7MB of a 7.4MB package', () => {
   assert.ok(ignore.includes('media/merged.gif'));
   assert.ok(!images.includes('media/merged.gif'), 'and the README no longer embeds it');
 });
+
+test('the package script keeps the paths relative, so the listing serves the images from the vsix and not from GitHub', () => {
+  // vsce rewrites relative image paths to GitHub raw URLs by default. That ties the
+  // listing to a pushed branch, which this project does not have. With the rewrite off,
+  // open-vsx serves the files from inside the vsix. The script is pinned to a vsce version
+  // because the flag's behaviour is the whole point.
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.match(pkg.scripts.package, /--no-rewrite-relative-links/);
+  assert.match(pkg.scripts.package, /npx --yes @vscode\/vsce@\d+\.\d+\.\d+/, 'invoked through npx with a pinned version; a bare vsce is not installed here');
+});
