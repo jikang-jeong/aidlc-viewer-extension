@@ -471,8 +471,10 @@
       },
       "refusals": 16,
       "refusalsLive": 0,
-      "approvalGates": 0,
-      "waitingOnYou": [],
+      "approvalGates": 1,
+      "waitingOnYou": [
+        "build-and-test"
+      ],
       "sensorFailureTotal": 13,
       "sensorsByStage": {
         "code-generation": 4,

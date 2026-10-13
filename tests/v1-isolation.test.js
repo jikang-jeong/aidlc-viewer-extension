@@ -627,7 +627,7 @@ test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', 
   assert.equal(w.label, 'Waiting for you');
   assert.equal(w.description, '2 items · intent-capture');
   assert.equal(new WaitingItem({ count: 0, stages: [] }).description, 'nothing right now');
-  assert.equal(new EngineRecordsItem().label, 'Engine log');
+  assert.equal(new EngineRecordsItem().label, 'AI-DLC Engine Log');
 
   // The gate itself, read from the source: the two rows are spread in under `isV2`.
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');

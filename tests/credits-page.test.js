@@ -54,7 +54,7 @@ test('v1 shows Credits only -- no Waiting, no engine records -- so its page matc
     ({ project }) => {
       const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
       const s = sections(html);
-      assert.deepEqual(s.filter((x) => /Waiting|Engine log|stuck|Checks/.test(x)), []);
+      assert.deepEqual(s.filter((x) => /Waiting|Engine Log|stuck|Checks/.test(x)), []);
       assert.ok(s.includes('Usage'));
     }
   ));
@@ -100,7 +100,7 @@ test('three pages: Usage starts and ends with credits; Waiting and Engine log ar
       assert.match(waiting, /fill in each empty <code>\[Answer\]:<\/code>/);
 
       const records = page.renderEngineRecordsPage({ webview, root: project, project: v2 });
-      assert.match(records, /<title>Engine log<\/title>/);
+      assert.match(records, /<title>AI-DLC Engine Log<\/title>/);
       assert.doesNotMatch(records, /<details class="records">/, 'unfolded: it is the whole page now');
     }
   ));

@@ -427,10 +427,10 @@ function waitingSection(project) {
 // they are below the fold because the two sections above are what a person acts on.
 function engineRecordsSection(project, root) {
   const intent = project?.v2?.active;
-  if (!intent) return `<section><h2>Engine log</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
+  if (!intent) return `<section><h2>AI-DLC Engine Log</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
   const parts = [blocking(intent, root), sensors(intent, root), contrast(intent, root)].filter(Boolean);
   if (parts.length === 0) {
-    return `<section><h2>Engine log</h2><p class="quiet">The engine has recorded no refusal, no sensor finding and no self-report to compare for this intent.</p></section>`;
+    return `<section><h2>AI-DLC Engine Log</h2><p class="quiet">The engine has recorded no refusal, no sensor finding and no self-report to compare for this intent.</p></section>`;
   }
   return `<p class="quiet">Refusals, what the engine\u2019s checks flagged, and the agent\u2019s own record beside the engine\u2019s check of it. These are the engine\u2019s records, shown as written.</p>\n${parts.join('\n')}`;
 }
@@ -439,7 +439,7 @@ function engineRecordsSection(project, root) {
 // this answers "when, and on what" -- and lets a person check that a figure in a table
 // is made of turns they recognise. Capped so a long-lived project does not render
 // thousands of rows; the cap is said on the page.
-const PAGE_TITLE = { credits: 'Usage', waiting: 'Waiting for you', records: 'Engine log' };
+const PAGE_TITLE = { credits: 'Usage', waiting: 'Waiting for you', records: 'AI-DLC Engine Log' };
 const HISTORY_LIMIT = 200;
 function historySection(model) {
   if (!model.ok || !model.history || model.history.length === 0) return '';

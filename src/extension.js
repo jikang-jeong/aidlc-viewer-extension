@@ -211,7 +211,7 @@ class WatchController {
       this._pages = {
         credits: { id: 'markdownWatchViewer.credits', title: `AI-DLC ${PAGE_TITLE.credits}`, render: renderCreditsPage },
         waiting: { id: 'markdownWatchViewer.waiting', title: `AI-DLC ${PAGE_TITLE.waiting}`, render: renderWaitingPage },
-        records: { id: 'markdownWatchViewer.records', title: `AI-DLC ${PAGE_TITLE.records}`, render: renderEngineRecordsPage }
+        records: { id: 'markdownWatchViewer.records', title: PAGE_TITLE.records, render: renderEngineRecordsPage }
       };
     }
     return this._pages;
@@ -3478,7 +3478,7 @@ function getHelpHtml() {
 </div>
 
 <div class="stage-card supervision">
-  <h3>🛡 Engine log — v2 only</h3>
+  <h3>🛡 AI-DLC Engine Log — v2 only</h3>
   <p>The engine's own account of the run: what it refused and why, what its checks flagged, and the agent's claim set beside the engine's check of it. Shown as written, never summarised.</p>
 </div>
 
@@ -3572,7 +3572,7 @@ function getHelpHtml() {
 </div>
 
 <div class="stage-card supervision">
-  <h3>🛡 Engine log(엔진 기록) — v2 전용</h3>
+  <h3>🛡 AI-DLC Engine Log(엔진 기록) — v2 전용</h3>
   <p>엔진 자신의 기록입니다. 무엇을 왜 거부했는지, 점검이 무엇을 지적했는지, 에이전트의 주장 옆에 놓인 엔진의 판정. 요약하지 않고 쓰인 그대로 보여줍니다.</p>
 </div>
 

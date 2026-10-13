@@ -193,9 +193,13 @@ function buildV2(root, options = {}) {
       // in place, so the project's own file is the only source.
       const scopeName = runtime ? runtime.scope : undefined;
       const stages = graphReader.stagesForScope(stageGraph, scopeGrid, scopeName);
+      // Every stage slug this intent's scope knows, so the ledger reader can recognise
+      // a stage inside a Context path whatever position it sits at. The runtime graph
+      // would list only the stages that have run, which is too few for this.
+      const stageSlugs = new Set(stages.map((s) => s.slug));
       // Per-unit progress lives only in the ledger, so the audit has to be read
       // before the journey can be honest about a stage that repeats.
-      const audit = auditReader.summarise(intent.dir);
+      const audit = auditReader.summarise(intent.dir, stageSlugs);
       const journey = buildFromStages(stages, runtime, audit.unitsCompleted, audit.unitsSeen);
       const disk = runtimeReader.phaseDirsOnDisk(intent.dir, phases);
       intents.push({
@@ -211,6 +215,11 @@ function buildV2(root, options = {}) {
         scopeDisagreement:
           Boolean(scopeName) && Boolean(intent.scope) && scopeName !== intent.scope,
         journey,
+        // The runtime graph and the scope's stage list, for diagnose. `runtime` was
+        // read here and then dropped -- only hasRuntime survived -- so diagnose ran
+        // without it and its "done according to the runtime graph" check never fired.
+        runtime,
+        stageSlugs,
         // Reported, not corrected: a directory that is not a phase is either
         // engine bookkeeping or something this model has not met.
         nonPhaseDirs: disk.nonPhaseDirs,

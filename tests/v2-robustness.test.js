@@ -936,3 +936,55 @@ test('the gate events are no longer reported as unrecognised', () => {
   assert.ok(!unknown.includes('STAGE_AWAITING_APPROVAL'), unknown.join(', '));
   assert.ok(!unknown.includes('SUMMARY_CONFIRMATION_RECORDED'), unknown.join(', '));
 });
+
+// ---------------------------------------------------------------------------
+// 2.11.0 ledgers put the stage in a Context path on artifact rows
+// ---------------------------------------------------------------------------
+//
+// Found on a real run on 2026-10-13: the agent was asking "Approve or Request Changes?"
+// in the chat and the page read "nothing right now". The 2.11.0 engine emits no
+// STAGE_AWAITING_APPROVAL for that gate; the inference keys on "an artifact was written
+// and nothing moved the stage since", and the ARTIFACT_* rows carried no Stage field --
+// only `**Context**: ideation > intent-capture > intent-statement.md`. Every artifact
+// event was stageless and the inference had nothing to key on.
+
+const KNOWN = new Set(['intent-capture', 'requirements-analysis', 'functional-design', 'build-and-test']);
+
+test('an artifact row names its stage in a Context path, matched against the known stages', () => {
+  const dir = intentWith([
+    { Timestamp: '2026-10-13T02:51:00Z', Event: 'STAGE_STARTED', Stage: 'intent-capture' },
+    { Timestamp: '2026-10-13T02:52:44Z', Event: 'ARTIFACT_UPDATED', Tool: 'Edit', Context: 'ideation > intent-capture > intent-statement.md' },
+    { Timestamp: '2026-10-13T02:54:47Z', Event: 'HUMAN_TURN', Session: 'sess_x' }
+  ]);
+  const result = diagnose(dir, { knownStages: KNOWN });
+  assert.equal(result.waitingOnYou.length, 1);
+  assert.equal(result.waitingOnYou[0].stage, 'intent-capture');
+  assert.equal(result.waitingOnYou[0].stated, false, 'concluded from the ledger, and says so');
+  assert.equal(result.waitingOnYou[0].evidence, 'ARTIFACT_UPDATED');
+});
+
+test('the Context path has three shapes, and position is not assumed: the segment that is a stage wins', () => {
+  // phase > stage > file;  construction > <unit> > stage > file;  phase > stage > contributions > file
+  const dir = intentWith([
+    { Timestamp: '2026-10-13T02:50:00Z', Event: 'ARTIFACT_UPDATED', Context: 'construction > u1-inspection-core > functional-design > functional-spec.md' },
+    { Timestamp: '2026-10-13T02:50:10Z', Event: 'ARTIFACT_CREATED', Context: 'inception > requirements-analysis > contributions > aidlc-quality-agent.md' },
+    { Timestamp: '2026-10-13T02:50:20Z', Event: 'ARTIFACT_CREATED', Context: 'ideation > phase-check-ideation.md' }
+  ]);
+  const stages = diagnose(dir, { knownStages: KNOWN }).waitingOnYou.map((w) => w.stage).sort();
+  // The unit name and the phase-check file are not stages and must not become waits.
+  assert.deepEqual(stages, ['functional-design', 'requirements-analysis']);
+});
+
+test('without the known-stage list a Context path names no stage, which errs toward silence', () => {
+  const dir = intentWith([
+    { Timestamp: '2026-10-13T02:52:44Z', Event: 'ARTIFACT_UPDATED', Context: 'ideation > intent-capture > intent-statement.md' }
+  ]);
+  assert.deepEqual(diagnose(dir).waitingOnYou, []);
+});
+
+test('a Stage field still outranks the Context path when a row carries both', () => {
+  const dir = intentWith([
+    { Timestamp: '2026-10-13T02:52:44Z', Event: 'ARTIFACT_UPDATED', Stage: 'build-and-test', Context: 'ideation > intent-capture > x.md' }
+  ]);
+  assert.equal(diagnose(dir, { knownStages: KNOWN }).waitingOnYou[0].stage, 'build-and-test');
+});

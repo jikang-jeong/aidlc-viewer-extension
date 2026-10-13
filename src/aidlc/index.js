@@ -131,7 +131,7 @@ function buildProject(root, generation, markers) {
 
   // Supervision facts per intent, attached alongside its journey.
   const intents = model.intents.map((intent) => {
-    const diagnosis = diagnose(intent.dir, { runtime: intent.runtime, projectRoot: root });
+    const diagnosis = diagnose(intent.dir, { runtime: intent.runtime, knownStages: intent.stageSlugs, projectRoot: root });
     return {
       ...intent,
       diagnosis,

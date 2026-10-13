@@ -128,6 +128,22 @@ v1 tree must not gain a row. The three panels share one poll and one render loop
 (`pages`), each with a fixed nonce so an unchanged report is byte-identical. Pins:
 credits-page "three pages"; v1-isolation "the v2-only rows never appear in a v1 tree".
 
+**2.11.0 artifact rows carry their stage in a Context path, not a Stage field.**
+`ARTIFACT_CREATED` / `ARTIFACT_UPDATED` rows have `**Context**: <phase> > <stage> > <file>`
+and no `Stage`. Reading only `Stage` / `Stage slug` left every artifact event stageless,
+and the approval-wait inference, which keys on "an artifact was written and nothing moved
+the stage since", had nothing to key on: a run whose agent was asking "Approve or Request
+Changes?" read "nothing right now". The path has three shapes (`phase > stage > file`,
+`construction > <unit> > stage > file`, `phase > stage > contributions > file`), so no
+position is assumed; segments are matched against the scope's stage slugs, passed in from
+journey-v2 as `knownStages`. Taking the second segment blindly reported unit names and
+`phase-check-ideation.md` as waiting stages on three finished samples. Also found: the
+runtime graph was read in journey-v2 and then dropped, so diagnose's "done according to
+the runtime graph" check never fired; it is passed through now. The v2-test baseline
+changed on purpose: its Build and Test is `pending` in the runtime graph with artifacts
+written and nothing after, which is a wait by the rule. Pins: v2-robustness, four tests
+under "2.11.0 ledgers put the stage in a Context path".
+
 **A person's turn on v2 is a questions file with an open `[Answer]:`.** Guard refusals
 and parked plans are two sources; the third, and on real intents the common one, is a
 `*questions*.md` under `<phase>/<stage>/` with unanswered `[Answer]:` lines, the same

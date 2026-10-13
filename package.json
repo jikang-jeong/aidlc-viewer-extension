@@ -93,7 +93,7 @@
       },
       {
         "command": "markdownWatchViewer.showEngineRecords",
-        "title": "AI-DLC: Engine log"
+        "title": "AI-DLC: Engine Log"
       }
     ],
     "viewsContainers": {

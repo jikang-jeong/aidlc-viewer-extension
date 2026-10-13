@@ -301,7 +301,7 @@ function readPlanApprovalRequests(projectRoot) {
 // here so this stays a transform over data the caller gathered, and so the completion
 // authority is the same object the journey was built from.
 function diagnose(intentDir, options = {}) {
-  const summary = auditReader.summarise(intentDir);
+  const summary = auditReader.summarise(intentDir, options.knownStages);
   const refusals = describeRefusals(summary, options);
   const approvalWaits = describeApprovalWaits(summary, options.runtime);
   const guardRefusals = readGuardRefusals(intentDir);

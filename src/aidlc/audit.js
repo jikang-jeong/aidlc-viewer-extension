@@ -81,10 +81,31 @@ function field(record, name) {
   return match ? match[1].trim() : undefined;
 }
 
-// The stage a record belongs to, trying both spellings. Order matters only for
-// speed; a record carries one or the other, never both.
-function stageOf(record) {
-  return field(record, 'Stage') ?? field(record, 'Stage slug');
+// The stage a record belongs to, trying each spelling the engine has used. A record
+// carries one of them, never two, so order is only for speed.
+//
+// The third shape arrived with 2.11.0's ARTIFACT_CREATED / ARTIFACT_UPDATED rows, which
+// carry no Stage field at all but a `**Context**: <phase> > <stage> > <file>` line.
+// Reading only the first two left every artifact event stageless, and the approval-wait
+// inference -- which keys on "an artifact was written and nothing moved the stage since"
+// -- had nothing to key on. A project whose agent was asking "Approve or Request
+// Changes?" in the chat read "nothing right now". Found on a real run, 2026-10-13.
+//
+// The Context path has three shapes on real ledgers: `phase > stage > file`,
+// `construction > <unit> > stage > file`, and `phase > stage > contributions > file`.
+// Taking the second segment put unit names and "phase-check-ideation.md" where a stage
+// goes and reported five waits on a finished project. So no position is assumed: the
+// segments are matched against the project's own stage list from its runtime graph,
+// and the one that is a stage wins. Without that list the Context line names no stage,
+// which errs toward silence.
+function stageOf(record, knownStages) {
+  const direct = field(record, 'Stage') ?? field(record, 'Stage slug');
+  if (direct) return direct;
+  if (!knownStages || knownStages.size === 0) return undefined;
+  const context = field(record, 'Context');
+  if (!context) return undefined;
+  const parts = context.split('>').map((p) => p.trim()).filter(Boolean);
+  return parts.find((p) => knownStages.has(p));
 }
 
 function listShardPaths(intentDir) {
@@ -104,7 +125,7 @@ function listShardPaths(intentDir) {
 // shards. Shard filename order is NOT execution order across clones, so callers
 // must not treat the sequence as a global timeline; timestamps are the ordering
 // key when order matters.
-function readEvents(intentDir) {
+function readEvents(intentDir, knownStages) {
   const events = [];
   for (const shardPath of listShardPaths(intentDir)) {
     let content;
@@ -119,7 +140,7 @@ function readEvents(intentDir) {
       events.push({
         event: name,
         timestamp: field(record, 'Timestamp'),
-        stage: stageOf(record),
+        stage: stageOf(record, knownStages),
         // Only present on per-unit rows, and the only place a unit name appears
         // in the ledger.
         unit: field(record, 'Unit'),
@@ -153,8 +174,10 @@ function tally(events) {
 // stage-local: a run can accumulate failures early and then produce none for
 // many stages, and a bare cumulative number would keep warning about work the
 // user already moved past.
-function summarise(intentDir) {
-  const events = readEvents(intentDir);
+// `knownStages` is the project's stage slugs from its runtime graph, used only to
+// recognise a stage inside a Context path; see stageOf.
+function summarise(intentDir, knownStages) {
+  const events = readEvents(intentDir, knownStages);
   const counts = tally(events);
 
   const sensorFailures = [];
