@@ -55,7 +55,9 @@ function bar(value, max, { wasted = 0, label } = {}) {
   if (!(max > 0) || !(value >= 0)) return '';
   const pct = Math.max(0, Math.min(100, Math.round((value / max) * 100)));
   const wastedPct = Math.max(0, Math.min(pct, Math.round((wasted / max) * 100)));
-  const title = label ? ` title="${escapeHtml(label)}"` : '';
+  // The bar's meaning is in its title: "41% of the project's credits". Without the
+  // number a full bar on a one-session project read as "a lot", which it is not.
+  const title = ` title="${escapeHtml(label ? `${pct}% of the project\u2019s credits \u00b7 ${label}` : `${pct}% of the project\u2019s credits`)}"`;
   // Widths are classes, not inline styles: the page's CSP allows only the nonce'd
   // <style> block, so style="width:60%" is dropped and the bar renders as an empty
   // track. Seen in a screenshot. One class per whole percent, defined once in the CSS.
@@ -340,9 +342,14 @@ function creditsByStage(model) {
       : model.windowSource === 'artifacts'
         ? 'v1 keeps no ledger this extension reads, so a stage\u2019s window is the span of its artifacts\u2019 modification times. That is coarse: a stage revisited later stretches its window.'
         : '';
-  // Bars are relative to the largest row, so the eye reads "which stage cost most"
-  // without doing the subtraction.
-  const max = Math.max(0, ...rows.map((s) => s.credits), outside.credits || 0);
+  // Bars are the share of the PROJECT'S total credits, not of the largest row. The
+  // first version scaled to the largest row, so on a project with one session or one
+  // stage the bar was always full: 89 credits looked the same as 200 would. Asked, from
+  // a screenshot, what "full" meant. Against the total, a full bar means "this is all
+  // of it", a half bar "half of it", and the same bar on a bigger project is shorter.
+  // Stage shares can sum past 100% because a turn spanning two stages counts in both;
+  // the note under the table already says this column is a view, not a split.
+  const max = model.attribution.total;
   const body = rows
     .map(
       (s) =>
@@ -355,14 +362,16 @@ function creditsByStage(model) {
       : '';
   return `<section>
   <h2>By stage</h2>
-  <table><thead><tr><th>Stage</th><th class="viz"></th><th class="num">Credits</th><th class="num">Turns</th></tr></thead><tbody>${body}${outsideRow}</tbody></table>
+  <table><thead><tr><th>Stage</th><th class="viz sub">share of total</th><th class="num">Credits</th><th class="num">Turns</th></tr></thead><tbody>${body}${outsideRow}</tbody></table>
   <p class="quiet">${note}${outside.turns > 0 ? ' Turns outside every window are shown, not hidden, so the total still adds up.' : ''}</p>
 </section>`;
 }
 
 function creditsBySession(model) {
   if (!model.ok || model.sessions.length === 0) return '';
-  const max = Math.max(0, ...model.sessions.map((s) => s.credits));
+  // Share of the project's total, as in By stage. Sessions do not overlap, so these
+  // do sum to the total.
+  const max = model.attribution.total;
   const rows = model.sessions
     .map((s) => {
       // Where Kiro CLI recorded tokens, the four counts are shown in full on hover and
@@ -387,7 +396,7 @@ function creditsBySession(model) {
     .join('');
   return `<section>
   <h2>By session</h2>
-  <table><thead><tr><th>Session</th><th class="viz"></th><th class="num">Credits</th><th class="num">Turns</th><th class="num">Time</th><th class="num" title="Context window in use after the last turn">Context</th><th class="num">Tokens</th><th>Last turn</th></tr></thead><tbody>${rows}</tbody></table>
+  <table><thead><tr><th>Session</th><th class="viz sub">share of total</th><th class="num">Credits</th><th class="num">Turns</th><th class="num">Time</th><th class="num" title="Context window in use after the last turn">Context</th><th class="num">Tokens</th><th>Last turn</th></tr></thead><tbody>${rows}</tbody></table>
   <p class="quiet">Context is how much of the model\u2019s window the session was using after its last turn; a session near full is one to start fresh. Tokens are shown only where Kiro recorded them.</p>
 </section>`;
 }
@@ -427,10 +436,10 @@ function waitingSection(project) {
 // they are below the fold because the two sections above are what a person acts on.
 function engineRecordsSection(project, root) {
   const intent = project?.v2?.active;
-  if (!intent) return `<section><h2>AI-DLC Engine Log</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
+  if (!intent) return `<section><h2>v2 Engine Log</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
   const parts = [blocking(intent, root), sensors(intent, root), contrast(intent, root)].filter(Boolean);
   if (parts.length === 0) {
-    return `<section><h2>AI-DLC Engine Log</h2><p class="quiet">The engine has recorded no refusal, no sensor finding and no self-report to compare for this intent.</p></section>`;
+    return `<section><h2>v2 Engine Log</h2><p class="quiet">The engine has recorded no refusal, no sensor finding and no self-report to compare for this intent.</p></section>`;
   }
   return `<p class="quiet">Refusals, what the engine\u2019s checks flagged, and the agent\u2019s own record beside the engine\u2019s check of it. These are the engine\u2019s records, shown as written.</p>\n${parts.join('\n')}`;
 }
@@ -439,7 +448,7 @@ function engineRecordsSection(project, root) {
 // this answers "when, and on what" -- and lets a person check that a figure in a table
 // is made of turns they recognise. Capped so a long-lived project does not render
 // thousands of rows; the cap is said on the page.
-const PAGE_TITLE = { credits: 'Usage', waiting: 'Waiting for you', records: 'AI-DLC Engine Log' };
+const PAGE_TITLE = { credits: 'Usage', waiting: 'Waiting for you', records: 'v2 Engine Log' };
 const HISTORY_LIMIT = 200;
 function historySection(model) {
   if (!model.ok || !model.history || model.history.length === 0) return '';

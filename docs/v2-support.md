@@ -230,7 +230,17 @@ asserts no `style="width` survives.
 **Every phase is listed in the tree, including one the scope skipped in full.** Filtering
 those out left a v2 project showing three of five phases while the strip above showed all
 five. The row reads "not in scope", dimmed. v1 has no scope mechanism, so its rows are
-unchanged. Pin: v1-isolation "every phase is listed".
+unchanged. This took two fixes: the first changed the row's wording and the test helper
+but left the `.filter(...)` in `getChildren` in place, so the tree still showed three. A
+test that re-implements the logic it is testing proves only that it agrees with itself;
+the pin now also reads the `getChildren` source and requires no filter between the phase
+groups and the rows. Pin: v1-isolation "every phase is listed".
+
+**A proportion bar is scaled to the whole, never to the largest row.** Scaling to the
+largest row made every one-session project's bar full: 89 credits looked like 200 would.
+Bars on the Usage page are the share of the project's total, say so in their title ("75%
+of the project's credits"), and the column header reads "share of total". Pin:
+credits-page "a session that is half the project draws a half bar".
 
 **`summary { display:flex }` drops the browser's disclosure marker.** Draw ▸/▾ with
 `::before`.

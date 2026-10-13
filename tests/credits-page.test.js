@@ -100,7 +100,7 @@ test('three pages: Usage starts and ends with credits; Waiting and Engine log ar
       assert.match(waiting, /fill in each empty <code>\[Answer\]:<\/code>/);
 
       const records = page.renderEngineRecordsPage({ webview, root: project, project: v2 });
-      assert.match(records, /<title>AI-DLC Engine Log<\/title>/);
+      assert.match(records, /<title>v2 Engine Log<\/title>/);
       assert.doesNotMatch(records, /<details class="records">/, 'unfolded: it is the whole page now');
     }
   ));
@@ -289,7 +289,7 @@ test('the folded sections draw their own disclosure marker', () =>
     }
   ));
 
-test('the rollups carry bars drawn in CSS, relative to the largest row, with the wasted share marked', () =>
+test('the rollups carry bars drawn in CSS, as the share of the project total, with the wasted share marked', () =>
   withKiroHome(
     ({ home, project }) => ideSession(home, project, [{ at: T, credits: 60 }, { at: T + 1000, credits: 40, status: 'aborted' }]),
     ({ project }) => {
@@ -300,8 +300,10 @@ test('the rollups carry bars drawn in CSS, relative to the largest row, with the
       assert.match(html, /<div class="split" title="40% of credits bought nothing"><span class="split-ok w60"><\/span><span class="split-wasted w40">/);
       assert.doesNotMatch(html, /style="width/, 'no inline style survives the CSP');
       assert.match(html, /\.w60\{width:60%\}/, 'the width class is defined in the nonce\u2019d stylesheet');
-      // By session: the only session is the max, so its bar is full, with 40% marked wasted.
-      assert.match(html, /<div class="bar" title="40\.0 of 100 on aborted or failed turns"><span class="bar-fill w100"><\/span><span class="bar-wasted w40">/);
+      // By session: bars are the share of the project's total, so the only session is
+      // 100% -- and the title says so, because a full bar on a one-session project read
+      // as "a lot" rather than "all of it". 40% of it is marked wasted.
+      assert.match(html, /<div class="bar" title="100% of the project\u2019s credits \u00b7 40\.0 of 100 on aborted or failed turns"><span class="bar-fill w100"><\/span><span class="bar-wasted w40">/);
       // No script was added to draw any of it.
       assert.doesNotMatch(html, /<script/);
     }
@@ -314,5 +316,25 @@ test('the history has no context or token columns', () =>
       const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
       const head = /<details class="history">[\s\S]*?<thead>(.*?)<\/thead>/.exec(html)[1].replace(/<[^>]+>/g, '|');
       assert.equal(head, '||When||Credits||Status||Stage||Session||Time||');
+    }
+  ));
+
+
+test('a session that is half the project draws a half bar, so the bar means something across projects', () =>
+  withKiroHome(
+    ({ home, project }) => {
+      ideSession(home, project, [{ at: T, credits: 60 }]);
+      // A second session in another workspace hash, same project.
+      const dir = path.join(home, 'sessions', 'ws2', 'sess_2');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({ id: 'sess_2', modelId: 'm', workspacePaths: [project], createdAt: '2026-10-06T05:00:00.000Z', title: 'Second' }));
+      fs.writeFileSync(path.join(dir, 'messages.jsonl'), JSON.stringify({ id: 'x', timestamp: new Date(T + 5000).toISOString(), payload: { type: 'usage_summary', promptTurnSummaries: [{ usage: 60, status: 'success', elapsedTime: 1000 }] } }) + '\n');
+    },
+    ({ project }) => {
+      const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
+      const bars = [...html.matchAll(/<div class="bar" title="(\d+)% of the project/g)].map((m) => Number(m[1]));
+      // By stage has one "outside" row at 100%; the two sessions are 50% each. Under the
+      // old largest-row rule both sessions would have been 100%.
+      assert.deepEqual(bars, [100, 50, 50]);
     }
   ));

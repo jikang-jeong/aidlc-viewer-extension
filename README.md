@@ -14,7 +14,7 @@ AI-DLC has your agent work through a lifecycle, producing Markdown artifacts as 
 | **The artifact, rendered** | Markdown with Mermaid diagrams inline. Double-click to edit at that spot; Save returns you to the view. What you type is exactly what is saved. |
 | **Usage** | What Kiro spent on this project, in the credits Kiro itself recorded: total, the share that bought nothing, by stage, by session, and every turn. No estimates, no money. |
 | **Waiting for you** (v2) | A row with its count: the questions the engine wrote and you have not answered, the refusals only you can clear, the plans parked for your approval. A stage waiting on you is stopped, not slow. |
-| **AI-DLC Engine Log** (v2) | The engine's own account of the run, as written. |
+| **v2 Engine Log** (v2) | The engine's own account of the run, as written. |
 
 Works in **Kiro** and in VS Code and its forks. v2 setup targets Kiro IDE or Kiro CLI, the two it has verified against a real run; upstream also ships definitions for other agents, which you can install yourself. v1 works with Kiro, Claude Code and your editor's own convention.
 
@@ -59,7 +59,7 @@ The **Usage** row at the top of the tree opens a page. Every number on it is one
 
 ### What is waiting on you, and what the engine recorded (v2)
 
-**Waiting for you** carries its count in the tree, so you know without opening anything; the page lists each item with the engine's own words: questions it wrote for you and has not had answered (the file and how many), refusals with the remedies it marked as yours, and plans parked for your approval, each labelled as the engine's word or this extension's inference from the ledger. A stage waiting on you is not slow, it is stopped, and the chat said so once and scrolled away. **AI-DLC Engine Log** is the engine's own account: refusals, what its checks flagged, and the agent's claim beside the engine's check of it.
+**Waiting for you** carries its count in the tree, so you know without opening anything; the page lists each item with the engine's own words: questions it wrote for you and has not had answered (the file and how many), refusals with the remedies it marked as yours, and plans parked for your approval, each labelled as the engine's word or this extension's inference from the ledger. A stage waiting on you is not slow, it is stopped, and the chat said so once and scrolled away. **v2 Engine Log** is the engine's own account: refusals, what its checks flagged, and the agent's claim beside the engine's check of it.
 
 v1 has neither row, because it has no engine to wait on or to record.
 
@@ -103,7 +103,7 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 - **One sidebar for both generations, with two v2 rows.** The v2-only Supervision panel
   under the tree is gone. **Waiting for you** is a row with its count beside it and a page
   that reads what the engine wrote: unanswered questions files, refusals that need you,
-  parked plans. **AI-DLC Engine Log** is a row and a page with the engine's own account of
+  parked plans. **v2 Engine Log** is a row and a page with the engine's own account of
   the run. Both appear only on v2.
 - **Setup asks once, where it asks.** The "Set up the AI-DLC workflow for this folder?"
   prompt now carries **v1**, **v2 · Kiro IDE** and **v2 · Kiro CLI** as its own buttons
@@ -183,7 +183,7 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 
 **AI-DLC v2 support.** The extension detects which generation your project uses and shows the matching view. Nothing about v1 changes.
 
-- **Supervision panel for v2** — which stage is waiting on you, what the engine's checks flagged, the units of work, and the agent's own record placed beside the engine's check of it. (Became the Waiting for you and AI-DLC Engine Log rows in 0.0.26.)
+- **Supervision panel for v2** — which stage is waiting on you, what the engine's checks flagged, the units of work, and the agent's own record placed beside the engine's check of it. (Became the Waiting for you and v2 Engine Log rows in 0.0.26.)
 - **The journey strip works on v2**, including per-unit progress and the marker for the file you have open. Same strip, nothing new to learn.
 - **One setup button that asks which generation**, with v1 listed first.
 - **v2 setup tells you it needs bun** instead of producing a project whose gates silently never fire.

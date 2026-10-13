@@ -110,6 +110,13 @@ test('every phase is listed, and one the scope skipped in full reads "not in sco
   ];
   const groups = groupByPhaseInCheckpointOrder(withSkippedPhase);
   assert.deepEqual(groups.map((g) => g.phase), ['ideation', 'operation'], 'nothing is dropped');
+  // The test helper above re-implements the grouping; the first fix passed it while the
+  // real getChildren kept its filter, and the tree still showed three phases. So the
+  // source is read too: the progress branch must map every phase group to a row with
+  // no filter between.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
+  const branch = src.slice(src.indexOf("element.contextValue === 'progress'"), src.indexOf('new StageProgressChild(phase, nodes)'));
+  assert.doesNotMatch(branch, /\.filter\(/, 'getChildren filters phases out of the tree');
   const operation = new StageProgressChild('operation', groups[1].nodes);
   assert.equal(operation.description, 'not in scope');
 
@@ -627,7 +634,7 @@ test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', 
   assert.equal(w.label, 'Waiting for you');
   assert.equal(w.description, '2 items · intent-capture');
   assert.equal(new WaitingItem({ count: 0, stages: [] }).description, 'nothing right now');
-  assert.equal(new EngineRecordsItem().label, 'AI-DLC Engine Log');
+  assert.equal(new EngineRecordsItem().label, 'v2 Engine Log');
 
   // The gate itself, read from the source: the two rows are spread in under `isV2`.
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
