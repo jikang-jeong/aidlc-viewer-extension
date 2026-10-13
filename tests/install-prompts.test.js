@@ -588,3 +588,25 @@ test('the setup toast asks the generation with two buttons, then the harness wit
   const between = body.slice(body.indexOf('choice !== v2'), body.indexOf("'AI-DLC v2: which Kiro will run it?'"));
   assert.match(between, /recordedHarness\(folderUri\.fsPath\)[\s\S]*runSetup\(folderUri, `v2:\$\{recorded\}`\)/);
 });
+
+test('only the toolbar command reaches runSetup without a preselection; every toast button goes through the two-step toasts', () => {
+  // runSetup(folder) with no preselection is the path that opens the generation QuickPick
+  // in the centre of the screen. The toolbar button is allowed to, because it is a list
+  // of its own and carries the explanations. A toast button is not: the per-version
+  // notice's "Set up AI-DLC" went through setupRules() and reopened the picker the
+  // two-step toasts had retired. Reported after those toasts shipped.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
+  // Whole call lines, so nested parentheses in the argument do not cut the match short.
+  const calls = [...src.matchAll(/this\.runSetup\((.*)\);/g)].map((m) => m[1].trim());
+  const bare = calls.filter((args) => !args.includes(','));
+  assert.deepEqual(bare, ['vscode.Uri.file(folder)'], 'exactly one bare runSetup, inside setupRules()');
+  const setupRulesBody = src.slice(src.indexOf('async setupRules()'), src.indexOf('async offerWorkspaceAutoDetect()'));
+  assert.match(setupRulesBody, /this\.runSetup\(vscode\.Uri\.file\(folder\)\)/);
+  // setupRules is called from the registered toolbar command and nowhere else.
+  const callers = [...src.matchAll(/\bthis\.setupRules\(\)|controller\.setupRules\(\)/g)].map((m) => m[0]);
+  assert.deepEqual(callers, ['controller.setupRules()'], 'the notice toast no longer calls setupRules()');
+  // The notice routes to the toasts instead.
+  const notice = src.slice(src.indexOf('async maybeShowSetupNotice()'), src.indexOf('  refresh() {'));
+  assert.match(notice, /this\.offerAidlcSetup\(uri\)/);
+  assert.match(notice, /already set up in/);
+});

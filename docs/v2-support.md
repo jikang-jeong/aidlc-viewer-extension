@@ -252,6 +252,13 @@ CLI, skipped when the project already recorded one. The earlier objection to a t
 flow was a QuickPick opening in the centre of the screen, not the second step itself. Pin:
 install-prompts "the setup toast asks the generation with two buttons".
 
+**Every toast button that sets up goes through `offerAidlcSetup`; only the toolbar reaches
+`runSetup` bare.** `runSetup(folder)` with no preselection opens the generation QuickPick in
+the centre of the screen, which is right for the toolbar (a list with explanations) and wrong
+for a toast button. The per-version notice's "Set up AI-DLC" went through `setupRules()` and
+reopened the picker the two-step toasts had retired; found in the field the same afternoon.
+Pin: install-prompts "only the toolbar command reaches runSetup without a preselection".
+
 **Setup's installers return nothing, so "did setup happen" is read from the folder.**
 `runSetup` compares `detectGeneration` before and after; a generation present after that was
 not present before is what was just set up, and only then does the start page open. A re-run

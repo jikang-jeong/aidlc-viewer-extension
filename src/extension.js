@@ -614,7 +614,25 @@ class WatchController {
         guideLabel
       );
       if (choice === setupLabel) {
-        await this.setupRules();
+        // Through the same toasts the folder pick uses, not through setupRules(): that
+        // path takes no preselection and so opens the generation QuickPick in the
+        // centre of the screen -- the one place the two-step toast was meant to retire.
+        // Reported after the toast flow shipped: "setup from the corner notice still
+        // opens the picker at the top".
+        const folder = this.context.workspaceState.get(STATE_KEY);
+        if (folder) {
+          const uri = vscode.Uri.file(folder);
+          if (await aidlcSetupNeeded(uri, this.context.extensionUri)) {
+            await this.offerAidlcSetup(uri);
+          } else {
+            // A pressed button must say something; offerAidlcSetup stays quiet here
+            // because its usual caller is a folder pick, where silence is right.
+            vscode.window.showInformationMessage(`AI-DLC is already set up in ${path.basename(folder)}.`);
+          }
+        } else {
+          // selectFolder() ends by offering setup for the folder just picked.
+          await this.promptForFolder('Select an AI-DLC project folder first, then set it up.');
+        }
       } else if (choice === guideLabel) {
         this.showHelp();
       }
