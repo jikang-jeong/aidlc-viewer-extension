@@ -42,16 +42,17 @@ New artifacts are marked `NEW` until you open them, then `READ`, with counts rol
 
 Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit** to swap the same pane for the Markdown source, change it, and save back to the file; press **Read** to return. The view never rewrites your Markdown from the rendering, so what you type is exactly what is saved. Zoom works in both modes.
 
-### Supervision, on AI-DLC v2
+### What Kiro spent, and what is waiting on you
 
-In v2 your agent reads the artifacts and you approve a summary, and the workflow continues whether or not you read anything yourself. A summary is useful precisely because it leaves things out, so this panel shows you what it left out:
+The **Credits** row at the top of the tree opens a page. Every number on it is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
 
-- **which stage is waiting on you**, because a stage at its approval gate is not slow, it is stopped, and the chat said so once and scrolled away
-- **what the engine's own checks flagged**, grouped per check, with a link to read each finding
-- **the agent's record beside the engine's check of it**, per stage, never reconciled — the two answer slightly different questions, so the judgement stays yours
-- **the units of work** and what depends on what
+- **Total credits on this project**, and beside it the credits spent on turns Kiro marked **aborted or failed**: work that was paid for and produced nothing. That second number is the one to act on.
+- **By stage.** A turn is placed in a stage when its time falls inside that stage's window, from the engine's audit ledger on v2 and from the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.
+- **By session**: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro CLI recorded them. Kiro IDE records credits only, and the page says so rather than showing a zero.
 
-The panel appears only on v2 projects. Nothing about v1 changes.
+**On AI-DLC v2 the page also leads with what is waiting on you.** A stage at its approval gate is not slow, it is stopped, and the chat said so once and scrolled away. Each item carries the engine's own message and the remedies it marked as yours, labelled as either the engine's word or this extension's inference from the ledger. The engine's other records — refusals, what its checks flagged, the agent's claim beside the engine's check of it — are folded below.
+
+The sidebar is the same for both generations; only that v2 content differs.
 
 ## Toolbar
 
@@ -72,6 +73,30 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 
 **Nothing is read out of your Markdown.** Progress comes from the project's structure, so an artifact in an unexpected format cannot put your position wrong, and anything the extension does not recognise is reported rather than guessed at.
 ## What's New
+
+### 0.0.26
+
+- **The viewer is one pane.** It opens rendered; press **Edit** (or `Ctrl/Cmd+E`) to swap
+  the same space for the Markdown source, and **Read** to swap back. The split view with
+  the source on one side showed everything twice and left room for neither. What you
+  type is exactly what is saved — the view never rewrites your Markdown from the
+  rendering, which is the one way a viewer could silently alter a file.
+- **Credits.** A new row at the top of the tree opens a page with what Kiro spent on this
+  project: total credits, the credits spent on aborted or failed turns, a breakdown by
+  stage and by session, context-window usage per session, and token counts where Kiro CLI
+  recorded them. Every number is Kiro's own record. Nothing is estimated and no money is
+  shown. Works on v1 and v2 alike.
+- **On v2, the page leads with what is waiting on you**, read from what the engine itself
+  wrote down: each refusal with its code and the remedies the engine marked as yours, and
+  each code-generation plan parked for your approval. Where the engine said nothing and
+  the wait is inferred from the ledger, the page says so.
+- **One sidebar for both generations.** The v2-only Supervision panel under the tree is
+  gone; its contents are on the Credits page, folded under Engine records.
+- **Setup asks once, where it asks.** The "Set up the AI-DLC workflow for this folder?"
+  prompt now carries **v1** and **v2** as its own buttons instead of a "Choose a version"
+  step that opened a list elsewhere and came back.
+- Fixes: the setup list no longer claims v2 needs bun (the engine has not needed it since
+  2.8.0), and **Check setup** no longer fails on a machine where bun is absent.
 
 ### 0.0.25
 
@@ -135,7 +160,7 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 
 **AI-DLC v2 support.** The extension detects which generation your project uses and shows the matching view. Nothing about v1 changes.
 
-- **Supervision panel for v2** — which stage is waiting on you, what the engine's checks flagged, the units of work, and the agent's own record placed beside the engine's check of it.
+- **Supervision panel for v2** — which stage is waiting on you, what the engine's checks flagged, the units of work, and the agent's own record placed beside the engine's check of it. (Moved to the Credits page in 0.0.26.)
 - **The journey strip works on v2**, including per-unit progress and the marker for the file you have open. Same strip, nothing new to learn.
 - **One setup button that asks which generation**, with v1 listed first.
 - **v2 setup tells you it needs bun** instead of producing a project whose gates silently never fire.
