@@ -5,6 +5,7 @@ const { renderCreditsPage } = require('./credits-page');
 
 // Drives the `when` clause on the v2-only command (Remove AI-DLC v2). Set from the
 // project the tree reads, since the panel that used to set it is gone.
+const CREDITS_POLL_MS = 10_000;
 const V2_CONTEXT_KEY = 'aidlcViewer.v2Detected';
 const { readProject } = require('./aidlc/index');
 const { checkpointIndexForPath } = require('./aidlc/journey-v2');
@@ -151,10 +152,34 @@ class WatchController {
     vscode.commands.executeCommand('setContext', V2_CONTEXT_KEY, isV2);
     if (this.creditsPanel && root) {
       try {
-        this.creditsPanel.webview.html = renderCreditsPage({ webview: this.creditsPanel.webview, root: root.fsPath, project });
+        const html = renderCreditsPage({ webview: this.creditsPanel.webview, root: root.fsPath, project });
+        // Assigning html resets the page's scroll and folds every <details>, so it is
+        // assigned only when the report actually changed. The poll below calls this
+        // every few seconds; most of those calls must be no-ops to the reader.
+        if (html !== this.creditsHtml) {
+          this.creditsHtml = html;
+          this.creditsPanel.webview.html = html;
+        }
       } catch {
         // Leave the last good render in place.
       }
+    }
+  }
+
+  // The session store is under ~/.kiro, outside the watched folder, so no file event
+  // tells us a turn was spent. Reported from use: a kiro-cli session on the project
+  // was running and the page did not move until it was reopened. While the page is
+  // open it re-reads on a timer; the store reader caches for 5s so this is cheap, and
+  // the render is only applied when something changed.
+  startCreditsPoll() {
+    this.stopCreditsPoll();
+    this.creditsPoll = setInterval(() => this.refreshSupervision(), CREDITS_POLL_MS);
+  }
+
+  stopCreditsPoll() {
+    if (this.creditsPoll) {
+      clearInterval(this.creditsPoll);
+      this.creditsPoll = undefined;
     }
   }
 
@@ -178,8 +203,11 @@ class WatchController {
     );
     this.creditsPanel.onDidDispose(() => {
       this.creditsPanel = undefined;
+      this.creditsHtml = undefined;
+      this.stopCreditsPoll();
     });
     this.refreshSupervision();
+    this.startCreditsPoll();
   }
 
   async restoreWatcher() {
@@ -634,6 +662,7 @@ class WatchController {
   // during normal operation, so runtime behavior is unchanged.
   dispose() {
     this.disposeWatcher();
+    this.stopCreditsPoll();
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;

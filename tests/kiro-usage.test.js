@@ -365,3 +365,21 @@ test('all-zero token fields read as "not recorded", because that is what they ar
       assert.equal(s.tokens, undefined);
     }
   ));
+
+test('a session names the store it came from, not the program that wrote it', () =>
+  withStore(
+    ({ sessions, project }) => {
+      ideSession(sessions, { id: 'w', workspace: project, turns: [{ at: min(1), credits: 1 }] });
+      cliSession(sessions, { id: 'c', cwd: project, turns: [{ at: min(2), credits: 1 }] });
+    },
+    ({ project }) => {
+      // On 2026-10-13 a kiro-cli run ("kiro-cli --resume-id sess_...") wrote to the
+      // <workspace-hash>/sess_* store, the one this reader had labelled "Kiro IDE". The
+      // layout does not say which program wrote it, so the label must not claim to.
+      const u = usage.readKiroUsage(project);
+      const byId = Object.fromEntries(usage.summariseSessions(u.sessions).map((s) => [s.id, s.source]));
+      assert.equal(byId.sess_w, 'workspace');
+      assert.equal(byId.c, 'cli');
+      for (const s of u.sessions) assert.ok(!['ide', 'IDE'].includes(s.source), 'no session claims to be from the IDE');
+    }
+  ));

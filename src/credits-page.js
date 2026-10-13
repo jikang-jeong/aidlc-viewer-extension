@@ -354,7 +354,7 @@ function creditsBySession(model) {
       const ctx = typeof s.lastContextPercent === 'number' ? `${Math.round(s.lastContextPercent)}%` : '—';
       const wasted = s.wasted > 0 ? `<span class="warn-text">${fmtCredits(s.wasted)} lost</span>` : '';
       return `<tr>
-        <td><div>${escapeHtml(s.title || s.id)}</div><div class="sub">${escapeHtml(s.model ?? 'model not recorded')} · ${escapeHtml(s.source === 'cli' ? 'Kiro CLI' : 'Kiro IDE')}</div></td>
+        <td><div>${escapeHtml(s.title || s.id)}</div><div class="sub">${escapeHtml(s.model ?? 'model not recorded')} · ${escapeHtml(s.source === 'cli' ? 'sessions/cli' : 'sessions/<workspace>')}</div></td>
         <td class="num">${fmtCredits(s.credits)}${wasted ? `<div class="sub">${wasted}</div>` : ''}</td>
         <td class="num">${s.turns}</td>
         <td class="num">${fmtDuration(s.elapsedMs)}</td>

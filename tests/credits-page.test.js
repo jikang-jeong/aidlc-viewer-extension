@@ -204,3 +204,13 @@ test('token detail appears only where Kiro recorded non-zero tokens, as in/out w
   assert.equal(page.fmtTokens(2_300_000), '2.3M');
   assert.equal(page.fmtTokens(undefined), '—');
 });
+
+test('the session table says which store a session came from, never which program', () =>
+  withKiroHome(
+    ({ home, project }) => ideSession(home, project, [{ at: T, credits: 10 }]),
+    ({ project }) => {
+      const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
+      assert.match(html, /sessions\/&lt;workspace&gt;/);
+      assert.doesNotMatch(html, /Kiro IDE<\/div>/, 'a kiro-cli session lands in the same store, so "IDE" would be a guess');
+    }
+  ));

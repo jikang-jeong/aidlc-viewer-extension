@@ -48,7 +48,7 @@ The **Credits (Tokens)** row at the top of the tree opens a page. Every number o
 
 - **Total credits on this project**, and beside it the credits spent on turns Kiro marked **aborted or failed**: work that was paid for and produced nothing. That second number is the one to act on.
 - **By stage.** A turn is placed in a stage when its time falls inside that stage's window, from the engine's audit ledger on v2 and from the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.
-- **By session**: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them. Kiro IDE records credits only, and the page says so rather than showing a zero.
+- **By session**: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them. Each session names the store it was read from; Kiro IDE and current `kiro-cli` write to the same one, so the page does not guess which program it was. The page re-reads every few seconds while it is open.
 - **History**: every prompt turn, newest first, with its credits, status, stage and session, so any figure in the tables above can be traced to the turns that made it.
 
 **On AI-DLC v2 the page also leads with what is waiting on you.** A stage at its approval gate is not slow, it is stopped, and the chat said so once and scrolled away. Each item carries the engine's own message and the remedies it marked as yours, labelled as either the engine's word or this extension's inference from the ledger. The engine's other records — refusals, what its checks flagged, the agent's claim beside the engine's check of it — are folded below.

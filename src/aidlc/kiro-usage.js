@@ -20,14 +20,21 @@
 //
 // TWO STORES, TWO SHAPES
 //
-//   Kiro IDE   ~/.kiro/sessions/<workspace-hash>/sess_<id>/
+//   workspace  ~/.kiro/sessions/<workspace-hash>/sess_<id>/
 //              session.json (metadata: modelId, workspacePaths, createdAt) +
 //              messages.jsonl (one {id, timestamp, payload:{type,...}} per line).
 //              A turn's cost is payload.type === 'usage_summary', whose
 //              promptTurnSummaries[].usage is in credits. No token counts.
-//   Kiro CLI   ~/.kiro/sessions/cli/<id>.json
+//              Written by Kiro IDE AND by current kiro-cli: a CLI run on 2026-10-13
+//              ("kiro-cli --resume-id sess_...") landed here, not in cli/. So this
+//              store does not say which program wrote it, and neither do we.
+//   cli/       ~/.kiro/sessions/cli/<id>.json
 //              one JSON document; each turn carries metering_usage[].value in credits
-//              AND the four token counts. Bound to a project by its `cwd`.
+//              and four token-count fields. Bound to a project by its `cwd`. Seen
+//              written by automated kiro-cli runs; the token fields were all zero.
+//
+// `source` on a turn or session is the store it came from ('workspace' | 'cli'), not
+// the program that wrote it. The page shows the store.
 //
 // The unit is credits throughout. Tokens are carried where the CLI records them and
 // shown as secondary; they are never estimated where Kiro did not record them. Dollar
@@ -121,7 +128,7 @@ function normaliseIdeTurn(record, meta) {
     for (const tool of summary?.usedTools ?? []) if (typeof tool === 'string') tools.add(tool);
   }
   return {
-    source: 'ide',
+    source: 'workspace',
     sessionId: meta.id,
     at: typeof record.timestamp === 'number' ? record.timestamp : Date.parse(record.timestamp),
     credits,
