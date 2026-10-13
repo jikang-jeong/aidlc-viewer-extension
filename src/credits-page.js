@@ -525,20 +525,17 @@ function renderEngineRecordsPage({ webview, root, project, nonce: fixedNonce }) 
 function renderStartPage({ webview, root, project, nonce: fixedNonce, generation, installed = [], notices = [] }) {
   const gen = generation === 'both' ? 'v2' : generation;
   const isV2 = gen === 'v2';
-  const chatHref = 'command:markdownWatchViewer.openChatToStart';
+  const chatHref = `command:markdownWatchViewer.openChatToStart?${encodeURIComponent(JSON.stringify([isV2 ? 'v2' : 'v1']))}`;
   const guideHref = 'command:markdownWatchViewer.showHelp';
   const what = isV2
     ? `<p class="lead">Type <code class="big">/aidlc</code> in Kiro\u2019s chat, followed by what you want to build.</p>
        <p class="quiet">Setup installed a conductor agent and a set of role agents, so <code>/aidlc</code> starts or resumes the workflow; the others are there when you want a specific one.</p>`
     : `<p class="lead">Tell your agent: <code class="big">Using AI-DLC, build \u2026</code> and describe what you want.</p>
        <p class="quiet">The rules your agent reads are in the project now. Any agent that reads them works: Kiro, Claude Code, or your editor\u2019s own.</p>`;
-  // v2: one button that opens Kiro's chat with /aidlc already typed. v1: no button for
-  // the phrase, because v1 has no single chat to open (any agent reads the rules) and a
-  // copy button did not work from a webview link in the field; the phrase is large on the
-  // page and short enough to type.
-  const buttons = isV2
-    ? `<a class="btn primary" href="${chatHref}">Open chat with /aidlc</a><a class="btn" href="${guideHref}">Guide</a>`
-    : `<a class="btn" href="${guideHref}">Guide</a>`;
+  // One button that opens Kiro's chat with the start phrase already typed: /aidlc on
+  // v2, "Using AI-DLC, build " on v1. v1's rules are read by any agent, but the person
+  // who set this up from inside Kiro is in Kiro, and the button is for them.
+  const buttons = `<a class="btn primary" href="${chatHref}">${isV2 ? 'Open chat with /aidlc' : 'Open chat with the phrase'}</a><a class="btn" href="${guideHref}">Guide</a>`;
   const installedList = installed.length
     ? `<section><h2>What was set up</h2><ul class="plain">${installed.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul></section>`
     : '';

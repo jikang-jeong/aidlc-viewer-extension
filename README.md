@@ -1,86 +1,70 @@
 # AIDLC-VIEWER
 
-A companion tool for **[AI-DLC](https://github.com/awslabs/aidlc-workflows)**, the AWS AI-Driven Development Lifecycle workflow.
+The companion to **[AI-DLC](https://github.com/awslabs/aidlc-workflows)**, the AWS AI-Driven Development Lifecycle. Set the workflow up in one click, see where it is, read what it wrote, know when it is waiting on you, and know what it cost.
 
 ![AIDLC-VIEWER demo](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/merged.gif)
 
-AI-DLC has your agent work through a lifecycle, producing Markdown artifacts as it goes. This extension sits beside that run and answers the questions you would otherwise dig through folders or scroll back through chat to answer.
+AI-DLC hands your agent a lifecycle and the agent works through it, writing Markdown artifacts and asking you questions along the way. That run happens in a chat window and a folder tree, and both are bad at the questions you actually have: *where is it, what does it need from me, how much has this cost.* This extension answers them in the sidebar.
 
-| | What you get |
-| --- | --- |
-| **One-click setup** | Press one button, pick v1 or v2 (and for v2, Kiro IDE or Kiro CLI) on the same prompt, and the project is set up. v2's engine is installed for you from the official release. Nothing you already have is overwritten. When it is done, a page opens with the one thing to type to start. |
-| **Where the workflow is** | The furthest stage reached, at the top of the tree and in a strip above every open file. Not a percentage: AI-DLC decides its own stage list as it goes, so reached stages are counted and the list is shown. |
-| **Which file needs you** | New artifacts are marked and their folders open themselves, so what the agent just wrote is in front of you. |
-| **The artifact, rendered** | Markdown with Mermaid diagrams inline. Double-click to edit at that spot; Save returns you to the view. What you type is exactly what is saved. |
-| **Usage** | What Kiro spent on this project, in the credits Kiro itself recorded: total, the share that bought nothing, by stage, by session, and every turn. No estimates, no money. |
-| **Waiting for you** (v2) | A row with its count: the questions the engine wrote and you have not answered, the refusals only you can clear, the plans parked for your approval. A stage waiting on you is stopped, not slow. |
-| **v2 Engine Log** (v2) | The engine's own account of the run, as written. |
+Works in **Kiro** and in VS Code and its forks, with both generations of AI-DLC.
 
-Works in **Kiro** and in VS Code and its forks. v2 setup targets Kiro IDE or Kiro CLI, the two it has verified against a real run; upstream also ships definitions for other agents, which you can install yourself. v1 works with Kiro, Claude Code and your editor's own convention.
+## Set up in one click
 
-## Getting started
+![One toast asks which generation](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/setup_aidlc.png)
 
-1. Install the extension and click the **AIDLC** icon in the activity bar.
-2. **Choose the project folder** to watch. Everything below acts on that folder, so this comes first.
-3. Press **Set up AI-DLC Rules** and pick a generation. AI-DLC comes in two: v1 is rule files your agent reads, v2 is an engine that drives the workflow itself. If your project already has AI-DLC, the extension detects which one and you can skip this step.
-4. Start the workflow. **On v1**, tell your agent *"Using AI-DLC, build ..."*. **On v2**, type `/aidlc` — it installs a conductor agent plus a set of role agents, so `/aidlc` starts or resumes a workflow and `/aidlc-mvp` and the rest are there when you want a specific one.
+Pick the folder, press one button, answer one question. **v1** is the rule files your agent reads; **v2** is an engine that drives the workflow itself, and the extension installs it for you from the official release and configures the project with it. For v2 a second prompt in the same place asks Kiro IDE or Kiro CLI. Nothing you already have is overwritten.
 
-New artifacts appear in the tree as they are created.
+## Start it
 
-Two things to know about v2 before you start. Its engine is a program installed on your machine, so the first v2 setup downloads about 110MB and takes a minute; every project after that is seconds. And Kiro reads `/aidlc` from the **workspace root**, so if you set up a folder that is not the root of your window, open that folder and `/aidlc` will be there. **AI-DLC v2: Check setup** in the Command Palette tells you which of these is missing.
+![The start page, with the one thing to type](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/lets_start_ai-dlc.png)
 
-Setup does not overwrite anything. Existing files are detected and left alone.
+When setup finishes, a page opens with the one thing to type, large. One button opens Kiro's chat with it already in the input: `/aidlc` on v2, `Using AI-DLC, build …` on v1. Until the first stage is reached, the row at the top of the tree reads **Not started** with the same command beside it.
 
-## What it shows you
+## Know where it is
 
-### Where the workflow is
+![The tree and the strip, five phases, every stage](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/whereami_in_ai-dlc-phase.png)
 
-The top of the tree names the furthest stage reached and how many stages are done. Opening any artifact adds a strip across the top of the viewer, so your position stays visible while you read. Click it to see the whole stage list grouped by phase.
+The top of the tree names the furthest stage reached. Above every open file, a strip draws the whole workflow: each phase, each stage, done or in progress or skipped or never in scope. Click it for the list.
 
-**There is no percentage, on purpose.** AI-DLC adapts to the work: most stages are conditional, and Construction repeats once per unit of work with a unit count that does not exist until units have been generated. Any denominator would be guesswork, so reached stages are counted instead, and stages that repeat show their own progress like `2/3`.
+**There is no percentage, on purpose.** AI-DLC decides its own stage list as it goes, and Construction repeats once per unit of work with a unit count that does not exist until units have been generated. A denominator would be a guess, so reached stages are counted and the list is shown.
 
-A stage the workflow moved past without producing anything is shown as skipped rather than left blank, and one your scope never included says so. Both are normal.
-### Which file needs you
+Position comes from the project's structure, never from parsing the Markdown, so an artifact in an unexpected format cannot put it wrong.
 
-New artifacts are marked `NEW` until you open them, then `READ`, with counts rolled up to their folders. Folders containing new files open themselves, so you are not hunting for what just appeared. Changes are picked up whether they came from your agent, from git, or from anything else.
+## Read what it wrote
 
-### The artifact itself
+![An artifact, rendered, with the strip above it](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/ai-dlc_viewer.png)
 
-Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit**, or double-click the text you want to change, to swap the same pane for the Markdown source with the cursor near that spot; **Save** returns you to the view. The view never rewrites your Markdown from the rendering, so what you type is exactly what is saved. Zoom works in both modes. HTML comments, which AI-DLC uses to instruct the agent, are shown dimmed rather than dropped.
+New artifacts are marked and their folders open themselves, so what the agent just wrote is in front of you. Each one opens rendered, Mermaid diagrams inline. **Edit**, or double-click the text you want to change, swaps the same pane for the source with the cursor near that spot; **Save** brings the view back. What you type is exactly what is saved. The HTML comments AI-DLC uses to instruct the agent are shown dimmed rather than dropped.
 
-### What Kiro spent
+## Know when it is waiting on you (v2)
 
-The **Usage** row at the top of the tree opens a page. Every number on it is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
+A stage waiting for your answer is stopped, not slow, and the chat said so once and scrolled away. The **Waiting for you** row changes colour when there is something: the questions file the engine wrote and you have not answered, the refusal only you can clear, the plan parked for your approval. Each item is in the engine's own words, labelled as its word or as this extension's inference.
 
-- **Total credits on this project**, and beside it the credits spent on turns Kiro marked **aborted or failed**: work that was paid for and produced nothing. That second number is the one to act on.
-- **By stage**, each with a bar relative to the costliest stage, and by session with the aborted share marked on the bar. A turn is placed in a stage when its time falls inside that stage's window, from the engine's audit ledger on v2 and from the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.
-- **By session**: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them. Each session names the store it was read from; Kiro IDE and current `kiro-cli` write to the same one, so the page does not guess which program it was. The page re-reads every few seconds while it is open.
-- **History**: every prompt turn, newest first, with its credits, status, stage and session, so any figure in the tables above can be traced to the turns that made it.
+## Know what it cost
 
-### What is waiting on you, and what the engine recorded (v2)
+![Usage: credits by stage, by session, every turn](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/credit_token.png)
 
-**Waiting for you** carries its count in the tree, so you know without opening anything; the page lists each item with the engine's own words: questions it wrote for you and has not had answered (the file and how many), refusals with the remedies it marked as yours, and plans parked for your approval, each labelled as the engine's word or this extension's inference from the ledger. A stage waiting on you is not slow, it is stopped, and the chat said so once and scrolled away. **v2 Engine Log** is the engine's own account: refusals, what its checks flagged, and the agent's claim beside the engine's check of it.
+**Usage** shows what Kiro spent on this project, in the credits Kiro itself recorded. The total, and beside it the credits spent on turns that were aborted or failed: paid for, produced nothing. By stage and by session, each as its share of the whole. Every turn, newest first, so any figure can be traced to the turns behind it. The page re-reads while it is open, so a running session shows up as it spends.
 
-v1 has neither row, because it has no engine to wait on or to record.
+Nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
+
+## Also
+
+**v2 Engine Log** is a row and a page with the engine's own account of the run: what it refused, what its checks flagged, the agent's claim beside the engine's check of it.
+
+**Setup is reversible.** `AI-DLC v2: Remove` takes back only what the extension installed and refuses if it has no record of installing anything. `AI-DLC v2: Check setup` says what is present and what is missing when `/aidlc` does not appear, which is usually that Kiro reads agents from the workspace root and the folder you set up is not it.
+
+**v1 needs nothing and works offline.** v2's engine is installed by the installer AWS publishes with each release, which verifies what it downloads and needs no administrator rights. If that cannot run where you are, setup hands you the same command to run yourself.
 
 ## Toolbar
 
-| Button | What it does |
+| | |
 | --- | --- |
 | 📂 Open Workspace | Choose the project folder to watch |
 | 🔄 Refresh | Re-scan the folder |
 | ☁️ Set up AI-DLC Rules | Asks which generation (and harness, for v2), then sets it up |
-| ❓ Guide | Open the built-in guide, in English and Korean |
+| ❓ Guide | The built-in guide, in English and Korean |
 
-Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check setup** reports what is present and what is missing when `/aidlc` does not appear. **AI-DLC v2: Remove** takes back only what the extension installed, and refuses if it has no record of installing anything.
-
-## Notes
-
-**AI-DLC v2's engine is installed on your machine, and this extension installs it for you.** It runs the installer AWS publishes with each release, which verifies what it downloads and puts everything under your home directory, so no administrator rights are needed. If that cannot run where you are, setup hands you the same command to run yourself rather than leaving you a project whose gates never fire. v1 needs nothing and works offline.
-
-**v1 is installed from a snapshot inside the extension. v2 comes from the latest published release** of [awslabs/aidlc-workflows](https://github.com/awslabs/aidlc-workflows), and the version you have is recorded in the project so you can always tell which engine it is.
-
-**Nothing is read out of your Markdown.** Progress comes from the project's structure, so an artifact in an unexpected format cannot put your position wrong, and anything the extension does not recognise is reported rather than guessed at.
 ## What's New
 
 ### 0.0.26
@@ -96,10 +80,6 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
   stage and by session, context-window usage per session, and token counts where Kiro CLI
   recorded them. Every number is Kiro's own record. Nothing is estimated and no money is
   shown. Works on v1 and v2 alike.
-- **On v2, the page leads with what is waiting on you**, read from what the engine itself
-  wrote down: each refusal with its code and the remedies the engine marked as yours, and
-  each code-generation plan parked for your approval. Where the engine said nothing and
-  the wait is inferred from the ledger, the page says so.
 - **One sidebar for both generations, with two v2 rows.** The v2-only Supervision panel
   under the tree is gone. **Waiting for you** is a row with its count beside it and a page
   that reads what the engine wrote: unanswered questions files, refusals that need you,
@@ -112,8 +92,8 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
   row, where the generation was not told apart from the harness. A project that already
   recorded a harness is not asked again.
 - **Setup ends on what to do next.** When setup finishes, a page opens in the editor with
-  the one thing to type, large: `/aidlc` on v2, `"Using AI-DLC, build …"` on v1, and, on v2,
-  a button that opens Kiro's chat with `/aidlc` already typed. The completion toast used to
+  the one thing to type, large: `/aidlc` on v2, `"Using AI-DLC, build …"` on v1, and a
+  button that opens Kiro's chat with it already typed. The completion toast used to
   lead with which files were written and say this in a trailing sentence that was gone in
   seconds. Until the first stage is reached, the row at the top of the tree and the strip
   above an open file read **Not started** with the same command beside it, instead of v1's
