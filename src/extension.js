@@ -2875,45 +2875,94 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       const modeRead = document.getElementById('modeRead');
       const modeEdit = document.getElementById('modeEdit');
       const shell = document.querySelector('.shell');
-      function setMode(mode) {
+      // Switching modes keeps your place.
+      //
+      // The two panes have different heights -- rendered Markdown is not the same length
+      // as its source -- so copying a scroll ratio from one to the other lands on different
+      // text, which is what the old scroll-sync did and why Edit "jumped a little". And a
+      // textarea that is display:none has no layout, so a scrollTop set in the same tick
+      // as it becomes visible is silently dropped, which is why double-click "went to the
+      // top". Both are fixed the same way: pick the TEXT at the top of the pane being
+      // left (or the text that was double-clicked), switch, let the browser lay out, then
+      // find that text in the pane being entered and scroll to it. There is no exact map
+      // between rendered and source positions, so this is text matching and says so; when
+      // the text is not found the pane stays where it was.
+      function firstVisibleBlockText() {
+        const top = previewScroll.getBoundingClientRect().top;
+        const blocks = preview.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote');
+        for (const b of blocks) {
+          const r = b.getBoundingClientRect();
+          if (r.bottom > top + 4) return (b.textContent || '').trim().slice(0, 80);
+        }
+        return '';
+      }
+      function sourceLineAtEditorTop() {
+        const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 20;
+        const line = Math.floor(editor.scrollTop / lineHeight);
+        const lines = editor.value.split('\\n');
+        for (let i = line; i < Math.min(lines.length, line + 20); i++) {
+          const t = lines[i].replace(/^[#>*\\-\\s\\d.|]+/, '').trim();
+          if (t.length > 8) return t.slice(0, 60);
+        }
+        return '';
+      }
+      function scrollEditorToText(needle, placeCursor) {
+        if (!needle) return;
+        const at = editor.value.indexOf(needle);
+        if (at < 0) return;
+        if (placeCursor) editor.setSelectionRange(at, at);
+        const lines = editor.value.slice(0, at).split('\\n').length - 1;
+        const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 20;
+        editor.scrollTop = Math.max(0, lines * lineHeight - editor.clientHeight / 3);
+      }
+      function scrollPreviewToText(needle) {
+        if (!needle) return;
+        const blocks = preview.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote');
+        for (const b of blocks) {
+          if ((b.textContent || '').includes(needle)) {
+            const top = b.getBoundingClientRect().top - previewScroll.getBoundingClientRect().top;
+            previewScroll.scrollTop = Math.max(0, previewScroll.scrollTop + top - previewScroll.clientHeight / 3);
+            return;
+          }
+        }
+      }
+
+      // anchor: the text to land on in the new mode; when omitted it is taken from
+      // the top of the pane being left.
+      function setMode(mode, anchor) {
         const editing = mode === 'edit';
+        const wasEditing = document.body.classList.contains('editing');
+        if (anchor === undefined && editing !== wasEditing) {
+          anchor = wasEditing ? sourceLineAtEditorTop() : firstVisibleBlockText();
+        }
         document.body.classList.toggle('editing', editing);
         modeRead.classList.toggle('active', !editing);
         modeEdit.classList.toggle('active', editing);
         modeRead.setAttribute('aria-selected', String(!editing));
         modeEdit.setAttribute('aria-selected', String(editing));
-        if (editing) editor.focus();
         if (typeof vscode.setState === 'function') {
           vscode.setState(Object.assign({}, vscode.getState() || {}, { mode: mode }));
         }
+        // After layout: the pane just shown has no geometry until the browser paints it.
+        requestAnimationFrame(() => {
+          if (editing) {
+            editor.focus();
+            scrollEditorToText(anchor, true);
+          } else {
+            scrollPreviewToText(anchor);
+          }
+        });
       }
       modeRead.addEventListener('click', () => setMode('read'));
       modeEdit.addEventListener('click', () => setMode('edit'));
 
-      // Double-click anywhere in the view to edit there.
-      //
-      // There is no exact map from a rendered position back to a source offset -- the
-      // renderer drops the syntax -- so this is an approximation that is honest about
-      // being one: the text of the double-clicked block is looked up in the source and
-      // the cursor is placed at its first occurrence; a block that cannot be found (a
-      // Mermaid diagram, an image) still switches to Edit, at the top. Links, SVGs and
-      // code blocks are excluded as targets, because a double-click there usually means
-      // "select this", not "edit here".
+      // Double-click text in the view to edit it there. Links, SVGs and code blocks are
+      // excluded as targets, because a double-click there usually means "select this".
       preview.addEventListener('dblclick', (e) => {
         if (e.target.closest('a, svg, .mermaid, pre')) return;
         const block = e.target.closest('p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote');
         const needle = block ? (block.textContent || '').trim().slice(0, 80) : '';
-        setMode('edit');
-        if (!needle) return;
-        const at = editor.value.indexOf(needle);
-        if (at >= 0) {
-          editor.setSelectionRange(at, at);
-          // Scroll so the cursor line is in view: lines up to the match, times the line
-          // height the textarea is actually using.
-          const lines = editor.value.slice(0, at).split('\\\\n').length - 1;
-          const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 20;
-          editor.scrollTop = Math.max(0, lines * lineHeight - editor.clientHeight / 3);
-        }
+        setMode('edit', needle);
       });
       // Ctrl/Cmd+E toggles, the way an editor's own preview toggle does.
       document.addEventListener('keydown', (e) => {
@@ -2923,7 +2972,9 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         }
       });
       const previousState = (typeof vscode.getState === 'function' ? vscode.getState() : null) || {};
-      setMode(previousState.mode === 'edit' ? 'edit' : 'read');
+      // Restoring the remembered mode is not a switch, so no anchor is computed: the
+      // panes have not been laid out yet and previewScroll is declared further down.
+      setMode(previousState.mode === 'edit' ? 'edit' : 'read', '');
 
       const ZOOM_MIN = 0.5;
       const ZOOM_MAX = 3.0;
@@ -2983,32 +3034,9 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       previewScroll.addEventListener('gestureend', (e) => e.preventDefault());
 
       // Bi-directional scroll sync between raw editor and preview
-      let syncingFromEditor = false;
-      let syncingFromPreview = false;
-
-      function scrollRatio(el) {
-        const max = el.scrollHeight - el.clientHeight;
-        return max > 0 ? el.scrollTop / max : 0;
-      }
-      function setScrollRatio(el, ratio) {
-        const max = el.scrollHeight - el.clientHeight;
-        el.scrollTop = Math.max(0, Math.min(max, ratio * max));
-      }
-
-      editor.addEventListener('scroll', () => {
-        if (syncingFromPreview) return;
-        syncingFromEditor = true;
-        setScrollRatio(previewScroll, scrollRatio(editor));
-        requestAnimationFrame(() => { syncingFromEditor = false; });
-      });
-
-      previewScroll.addEventListener('scroll', () => {
-        if (syncingFromEditor) return;
-        syncingFromPreview = true;
-        setScrollRatio(editor, scrollRatio(previewScroll));
-        requestAnimationFrame(() => { syncingFromPreview = false; });
-      });
-
+      // The ratio-based scroll sync between the two panes is gone: they are never visible
+      // together now, and copying a ratio between panes of different heights is exactly
+      // what put Edit on different text. setMode keeps the place by text instead.
 
       function renderMarkdown(source) {
         preview.innerHTML = markdownToHtml(source);

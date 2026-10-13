@@ -262,3 +262,77 @@ test('the mode buttons read View and Edit, each with an icon', () => {
   assert.match(html, /id="modeRead"[^>]*>\u{1F50D} View</u);
   assert.match(html, /id="modeEdit"[^>]*>\u270E Edit</);
 });
+
+// ---------------------------------------------------------------------------
+// Keeping your place across a mode switch
+// ---------------------------------------------------------------------------
+//
+// The two panes have different heights, so a scroll RATIO copied from one to the other
+// lands on different text -- the old sync did that, and Edit "jumped a little". And a
+// textarea that was display:none has no layout in the tick it becomes visible, so a
+// scrollTop set then is dropped -- double-click "went to the top". Both are now done by
+// text: the block at the top of the pane being left is found in the pane being entered,
+// after the browser has laid it out.
+
+function blocks(dom, list) {
+  // list: [{ text, top, bottom }] in document order, relative to the preview scroller.
+  const nodes = list.map((b) => ({
+    textContent: b.text,
+    getBoundingClientRect: () => ({ top: b.top, bottom: b.bottom })
+  }));
+  dom.elements.get('preview').querySelectorAll = () => nodes;
+  dom.elements.get('previewScroll').getBoundingClientRect = () => ({ top: 0, bottom: 500 });
+  dom.elements.get('previewScroll').clientHeight = 500;
+}
+
+test('Edit opens on the text that was at the top of the view, not at a scroll ratio', () => {
+  const md = 'L1 intro paragraph text here\n\n' + 'filler line of text\n\n'.repeat(40) + 'The anchor paragraph I was reading.\n\n' + 'more\n'.repeat(10);
+  const { dom } = runViewerScript(md);
+  // The view is scrolled so that "The anchor paragraph" is the first visible block.
+  blocks(dom, [
+    { text: 'L1 intro paragraph text here', top: -900, bottom: -880 },
+    { text: 'The anchor paragraph I was reading.', top: 2, bottom: 22 },
+    { text: 'more', top: 30, bottom: 50 }
+  ]);
+  dom.fire('modeEdit', 'click');
+  const editor = dom.elements.get('editor');
+  assert.equal(editor.selectionStart, md.indexOf('The anchor paragraph'));
+  assert.ok(editor.scrollTop > 0, 'the textarea scrolled to the anchor');
+});
+
+test('View returns to the text that was at the top of the editor', () => {
+  const md = 'top\n' + 'x\n'.repeat(30) + 'Deep in the file is this sentence.\n' + 'y\n'.repeat(30);
+  const { dom } = runViewerScript(md);
+  dom.fire('modeEdit', 'click');
+  const editor = dom.elements.get('editor');
+  // Editor scrolled to line ~31 (lineHeight 20px in the stub).
+  editor.scrollTop = 31 * 20;
+  let scrolledTo;
+  const ps = dom.elements.get('previewScroll');
+  Object.defineProperty(ps, 'scrollTop', { get: () => 0, set: (v) => { scrolledTo = v; }, configurable: true });
+  blocks(dom, [
+    { text: 'top', top: 0, bottom: 20 },
+    { text: 'Deep in the file is this sentence.', top: 900, bottom: 920 }
+  ]);
+  dom.fire('modeRead', 'click');
+  assert.ok(typeof scrolledTo === 'number' && scrolledTo > 0, 'the view scrolled to the anchor block');
+});
+
+test('restoring the remembered mode on open computes no anchor, so nothing is read before it exists', () => {
+  // previewScroll is declared after the restore call; reading it there threw at load and
+  // blanked the viewer. Caught by executing the script, not by reading it.
+  assert.doesNotThrow(() => runViewerScript('# T', { mode: 'edit' }));
+  assert.doesNotThrow(() => runViewerScript('# T', { mode: 'read' }));
+});
+
+test('a Markdown table renders as rows, which pins the escaping inside the template literal', () => {
+  // The webview script lives inside a template literal, which unescapes once before the
+  // browser sees it. A split on '\\\\n' in source reached the browser as a split on the
+  // two characters backslash-n, so a table collapsed into one line. It had been that
+  // way; the new mode-switch code copied the pattern and the executing tests caught both.
+  const md = '| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n';
+  const { dom } = runViewerScript(md);
+  const html = dom.elements.get('preview').innerHTML;
+  const rows = (html.match(/<tr>/g) || []).length;
+  assert.ok(rows >= 3, `expected a header row and two body rows, got ${rows} in: ${html.slice(0, 200)}`);
+});
