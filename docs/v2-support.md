@@ -114,6 +114,14 @@ not filled in. "Field present" is not "recorded"; zeros across the board read as
 recorded, the same as the IDE's absence. Pin: kiro-usage "all-zero token fields read as
 not recorded".
 
+**A turn's model comes from the turn, not from session.json.** `session.json.modelId` is
+the model currently selected for the session; Kiro rewrites it when the person picks another.
+Reading it stamped every past turn with today's choice (three turns on two models all shown
+as the third, from a screenshot). The model a turn ran on is `payload.reasoningModelId`
+(`qdev::<model>`) on the `assistant` messages inside the turn, before its `usage_summary`;
+`turn_start` carries none (checked across 311 of them). A session on several models names
+them all. Pin: kiro-usage "a turn's model is the one its assistant messages ran on".
+
 **Do not name the program that wrote a session.** Kiro IDE and current `kiro-cli` both
 write to `~/.kiro/sessions/<workspace-hash>/sess_*` (a `kiro-cli --resume-id sess_…`
 run on 2026-10-13 landed there, not in `sessions/cli/`). The layout does not say who

@@ -21,10 +21,13 @@
 // TWO STORES, TWO SHAPES
 //
 //   workspace  ~/.kiro/sessions/<workspace-hash>/sess_<id>/
-//              session.json (metadata: modelId, workspacePaths, createdAt) +
+//              session.json (metadata: workspacePaths, createdAt; modelId is the model
+//              currently SELECTED, rewritten on change, and must not be read as a turn's) +
 //              messages.jsonl (one {id, timestamp, payload:{type,...}} per line).
 //              A turn's cost is payload.type === 'usage_summary', whose
-//              promptTurnSummaries[].usage is in credits. No token counts.
+//              promptTurnSummaries[].usage is in credits. A turn's model is the
+//              `reasoningModelId` (`qdev::<model>`) on the assistant messages before its
+//              summary. No token counts.
 //              Written by Kiro IDE AND by current kiro-cli: a CLI run on 2026-10-13
 //              ("kiro-cli --resume-id sess_...") landed here, not in cli/. So this
 //              store does not say which program wrote it, and neither do we.
@@ -116,7 +119,14 @@ function readJson(file) {
 //   elapsedMs turn wall time
 //   tokens    { input, output, cacheRead, cacheWrite } -- CLI only
 //   context   context-window usage percentage after the turn -- IDE only, when present
-function normaliseIdeTurn(record, meta) {
+// `model` is the model the TURN ran on, read from the assistant messages inside the turn
+// (`payload.reasoningModelId`, written as `qdev::<model>`), not from session.json.
+// session.json's modelId is the model currently SELECTED for the session; Kiro rewrites it
+// when the person picks another, so reading it stamped every past turn with today's
+// choice. Reported from a screenshot: three turns, two models, all shown as the third.
+// When no assistant message in the turn carried a model, the turn's model is undefined
+// and the page says "model not recorded" rather than borrowing the session's.
+function normaliseIdeTurn(record, meta, turnModel) {
   const payload = record.payload;
   const summaries = Array.isArray(payload.promptTurnSummaries) ? payload.promptTurnSummaries : [];
   let credits;
@@ -134,9 +144,16 @@ function normaliseIdeTurn(record, meta) {
     credits,
     status: typeof payload.status === 'string' ? payload.status : undefined,
     elapsedMs: typeof payload.elapsedTime === 'number' ? payload.elapsedTime : undefined,
-    model: meta.modelId,
+    model: turnModel,
     toolCount: tools.size
   };
+}
+
+// "qdev::claude-opus-5.5" -> "claude-opus-5.5". The prefix names the provider route, not
+// the model; anything without the prefix is kept as written.
+function modelFromReasoningId(value) {
+  if (typeof value !== 'string' || !value) return undefined;
+  return value.replace(/^qdev::/, '');
 }
 
 // Reads one IDE session directory. Returns undefined when it is not this project's, or
@@ -149,12 +166,16 @@ function readIdeSession(dir, projectRoot, gaps) {
 
   const turns = [];
   const contextSamples = [];
+  // The model seen on assistant messages since the last usage_summary. A turn's model is
+  // the last one seen before its summary; cleared after each summary so a model from one
+  // turn cannot leak into the next.
+  let turnModel;
   let text;
   try {
     text = fs.readFileSync(path.join(dir, 'messages.jsonl'), 'utf8');
   } catch {
     // A session opened but never prompted has metadata and no messages. Real, and empty.
-    return { id: meta.id, model: meta.modelId, createdAt: Date.parse(meta.createdAt), turns, contextSamples, title: meta.title };
+    return { id: meta.id, model: undefined, createdAt: Date.parse(meta.createdAt), turns, contextSamples, title: meta.title };
   }
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
@@ -167,8 +188,11 @@ function readIdeSession(dir, projectRoot, gaps) {
     }
     const payload = record?.payload;
     if (!payload || typeof payload.type !== 'string') continue;
-    if (payload.type === IDE_USAGE_EVENT) {
-      const turn = normaliseIdeTurn(record, meta);
+    if (payload.type === 'assistant' && payload.reasoningModelId !== undefined) {
+      turnModel = modelFromReasoningId(payload.reasoningModelId) ?? turnModel;
+    } else if (payload.type === IDE_USAGE_EVENT) {
+      const turn = normaliseIdeTurn(record, meta, turnModel);
+      turnModel = undefined;
       if (turn.status !== undefined && !KNOWN_STATUSES.has(turn.status)) gaps.unknownStatuses.add(turn.status);
       turns.push(turn);
     } else if (payload.type === IDE_METADATA_EVENT && payload.key === 'contextUsage') {
@@ -178,7 +202,12 @@ function readIdeSession(dir, projectRoot, gaps) {
       }
     }
   }
-  return { id: meta.id, model: meta.modelId, createdAt: Date.parse(meta.createdAt), turns, contextSamples, title: meta.title };
+  // The session's model is whatever its turns ran on. One model: that name. Several:
+  // all of them, in first-seen order, because "the session's model" is then a list and
+  // picking one would be the same mistake as reading session.json.
+  const seen = [...new Set(turns.map((t) => t.model).filter(Boolean))];
+  const model = seen.length === 0 ? undefined : seen.join(', ');
+  return { id: meta.id, model, createdAt: Date.parse(meta.createdAt), turns, contextSamples, title: meta.title };
 }
 
 // Reads one CLI session file. The turn records sit at varying depths inside

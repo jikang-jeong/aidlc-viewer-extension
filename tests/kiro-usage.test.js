@@ -42,6 +42,12 @@ function ideSession(sessions, { id, workspace, model = 'claude-opus-4.8', turns 
   );
   const lines = [];
   for (const t of turns) {
+    // The model a turn ran on sits on the assistant messages inside it, as Kiro writes
+    // it: `qdev::<model>`. session.json's modelId is the CURRENT selection and is not
+    // what a past turn used. `model: null` writes a turn with no assistant model at all.
+    if (t.model !== null) {
+      lines.push(JSON.stringify({ id: `a-${lines.length}`, timestamp: t.at - 500, payload: { type: 'assistant', reasoningModelId: `qdev::${t.model ?? model}` } }));
+    }
     lines.push(
       JSON.stringify({
         id: `m-${lines.length}`,
@@ -381,5 +387,42 @@ test('a session names the store it came from, not the program that wrote it', ()
       assert.equal(byId.sess_w, 'workspace');
       assert.equal(byId.c, 'cli');
       for (const s of u.sessions) assert.ok(!['ide', 'IDE'].includes(s.source), 'no session claims to be from the IDE');
+    }
+  ));
+
+
+test('a turn\u2019s model is the one its assistant messages ran on, not the session\u2019s current selection', () =>
+  withStore(
+    ({ sessions, project }) => {
+      // Reported from a screenshot: three turns on two models, all shown as the third,
+      // because session.json's modelId had been rewritten to the model picked last.
+      ideSession(sessions, {
+        id: 'sw',
+        workspace: project,
+        model: 'claude-opus-5.5', // what session.json says now
+        turns: [
+          { at: min(1), credits: 7.9, model: 'gpt-5.6-sol' },
+          { at: min(2), credits: 18.8, model: 'gpt-5.6-sol' },
+          { at: min(3), credits: 0.34, model: 'auto' }
+        ]
+      });
+    },
+    ({ project }) => {
+      const u = usage.readKiroUsage(project);
+      assert.deepEqual(u.turns.map((t) => t.model), ['gpt-5.6-sol', 'gpt-5.6-sol', 'auto']);
+      const [s] = usage.summariseSessions(u.sessions);
+      assert.equal(s.model, 'gpt-5.6-sol, auto', 'a session on several models names them all, first seen first');
+      assert.ok(!JSON.stringify(u).includes('claude-opus-5.5'), 'the current selection appears nowhere');
+    }
+  ));
+
+test('a turn with no assistant model is "not recorded", and does not borrow the previous turn\u2019s', () =>
+  withStore(
+    ({ sessions, project }) => {
+      ideSession(sessions, { id: 'nm', workspace: project, turns: [{ at: min(1), credits: 1, model: 'gpt-5.6-sol' }, { at: min(2), credits: 1, model: null }] });
+    },
+    ({ project }) => {
+      const u = usage.readKiroUsage(project);
+      assert.deepEqual(u.turns.map((t) => t.model), ['gpt-5.6-sol', undefined]);
     }
   ));

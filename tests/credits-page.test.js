@@ -38,10 +38,16 @@ function withKiroHome(build, run) {
 function ideSession(home, project, turns) {
   const dir = path.join(home, 'sessions', 'ws', 'sess_1');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({ id: 'sess_1', modelId: 'claude-opus-4.8', workspacePaths: [project], createdAt: '2026-10-06T05:00:00Z', title: 'Demo' }));
+  fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({ id: 'sess_1', modelId: 'something-else', workspacePaths: [project], createdAt: '2026-10-06T05:00:00Z', title: 'Demo' }));
   fs.writeFileSync(
     path.join(dir, 'messages.jsonl'),
-    turns.map((t) => JSON.stringify({ id: 'x', timestamp: t.at, payload: { type: 'usage_summary', status: t.status ?? 'success', elapsedTime: 60000, promptTurnSummaries: [{ unit: 'credit', usage: t.credits }] } })).join('\n') + '\n'
+    turns
+      .flatMap((t) => [
+        // The model a turn ran on is on its assistant messages, as `qdev::<model>`.
+        JSON.stringify({ id: 'a', timestamp: t.at - 1, payload: { type: 'assistant', reasoningModelId: 'qdev::claude-opus-4.8' } }),
+        JSON.stringify({ id: 'x', timestamp: t.at, payload: { type: 'usage_summary', status: t.status ?? 'success', elapsedTime: 60000, promptTurnSummaries: [{ unit: 'credit', usage: t.credits }] } })
+      ])
+      .join('\n') + '\n'
   );
 }
 
