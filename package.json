@@ -86,6 +86,14 @@
         "command": "markdownWatchViewer.showCredits",
         "title": "AI-DLC: Credits (Tokens)",
         "icon": "$(graph)"
+      },
+      {
+        "command": "markdownWatchViewer.showWaiting",
+        "title": "AI-DLC: Waiting for you"
+      },
+      {
+        "command": "markdownWatchViewer.showEngineRecords",
+        "title": "AI-DLC: Engine records"
       }
     ],
     "viewsContainers": {
@@ -159,6 +167,14 @@
         },
         {
           "command": "markdownWatchViewer.removeV2",
+          "when": "aidlcViewer.v2Detected"
+        },
+        {
+          "command": "markdownWatchViewer.showWaiting",
+          "when": "aidlcViewer.v2Detected"
+        },
+        {
+          "command": "markdownWatchViewer.showEngineRecords",
           "when": "aidlcViewer.v2Detected"
         }
       ]

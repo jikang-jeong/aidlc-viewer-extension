@@ -1,7 +1,7 @@
 const vscode = require('vscode');
 const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
-const { renderCreditsPage, nonce: creditsNonce } = require('./credits-page');
+const { renderCreditsPage, renderWaitingPage, renderEngineRecordsPage, waitingSummary, PAGE_TITLE, nonce: pageNonce } = require('./credits-page');
 
 // Drives the `when` clause on the v2-only command (Remove AI-DLC v2). Set from the
 // project the tree reads, since the panel that used to set it is gone.
@@ -71,6 +71,8 @@ function activate(context) {
     // waiting on you for. Opened from the tree row both generations have, so the sidebar
     // is the same shape for v1 and v2. This replaced the v2-only Supervision panel.
     vscode.commands.registerCommand('markdownWatchViewer.showCredits', () => controller.showCredits()),
+    vscode.commands.registerCommand('markdownWatchViewer.showWaiting', () => controller.showWaiting()),
+    vscode.commands.registerCommand('markdownWatchViewer.showEngineRecords', () => controller.showEngineRecords()),
     // One setup button. It asks which generation, because it used to install v1
     // unconditionally and a second button for v2 beside it did not help: pressing
     // "Set up AI-DLC" still did what it had always done, and nothing said the
@@ -165,16 +167,18 @@ class WatchController {
     }
     const isV2 = Boolean(project && (project.generation === 'v2' || project.generation === 'both'));
     vscode.commands.executeCommand('setContext', V2_CONTEXT_KEY, isV2);
-    if (this.creditsPanel && root) {
+    if (!root) return;
+    for (const page of Object.values(this.pages)) {
+      if (!page.panel) continue;
       try {
-        if (!this.creditsNonce) this.creditsNonce = creditsNonce();
-        const html = renderCreditsPage({ webview: this.creditsPanel.webview, root: root.fsPath, project, nonce: this.creditsNonce });
+        if (!page.nonce) page.nonce = pageNonce();
+        const html = page.render({ webview: page.panel.webview, root: root.fsPath, project, nonce: page.nonce });
         // Assigning html resets the page's scroll and folds every <details>, so it is
         // assigned only when the report actually changed. The poll below calls this
         // every few seconds; most of those calls must be no-ops to the reader.
-        if (html !== this.creditsHtml) {
-          this.creditsHtml = html;
-          this.creditsPanel.webview.html = html;
+        if (html !== page.html) {
+          page.html = html;
+          page.panel.webview.html = html;
         }
       } catch {
         // Leave the last good render in place.
@@ -184,47 +188,74 @@ class WatchController {
 
   // The session store is under ~/.kiro, outside the watched folder, so no file event
   // tells us a turn was spent. Reported from use: a kiro-cli session on the project
-  // was running and the page did not move until it was reopened. While the page is
+  // was running and the page did not move until it was reopened. While any page is
   // open it re-reads on a timer; the store reader caches for 5s so this is cheap, and
   // the render is only applied when something changed.
-  startCreditsPoll() {
-    this.stopCreditsPoll();
-    this.creditsPoll = setInterval(() => this.refreshSupervision(), CREDITS_POLL_MS);
+  startPagePoll() {
+    if (this.pagePoll) return;
+    this.pagePoll = setInterval(() => this.refreshSupervision(), CREDITS_POLL_MS);
   }
 
-  stopCreditsPoll() {
-    if (this.creditsPoll) {
-      clearInterval(this.creditsPoll);
-      this.creditsPoll = undefined;
+  stopPagePollIfIdle() {
+    if (Object.values(this.pages).some((p) => p.panel)) return;
+    if (this.pagePoll) {
+      clearInterval(this.pagePoll);
+      this.pagePoll = undefined;
     }
   }
 
-  showCredits() {
+  // Three report pages, one mechanism. Each is a script-free webview that re-renders
+  // from the project on the shared poll and only when its HTML changed.
+  get pages() {
+    if (!this._pages) {
+      this._pages = {
+        credits: { id: 'markdownWatchViewer.credits', title: `AI-DLC ${PAGE_TITLE.credits}`, render: renderCreditsPage },
+        waiting: { id: 'markdownWatchViewer.waiting', title: `AI-DLC ${PAGE_TITLE.waiting}`, render: renderWaitingPage },
+        records: { id: 'markdownWatchViewer.records', title: `AI-DLC ${PAGE_TITLE.records}`, render: renderEngineRecordsPage }
+      };
+    }
+    return this._pages;
+  }
+
+  showPage(key) {
     const root = this.treeDataProvider.rootUri;
     if (!root) {
       vscode.window.showWarningMessage('Select a folder to watch first.');
       return;
     }
-    if (this.creditsPanel) {
-      this.creditsPanel.reveal(vscode.ViewColumn.One);
+    const page = this.pages[key];
+    if (page.panel) {
+      page.panel.reveal(vscode.ViewColumn.One);
       this.refreshSupervision();
       return;
     }
-    this.creditsPanel = vscode.window.createWebviewPanel(
-      'markdownWatchViewer.credits',
-      'AI-DLC Credits (Tokens)',
+    page.panel = vscode.window.createWebviewPanel(
+      page.id,
+      page.title,
       vscode.ViewColumn.One,
       // No scripts: the page is a report, and a report that cannot run code cannot leak.
       { enableScripts: false, retainContextWhenHidden: true }
     );
-    this.creditsPanel.onDidDispose(() => {
-      this.creditsPanel = undefined;
-      this.creditsHtml = undefined;
-      this.creditsNonce = undefined;
-      this.stopCreditsPoll();
+    page.panel.onDidDispose(() => {
+      page.panel = undefined;
+      page.html = undefined;
+      page.nonce = undefined;
+      this.stopPagePollIfIdle();
     });
     this.refreshSupervision();
-    this.startCreditsPoll();
+    this.startPagePoll();
+  }
+
+  showCredits() {
+    this.showPage('credits');
+  }
+
+  showWaiting() {
+    this.showPage('waiting');
+  }
+
+  showEngineRecords() {
+    this.showPage('records');
   }
 
   async restoreWatcher() {
@@ -692,7 +723,10 @@ class WatchController {
   // during normal operation, so runtime behavior is unchanged.
   dispose() {
     this.disposeWatcher();
-    this.stopCreditsPoll();
+    if (this.pagePoll) {
+      clearInterval(this.pagePoll);
+      this.pagePoll = undefined;
+    }
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
@@ -875,12 +909,22 @@ class MarkdownTreeDataProvider {
       // "Operations" on a project in Inception while this row was right. What the
       // state file says is still shown, in this row's tooltip, beside what the
       // tree says -- as a second opinion, not as the answer.
+      // Pages are rows. Credits is for both generations; Waiting for you and Engine
+      // records exist only on v2, where there is an engine to wait on and to record.
+      const isV2 = stageSummary.generation === 'v2' || stageSummary.generation === 'both';
+      let waiting;
+      if (isV2) {
+        try {
+          waiting = waitingSummary(readProject(this.rootUri.fsPath, {}));
+        } catch {
+          waiting = undefined;
+        }
+      }
       return [
         new ProgressItem(stageSummary),
-        // One row for both generations. Clicking opens the Credits page; on v2 the
-        // row also says when something is waiting on the person, because that is the
-        // one fact worth seeing without opening anything.
-        new CreditsItem(this.rootUri),
+        ...(isV2 ? [new WaitingItem(waiting)] : []),
+        new CreditsItem(),
+        ...(isV2 ? [new EngineRecordsItem()] : []),
         ...entries
       ];
     }
@@ -1235,22 +1279,44 @@ class InfoItem extends vscode.TreeItem {
 }
 
 class CreditsItem extends vscode.TreeItem {
-  constructor(rootUri) {
-    super('Credits (Tokens)', vscode.TreeItemCollapsibleState.None);
+  constructor() {
+    super(PAGE_TITLE.credits, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'credits';
     this.iconPath = new vscode.ThemeIcon('graph', new vscode.ThemeColor('charts.purple'));
-    this.command = { command: 'markdownWatchViewer.showCredits', title: 'Open the Credits (Tokens) page' };
-    let waiting = 0;
-    try {
-      const project = rootUri ? readProject(rootUri.fsPath, {}) : undefined;
-      waiting = project?.v2?.active?.diagnosis?.waitingOnYou?.length ?? 0;
-    } catch {
-      waiting = 0;
-    }
-    this.description = waiting > 0 ? `${waiting} waiting for you` : 'Kiro credits, by stage and session';
-    this.tooltip = waiting > 0
-      ? `${waiting} item(s) are waiting on your decision. Open the page to see what the engine asked for.`
-      : 'What Kiro spent on this project. On v2, also what the engine is waiting on you for.';
+    this.command = { command: 'markdownWatchViewer.showCredits', title: `Open the ${PAGE_TITLE.credits} page` };
+    this.description = 'Kiro credits, by stage and session';
+    this.tooltip = 'What Kiro spent on this project: total, the share that bought nothing, by stage, by session, and every turn.';
+  }
+}
+
+// v2 only. The one fact worth seeing without opening anything is whether something is
+// waiting on the person, so the count sits in the row. The row stays when nothing waits
+// rather than vanishing, which would read as "did that go away?".
+class WaitingItem extends vscode.TreeItem {
+  constructor(summary) {
+    super(PAGE_TITLE.waiting, vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'waiting';
+    const n = summary ? summary.count : 0;
+    this.iconPath = new vscode.ThemeIcon(
+      n > 0 ? 'bell-dot' : 'bell',
+      new vscode.ThemeColor(n > 0 ? 'editorWarning.foreground' : 'descriptionForeground')
+    );
+    this.command = { command: 'markdownWatchViewer.showWaiting', title: `Open the ${PAGE_TITLE.waiting} page` };
+    this.description = n > 0 ? `${n} item${n === 1 ? '' : 's'}${summary.stages.length ? ` · ${summary.stages.join(', ')}` : ''}` : 'nothing right now';
+    this.tooltip = n > 0
+      ? `${n} item(s) are waiting on your decision. Open the page to see what the engine asked for.`
+      : 'Nothing is waiting on your decision.';
+  }
+}
+
+class EngineRecordsItem extends vscode.TreeItem {
+  constructor() {
+    super(PAGE_TITLE.records, vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'records';
+    this.iconPath = new vscode.ThemeIcon('shield', new vscode.ThemeColor('descriptionForeground'));
+    this.command = { command: 'markdownWatchViewer.showEngineRecords', title: `Open the ${PAGE_TITLE.records} page` };
+    this.description = 'refusals, checks, claims';
+    this.tooltip = "The engine's own records: refusals, what its checks flagged, and the agent's claim beside the engine's check of it.";
   }
 }
 

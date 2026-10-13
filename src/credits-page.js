@@ -394,10 +394,10 @@ function creditsBySession(model) {
 
 function waitingSection(project) {
   const intent = project?.v2?.active;
-  if (!intent) return '';
+  if (!intent) return `<section><h2>Waiting for you</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
   const waits = intent.diagnosis?.waitingOnYou ?? [];
   if (waits.length === 0) {
-    return `<section><h2>Waiting for you</h2><p class="quiet">Nothing is waiting on your decision. The engine recorded no refusal that needs you, no parked plan, and no gate left open.</p></section>`;
+    return `<section><h2>Waiting for you</h2><p class="quiet">Nothing is waiting on your decision. The engine recorded no unanswered question, no refusal that needs you, no parked plan, and no gate left open.</p></section>`;
   }
   const items = waits
     .map((w) => {
@@ -408,31 +408,38 @@ function waitingSection(project) {
       const head =
         w.kind === 'plan-approval'
           ? `Plan approval${w.unit ? ` · unit ${escapeHtml(w.unit)}` : ''}`
-          : `${escapeHtml(w.stage ?? 'unknown stage')}${w.code ? ` · ${escapeHtml(w.code)}` : ''}`;
+          : w.kind === 'questions'
+            ? `Questions to answer · ${escapeHtml(w.stage ?? 'unknown stage')}`
+            : `${escapeHtml(w.stage ?? 'unknown stage')}${w.code ? ` · ${escapeHtml(w.code)}` : ''}`;
+      const how = w.kind === 'questions' ? `<div class="sub">Open the file from the tree and fill in each empty <code>[Answer]:</code>, then tell the agent to continue.</div>` : '';
       return `<li class="wait">
         <div class="wait-head">${head} ${who}${typeof w.count === 'number' && w.count > 1 ? ` <span class="sub">×${w.count}</span>` : ''}</div>
         ${w.message ? `<div class="wait-msg">${escapeHtml(w.message)}</div>` : ''}
+        ${how}
         ${remedies ? `<ul class="remedies">${remedies}</ul>` : ''}
       </li>`;
     })
     .join('');
-  return `<section class="urgent"><h2>Waiting for you</h2><ul class="waits">${items}</ul><p class="quiet">A stage at its gate is stopped, not slow. "Engine says" is the engine\u2019s own record; "inferred" is this extension\u2019s reading of the ledger\u2019s order.</p></section>`;
+  return `<section class="urgent"><h2>Waiting for you</h2><ul class="waits">${items}</ul><p class="quiet">A stage waiting on you is stopped, not slow. "Engine says" is the engine\u2019s own record (a file it wrote); "inferred" is this extension\u2019s reading of the ledger\u2019s order.</p></section>`;
 }
 
 // The former Supervision panel, folded. Its facts are still true and still the engine's;
 // they are below the fold because the two sections above are what a person acts on.
 function engineRecordsSection(project, root) {
   const intent = project?.v2?.active;
-  if (!intent) return '';
+  if (!intent) return `<section><h2>Engine records</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
   const parts = [blocking(intent, root), sensors(intent, root), contrast(intent, root)].filter(Boolean);
-  if (parts.length === 0) return '';
-  return `<details class="records"><summary><h2>Engine records</h2><span class="sub">refusals, sensor findings, the agent\u2019s record beside the engine\u2019s check</span></summary>${parts.join('\n')}</details>`;
+  if (parts.length === 0) {
+    return `<section><h2>Engine records</h2><p class="quiet">The engine has recorded no refusal, no sensor finding and no self-report to compare for this intent.</p></section>`;
+  }
+  return `<p class="quiet">Refusals, what the engine\u2019s checks flagged, and the agent\u2019s own record beside the engine\u2019s check of it. These are the engine\u2019s records, shown as written.</p>\n${parts.join('\n')}`;
 }
 
 // The turns themselves, newest first and folded. The rollups above answer "how much";
 // this answers "when, and on what" -- and lets a person check that a figure in a table
 // is made of turns they recognise. Capped so a long-lived project does not render
 // thousands of rows; the cap is said on the page.
+const PAGE_TITLE = { credits: 'Credits (' + 'Tokens)', waiting: 'Waiting for you', records: 'Engine records' };
 const HISTORY_LIMIT = 200;
 function historySection(model) {
   if (!model.ok || !model.history || model.history.length === 0) return '';
@@ -473,19 +480,44 @@ function gapsSection(model) {
 // when it differs; a fresh nonce on every call made every render differ, and every
 // assignment folds the page's <details> and resets its scroll -- reported as "History
 // closes by itself after a moment".
+// Three pages share one shell and one stylesheet. They used to be one page, with
+// "Waiting for you" at the top of a page called Credits and the former Supervision panel
+// folded at its bottom. Separate things on separate pages: the Credits page starts and
+// ends with credits, what is waiting on you is its own row in the tree (where its count
+// is visible without opening anything), and the engine's records are their own page.
 function renderCreditsPage({ webview, root, project, nonce: fixedNonce }) {
   const model = collectCreditsModel(root, project);
-  const n = fixedNonce || nonce();
-  const folder = path.basename(root);
-  const body = [
-    `<h1>${escapeHtml(folder)} <span class="gen">${escapeHtml(project?.generation === 'both' ? 'v2' : project?.generation ?? '')}</span></h1>`,
-    waitingSection(project),
+  return shell({ webview, root, project, nonce: fixedNonce, title: PAGE_TITLE.credits }, [
     creditsHeadline(model),
     creditsByStage(model),
     creditsBySession(model),
     historySection(model),
-    engineRecordsSection(project, root),
     gapsSection(model)
+  ]);
+}
+
+function renderWaitingPage({ webview, root, project, nonce: fixedNonce }) {
+  return shell({ webview, root, project, nonce: fixedNonce, title: PAGE_TITLE.waiting }, [waitingSection(project)]);
+}
+
+function renderEngineRecordsPage({ webview, root, project, nonce: fixedNonce }) {
+  return shell({ webview, root, project, nonce: fixedNonce, title: PAGE_TITLE.records }, [engineRecordsSection(project, root)]);
+}
+
+// What the tree row says beside "Waiting for you" without the page being open.
+function waitingSummary(project) {
+  const intent = project?.v2?.active;
+  if (!intent) return undefined;
+  const waits = intent.diagnosis?.waitingOnYou ?? [];
+  return { count: waits.length, stages: [...new Set(waits.map((w) => w.stage).filter(Boolean))] };
+}
+
+function shell({ webview, root, project, nonce: fixedNonce, title }, sections) {
+  const n = fixedNonce || nonce();
+  const folder = path.basename(root);
+  const body = [
+    `<h1>${escapeHtml(folder)} <span class="gen">${escapeHtml(project?.generation === 'both' ? 'v2' : project?.generation ?? '')}</span></h1>`,
+    ...sections
   ]
     .filter(Boolean)
     .join('\n');
@@ -496,7 +528,7 @@ function renderCreditsPage({ webview, root, project, nonce: fixedNonce }) {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${n}'; script-src 'nonce-${n}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Credits (Tokens)</title>
+<title>${escapeHtml(title)}</title>
 <style nonce="${n}">
   :root { --purple: var(--vscode-charts-purple, #a371f7); --warn: var(--vscode-editorWarning-foreground, #cca700); --muted: var(--vscode-descriptionForeground); }
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px 28px 40px; max-width: 980px; margin: 0 auto; line-height: 1.5; }
@@ -558,4 +590,4 @@ ${body}
 </html>`;
 }
 
-module.exports = { collectCreditsModel, renderCreditsPage, nonce, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };
+module.exports = { collectCreditsModel, renderCreditsPage, renderWaitingPage, renderEngineRecordsPage, waitingSummary, PAGE_TITLE, nonce, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };

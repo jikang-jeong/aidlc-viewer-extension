@@ -366,7 +366,7 @@ function loadExtensionInternals() {
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
     loaded._compile(
       `${fs.readFileSync(file, 'utf8')}
-module.exports = { ProgressItem, StageProgressChild, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
+module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, EngineRecordsItem, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
       file
     );
     return loaded.exports;
@@ -614,4 +614,23 @@ test('a set-up project that has not run shows what to type, per generation, and 
   assert.equal(v1.label, 'Setup repo');
   assert.match(v1.description, /Using AI-DLC/);
   assert.doesNotMatch(v1.description, /\/aidlc/, 'v1 is not started with a slash command');
+});
+
+test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', () => {
+  // Waiting for you and Engine records are rows now. They are gated on the generation,
+  // not on "does the project have something to show", because a v1 project has neither
+  // an engine to wait on nor one to record, and a row that promised either would be a
+  // new thing for 6,000 people to wonder about.
+  const { WaitingItem, EngineRecordsItem, CreditsItem } = loadExtensionInternals();
+  assert.equal(new CreditsItem().label, 'Credits (' + 'Tokens)');
+  const w = new WaitingItem({ count: 2, stages: ['intent-capture'] });
+  assert.equal(w.label, 'Waiting for you');
+  assert.equal(w.description, '2 items · intent-capture');
+  assert.equal(new WaitingItem({ count: 0, stages: [] }).description, 'nothing right now');
+  assert.equal(new EngineRecordsItem().label, 'Engine records');
+
+  // The gate itself, read from the source: the two rows are spread in under `isV2`.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
+  assert.match(src, /\.\.\.\(isV2 \? \[new WaitingItem\(waiting\)\] : \[\]\)/);
+  assert.match(src, /\.\.\.\(isV2 \? \[new EngineRecordsItem\(\)\] : \[\]\)/);
 });

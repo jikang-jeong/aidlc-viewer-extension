@@ -51,9 +51,9 @@ The **Credits (Tokens)** row at the top of the tree opens a page. Every number o
 - **By session**: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them. Each session names the store it was read from; Kiro IDE and current `kiro-cli` write to the same one, so the page does not guess which program it was. The page re-reads every few seconds while it is open.
 - **History**: every prompt turn, newest first, with its credits, status, stage and session, so any figure in the tables above can be traced to the turns that made it.
 
-**On AI-DLC v2 the page also leads with what is waiting on you.** A stage at its approval gate is not slow, it is stopped, and the chat said so once and scrolled away. Each item carries the engine's own message and the remedies it marked as yours, labelled as either the engine's word or this extension's inference from the ledger. The engine's other records — refusals, what its checks flagged, the agent's claim beside the engine's check of it — are folded below.
+**On AI-DLC v2, two more rows.** **Waiting for you** carries its count in the tree, so you know without opening anything; the page lists each item with the engine's own words: questions it wrote for you and has not had answered (the file and how many), refusals with the remedies it marked as yours, and plans parked for your approval, each labelled as the engine's word or this extension's inference from the ledger. A stage waiting on you is not slow, it is stopped, and the chat said so once and scrolled away. **Engine records** is the engine's own account: refusals, what its checks flagged, and the agent's claim beside the engine's check of it.
 
-The sidebar is the same for both generations; only that v2 content differs.
+v1 has neither row, because it has no engine to wait on or to record.
 
 ## Toolbar
 
@@ -92,8 +92,11 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
   wrote down: each refusal with its code and the remedies the engine marked as yours, and
   each code-generation plan parked for your approval. Where the engine said nothing and
   the wait is inferred from the ledger, the page says so.
-- **One sidebar for both generations.** The v2-only Supervision panel under the tree is
-  gone; its contents are on the Credits page, folded under Engine records.
+- **One sidebar for both generations, with two v2 rows.** The v2-only Supervision panel
+  under the tree is gone. **Waiting for you** is a row with its count beside it and a page
+  that reads what the engine wrote: unanswered questions files, refusals that need you,
+  parked plans. **Engine records** is a row and a page with the engine's own account of
+  the run. Both appear only on v2.
 - **Setup asks once, where it asks.** The "Set up the AI-DLC workflow for this folder?"
   prompt now carries **v1**, **v2 · Kiro IDE** and **v2 · Kiro CLI** as its own buttons
   instead of a "Choose a version" step that opened a list elsewhere and came back, and a

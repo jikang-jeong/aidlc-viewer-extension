@@ -120,6 +120,14 @@ run on 2026-10-13 landed there, not in `sessions/cli/`). The layout does not say
 wrote it, so a label that did was a guess read as a fact. Sessions show their model and
 nothing about their origin. Pin: kiro-usage "a session names the store it came from".
 
+**Three pages, three rows; nothing folded inside something else.** Waiting for you, Credits
+and Engine records were one page for a day, with the first at the top of a page called
+Credits and the third folded at its bottom. Separate things are separate rows in the tree,
+gated on the generation (`isV2`), never on "does the project have something to show" -- a
+v1 tree must not gain a row. The three panels share one poll and one render loop
+(`pages`), each with a fixed nonce so an unchanged report is byte-identical. Pins:
+credits-page "three pages"; v1-isolation "the v2-only rows never appear in a v1 tree".
+
 **A person's turn on v2 is a questions file with an open `[Answer]:`.** Guard refusals
 and parked plans are two sources; the third, and on real intents the common one, is a
 `*questions*.md` under `<phase>/<stage>/` with unanswered `[Answer]:` lines, the same

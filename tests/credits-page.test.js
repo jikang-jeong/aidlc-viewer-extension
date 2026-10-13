@@ -59,22 +59,69 @@ test('v1 shows Credits only -- no Waiting, no engine records -- so its page matc
     }
   ));
 
-test('v2 puts Waiting for you first, because it is the one thing only the reader can clear', () =>
+const V2_WAITING = (project) => ({
+  generation: 'v2',
+  v2: {
+    active: {
+      dir: path.join(project, 'aidlc/spaces/default/intents/i'),
+      diagnosis: {
+        waitingOnYou: [
+          { kind: 'guard-refusal', stated: true, stage: 'intent-capture', code: 'REQUIRED_ARTIFACTS_MISSING', message: 'Cannot present.', remedies: [{ op: 'request-changes', label: 'Request changes', requiresHuman: true }] },
+          { kind: 'questions', stated: true, stage: 'requirements-analysis', message: '2 of 5 questions unanswered in inception/requirements-analysis/q.md', open: 2, total: 5 }
+        ],
+        live: [], refusals: [], sensorFailures: new Map(), sensorFailureTotal: 0
+      },
+      contrast: { rows: [], faultedWithoutRecord: [] }
+    }
+  }
+});
+
+test('three pages: Credits starts and ends with credits; Waiting and Engine records are their own', () =>
   withKiroHome(
     ({ home, project }) => ideSession(home, project, [{ at: T, credits: 5 }]),
     ({ project }) => {
-      const v2 = {
-        generation: 'v2',
-        v2: { active: { dir: path.join(project, 'aidlc/spaces/default/intents/i'), diagnosis: { waitingOnYou: [{ kind: 'guard-refusal', stated: true, stage: 'intent-capture', code: 'REQUIRED_ARTIFACTS_MISSING', message: 'Cannot present.', remedies: [{ op: 'request-changes', label: 'Request changes', requiresHuman: true }] }], live: [], refusals: [], sensorFailures: new Map(), sensorFailureTotal: 0 }, contrast: { rows: [], faultedWithoutRecord: [] } } }
-      };
-      const html = page.renderCreditsPage({ webview, root: project, project: v2 });
-      const s = sections(html);
-      assert.equal(s[0], 'Waiting for you');
-      assert.match(html, /engine says/);
-      assert.match(html, /REQUIRED_ARTIFACTS_MISSING/);
-      assert.match(html, /Request changes/);
-      // Engine records are present but folded.
-      assert.match(html, /<details class="records">/);
+      // They used to be one page, with "Waiting for you" above the credits and the
+      // engine's records folded below them. Asked for as separate rows in the tree.
+      const v2 = V2_WAITING(project);
+      const credits = page.renderCreditsPage({ webview, root: project, project: v2 });
+      const s = sections(credits);
+      assert.equal(s[0], 'Credits (' + 'Tokens)');
+      assert.ok(!s.includes('Waiting for you'), 'not on the Credits page any more');
+      assert.doesNotMatch(credits, /<details class="records">/, 'nor the engine records');
+
+      const waiting = page.renderWaitingPage({ webview, root: project, project: v2 });
+      assert.deepEqual(sections(waiting), ['Waiting for you']);
+      assert.match(waiting, /engine says/);
+      assert.match(waiting, /REQUIRED_ARTIFACTS_MISSING/);
+      assert.match(waiting, /Request changes/);
+      // Open questions name the file and say what to do.
+      assert.match(waiting, /Questions to answer · requirements-analysis/);
+      assert.match(waiting, /2 of 5 questions unanswered in inception\/requirements-analysis\/q\.md/);
+      assert.match(waiting, /fill in each empty <code>\[Answer\]:<\/code>/);
+
+      const records = page.renderEngineRecordsPage({ webview, root: project, project: v2 });
+      assert.match(records, /<title>Engine records<\/title>/);
+      assert.doesNotMatch(records, /<details class="records">/, 'unfolded: it is the whole page now');
+    }
+  ));
+
+test('the Waiting row summary carries the count and the stages, and says nothing on v1', () =>
+  withKiroHome(
+    () => {},
+    ({ project }) => {
+      assert.deepEqual(page.waitingSummary(V2_WAITING(project)), { count: 2, stages: ['intent-capture', 'requirements-analysis'] });
+      assert.equal(page.waitingSummary({ generation: 'v1' }), undefined);
+      assert.deepEqual(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [] } } } }), { count: 0, stages: [] });
+    }
+  ));
+
+test('each page says so when no v2 intent has started, rather than rendering an empty body', () =>
+  withKiroHome(
+    () => {},
+    ({ project }) => {
+      const none = { generation: 'v2', v2: { active: undefined } };
+      assert.match(page.renderWaitingPage({ webview, root: project, project: none }), /No AI-DLC v2 intent has started/);
+      assert.match(page.renderEngineRecordsPage({ webview, root: project, project: none }), /No AI-DLC v2 intent has started/);
     }
   ));
 
