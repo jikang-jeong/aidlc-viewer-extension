@@ -1249,6 +1249,21 @@ class StageDecorationProvider {
   }
 
   provideFileDecoration(uri) {
+    if (uri.scheme === WAITING_SCHEME) {
+      // Waiting for you. With items: the label in the warning colour and the count as
+      // the badge, so the row reads differently from everything around it. Without: the
+      // label dimmed, so "nothing right now" is visibly the quiet state and not a
+      // row that failed to update.
+      const n = Number(uri.path.replace(/^\//, '')) || 0;
+      if (n > 0) {
+        return {
+          color: new vscode.ThemeColor('editorWarning.foreground'),
+          badge: n > 99 ? '99' : String(n),
+          tooltip: `${n} item(s) waiting on your decision`
+        };
+      }
+      return { color: new vscode.ThemeColor('descriptionForeground') };
+    }
     if (uri.scheme !== 'file') {
       return undefined;
     }
@@ -1292,11 +1307,19 @@ class CreditsItem extends vscode.TreeItem {
 // v2 only. The one fact worth seeing without opening anything is whether something is
 // waiting on the person, so the count sits in the row. The row stays when nothing waits
 // rather than vanishing, which would read as "did that go away?".
+// The row's label is coloured through a FileDecorationProvider, the same mechanism
+// that colours NEW files in the tree: a tree item can colour its icon by itself but
+// not its label, and an icon alone did not stand out. The item carries a URI in a
+// private scheme whose path is the count, so the provider can paint the label and put
+// the count in the badge without re-reading the project.
+const WAITING_SCHEME = 'aidlc-waiting';
+
 class WaitingItem extends vscode.TreeItem {
   constructor(summary) {
     super(PAGE_TITLE.waiting, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'waiting';
     const n = summary ? summary.count : 0;
+    this.resourceUri = vscode.Uri.from({ scheme: WAITING_SCHEME, path: `/${n}` });
     this.iconPath = new vscode.ThemeIcon(
       n > 0 ? 'bell-dot' : 'bell',
       new vscode.ThemeColor(n > 0 ? 'editorWarning.foreground' : 'descriptionForeground')

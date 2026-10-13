@@ -236,6 +236,14 @@ test that re-implements the logic it is testing proves only that it agrees with 
 the pin now also reads the `getChildren` source and requires no filter between the phase
 groups and the rows. Pin: v1-isolation "every phase is listed".
 
+**A tree row's label is coloured only through a FileDecorationProvider.** A TreeItem can
+colour its icon (`ThemeIcon` with a `ThemeColor`) but not its label, and an icon alone did
+not make the Waiting row stand out. The row carries a URI in a private scheme
+(`aidlc-waiting:/<count>`) and the provider that colours NEW files paints the label in the
+warning colour with the count as the badge, or dims it when nothing waits. The count in the
+path means a changed count is a new URI and VS Code re-asks on its own. Pin: v1-isolation
+"the Waiting row is coloured through the decoration provider".
+
 **A proportion bar is scaled to the whole, never to the largest row.** Scaling to the
 largest row made every one-session project's bar full: 89 credits looked like 200 would.
 Bars on the Usage page are the share of the project's total, say so in their title ("75%

@@ -352,7 +352,7 @@ function loadExtensionInternals() {
           this.value = value;
         }
       },
-      Uri: { file: (p) => ({ fsPath: p }) },
+      Uri: { file: (p) => ({ fsPath: p }), from: (c) => ({ scheme: c.scheme, path: c.path }) },
       window: {},
       workspace: { fs: {} },
       commands: {},
@@ -373,7 +373,7 @@ function loadExtensionInternals() {
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
     loaded._compile(
       `${fs.readFileSync(file, 'utf8')}
-module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, EngineRecordsItem, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
+module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, EngineRecordsItem, StageDecorationProvider, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
       file
     );
     return loaded.exports;
@@ -640,4 +640,33 @@ test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', 
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
   assert.match(src, /\.\.\.\(isV2 \? \[new WaitingItem\(waiting\)\] : \[\]\)/);
   assert.match(src, /\.\.\.\(isV2 \? \[new EngineRecordsItem\(\)\] : \[\]\)/);
+});
+
+
+test('the Waiting row is coloured through the decoration provider: warning colour and a count badge when something waits, dimmed otherwise', () => {
+  // A tree item can colour its icon but not its label; the icon alone did not stand
+  // out (asked for from use). The row carries a private-scheme URI whose path is the
+  // count, and the same provider that colours NEW files paints the label.
+  const { WaitingItem, StageDecorationProvider } = loadExtensionInternals();
+  const provider = new StageDecorationProvider();
+
+  const busy = new WaitingItem({ count: 2, stages: ['intent-capture'] });
+  assert.equal(busy.resourceUri.scheme, 'aidlc-waiting');
+  const lit = provider.provideFileDecoration(busy.resourceUri);
+  assert.equal(lit.badge, '2');
+  assert.ok(lit.color, 'the label is coloured');
+  assert.match(lit.tooltip, /2 item/);
+
+  const idle = new WaitingItem({ count: 0, stages: [] });
+  const dim = provider.provideFileDecoration(idle.resourceUri);
+  assert.equal(dim.badge, undefined, 'no badge when nothing waits');
+  assert.ok(dim.color, 'dimmed, not undecorated: "nothing right now" is a state, not a failure to update');
+
+  // Different counts are different URIs, so VS Code asks for the decoration again on
+  // its own; no change event has to be fired.
+  assert.notEqual(busy.resourceUri.path, idle.resourceUri.path);
+
+  // The file-scheme path is untouched: a v1 tree's stage colours still come from it.
+  const v1 = provider.provideFileDecoration({ scheme: 'file', fsPath: '/p/aidlc-docs/inception/x.md' });
+  assert.equal(v1.badge, 'I');
 });
