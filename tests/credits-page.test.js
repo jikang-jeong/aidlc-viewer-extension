@@ -97,7 +97,7 @@ test('no money is ever shown, and tokens are not shown where Kiro did not record
     ({ project }) => {
       const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
       assert.equal(/\$\s?\d|USD|dollar/i.test(html), false, 'no currency');
-      assert.match(html, /not token counts/);
+      assert.match(html, /no token counts for these sessions/);
       assert.equal(/\d+ tok\b/.test(html), false, 'no token figure for an IDE session');
     }
   ));
