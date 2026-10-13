@@ -95,8 +95,12 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 - **One sidebar for both generations.** The v2-only Supervision panel under the tree is
   gone; its contents are on the Credits page, folded under Engine records.
 - **Setup asks once, where it asks.** The "Set up the AI-DLC workflow for this folder?"
-  prompt now carries **v1** and **v2** as its own buttons instead of a "Choose a version"
-  step that opened a list elsewhere and came back.
+  prompt now carries **v1**, **v2 · Kiro IDE** and **v2 · Kiro CLI** as its own buttons
+  instead of a "Choose a version" step that opened a list elsewhere and came back, and a
+  second list for the harness after that. A project that already recorded a harness keeps it.
+- **A project that has not run says what to type.** Until the first stage is reached, the
+  row at the top of the tree and the strip above an open file read **Not started** with the
+  command for your generation beside it, instead of v1's stage list on a v2 project.
 - **One row says where the workflow is.** The tree used to open with two: one parsed
   from `aidlc-state.md`, one from the artifact tree. Upstream changed the state file's
   checklist wording, and the parsed row read **Operations** on a project in Inception

@@ -491,3 +491,75 @@ test("v1's installer is called without its own confirmation, because the generat
     assert.match(args, /confirm:\s*false/, `must not re-ask: ensureAidlcRules(${args})`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// The harness is on the toast too
+// ---------------------------------------------------------------------------
+//
+// With v1 and v2 as toast buttons, picking v2 still opened the harness list in the
+// centre of the screen: the same decision moved, not removed. The toast now carries
+// "v2 · Kiro IDE" and "v2 · Kiro CLI", and hands setup() a 'v2:<harness>' preselection.
+
+const ENGINE_READY = {
+  './aidlc/engine-install': {
+    DOCS_URL: 'https://example.invalid/docs',
+    detectEngine: () => ({ found: true, path: '/fake/aidlc', version: '2.11.0' }),
+    installEngine: async () => ({ ok: true, version: '2.11.0' }),
+    installCommand: () => 'INSTALL-COMMAND'
+  }
+};
+
+function configuredWith(record) {
+  return {
+    './aidlc/engine-config': {
+      configureProject: async ({ harness }) => {
+        record.push(harness);
+        return { ok: true, plan: { create: 1, update: 0, merge: 0, preserve: 0, remove: 0, conflict: 0 }, outstanding: [], message: 'ok' };
+      }
+    }
+  };
+}
+
+test("a 'v2:kiro-cli' preselection installs for the CLI without showing either list", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pre4-'));
+  try {
+    fs.mkdirSync(path.join(root, '.git'));
+    const harnesses = [];
+    const { api, shown } = loadWithStub({ root, onToast: () => Promise.resolve(undefined), modules: { ...ENGINE_READY, ...configuredWith(harnesses) } });
+    await api.setup({ fsPath: root }, async () => assert.fail('v1 must not run'), 'v2:kiro-cli');
+    assert.equal(shown.quickPicks.length, 0, 'neither the generation list nor the harness list');
+    assert.deepEqual(harnesses, ['kiro-cli']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a 'v2:<unknown>' preselection is not trusted; it asks", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pre5-'));
+  try {
+    fs.mkdirSync(path.join(root, '.git'));
+    const { api, shown } = loadWithStub({ root, onQuickPick: () => undefined, modules: ENGINE_READY });
+    await api.setup({ fsPath: root }, async () => {}, 'v2:windows-notepad');
+    assert.equal(shown.quickPicks.length, 1, 'falls back to the generation question');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a project that already recorded a harness keeps it, whichever v2 button was pressed', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pre6-'));
+  try {
+    fs.mkdirSync(path.join(root, '.git'));
+    const { RECEIPT_PATH } = require('../src/aidlc/install-state');
+    const receipt = path.join(root, ...RECEIPT_PATH);
+    fs.mkdirSync(path.dirname(receipt), { recursive: true });
+    fs.writeFileSync(receipt, JSON.stringify({ version: 1, harness: 'kiro-ide', files: [] }));
+    const harnesses = [];
+    const { api, shown } = loadWithStub({ root, onToast: () => Promise.resolve(undefined), modules: { ...ENGINE_READY, ...configuredWith(harnesses) } });
+    await api.setup({ fsPath: root }, async () => {}, 'v2:kiro-cli');
+    assert.equal(shown.quickPicks.length, 0);
+    assert.deepEqual(harnesses, ['kiro-ide'], 'the recorded harness outranks the button');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

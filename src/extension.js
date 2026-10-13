@@ -300,18 +300,27 @@ class WatchController {
       // which opened a list elsewhere on screen and then returned here -- one decision
       // spread over three surfaces. v1 is first, as it is in the full list, for the same
       // reason: it is the answer most people opening this are looking for.
+      //
+      // v2's harness is on the toast too. Picking "v2" used to open the harness list in
+      // the centre of the screen, which was the same decision moved rather than removed.
+      // Three buttons, one place. A project that already recorded a harness keeps it
+      // regardless of which v2 button is pressed.
       const v1 = 'AI-DLC v1';
-      const v2 = 'AI-DLC v2';
+      const v2ide = 'v2 · Kiro IDE';
+      const v2cli = 'v2 · Kiro CLI';
       const choice = await vscode.window.showInformationMessage(
         'Set up the AI-DLC workflow for this folder?',
         v1,
-        v2,
+        v2ide,
+        v2cli,
         'Not now'
       );
       if (choice === v1) {
         await this.runSetup(folderUri, 'v1');
-      } else if (choice === v2) {
-        await this.runSetup(folderUri, 'v2');
+      } else if (choice === v2ide) {
+        await this.runSetup(folderUri, 'v2:kiro-ide');
+      } else if (choice === v2cli) {
+        await this.runSetup(folderUri, 'v2:kiro-cli');
       }
     } catch (err) {
       vscode.window.showErrorMessage(`AI-DLC setup failed: ${err && err.message ? err.message : err}`);

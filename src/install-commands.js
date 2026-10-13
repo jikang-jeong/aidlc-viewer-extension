@@ -224,22 +224,38 @@ async function setup(folderUri, installV1, preselected) {
     return;
   }
 
-  const generation =
-    preselected === 'v1' || preselected === 'v2' ? preselected : await chooseGeneration(state);
+  // `preselected` is 'v1', 'v2', or 'v2:<harness>' when the toast already carried the
+  // harness as a button. Anything else asks. The toast used to offer v1 and v2, and
+  // picking v2 opened the harness list in the centre of the screen -- the same one
+  // decision spread over two surfaces that the generation buttons had just removed.
+  const pre = parsePreselection(preselected);
+  const generation = pre ? pre.generation : await chooseGeneration(state);
   if (!generation) return;
   if (generation === 'v1') {
     // Unchanged from what it has always done, including its own confirmation.
     await installV1();
     return;
   }
-  await installV2(root, state);
+  await installV2(root, state, pre ? pre.harness : undefined);
 }
 
-async function installV2(root, state) {
+function parsePreselection(value) {
+  if (value === 'v1') return { generation: 'v1' };
+  if (value === 'v2') return { generation: 'v2' };
+  if (typeof value === 'string' && value.startsWith('v2:')) {
+    const harness = value.slice(3);
+    if (Object.prototype.hasOwnProperty.call(HARNESSES, harness)) return { generation: 'v2', harness };
+  }
+  return undefined;
+}
+
+async function installV2(root, state, preselectedHarness) {
   // A harness already recorded is kept. Offering to switch would produce a
-  // project carrying two mutually exclusive sets of agent definitions.
+  // project carrying two mutually exclusive sets of agent definitions. That also
+  // outranks a preselection: a project that already has Kiro IDE agents is not
+  // reinstalled for the CLI because a toast button said so.
   const existing = state.receipt ? state.receipt.harness : undefined;
-  const harness = await chooseHarness(existing);
+  const harness = existing ?? preselectedHarness ?? (await chooseHarness(undefined));
   if (!harness) return;
 
   // The progress notification covers the work and nothing else.
