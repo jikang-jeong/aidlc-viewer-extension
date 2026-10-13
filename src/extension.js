@@ -2046,8 +2046,14 @@ function getNonce() {
 }
 
 function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
-  const safeInitialValue = JSON.stringify(markdown);
-  const safeJourney = JSON.stringify(journey || null);
+  // JSON.stringify leaves "</script>" intact, and inside an inline <script> that ends
+  // the script wherever the document happens to mention one -- the rest of the file
+  // renders as text and the viewer never starts. Found by a test fixture, not by a
+  // user; it is the kind of content an artifact about HTML would contain. The "<"
+  // is written as a JS escape, which is the same string to the parser and inert to
+  // the HTML tokenizer.
+  const safeInitialValue = JSON.stringify(markdown).replace(/</g, '\\u003c');
+  const safeJourney = JSON.stringify(journey || null).replace(/</g, '\\u003c');
   const title = escapeHtml(fileUri.fsPath);
   const mermaidUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
   const nonce = getNonce();
@@ -2139,6 +2145,7 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
     .journey.not-started { cursor: default; }
     .journey.not-started:hover { background: transparent; }
     .j-hint { color: var(--muted); font-weight: 400; margin-left: 10px; }
+    .md-comment { color: var(--muted); opacity: 0.75; font-style: italic; font-size: 0.92em; }
       .journey:hover { background: color-mix(in srgb, var(--bg) 80%, var(--text) 20%); }
       /* Plain focus drew a full-width browser outline around the whole band. */
       .journey:focus { outline: none; }
@@ -3126,6 +3133,19 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
           return '\\u0000INLINECODE' + idx + '\\u0000';
         });
 
+        // 2b) HTML comments. AI-DLC artifacts carry instructions to the agent in
+        // them, e.g. "<!-- Things agents must never do -->". A Markdown renderer
+        // would drop them; this one used to escape them into body text. They are
+        // shown, dimmed, so a person can see what the file tells the agent without
+        // it reading as part of the document. The text inside is escaped on the way
+        // back, so a comment cannot smuggle markup.
+        const comments = [];
+        src = src.replace(/<!--([\\s\\S]*?)-->/g, (_, body) => {
+          const idx = comments.length;
+          comments.push(body);
+          return '\\u0000COMMENT' + idx + '\\u0000';
+        });
+
         // 3) Escape the rest
         let html = escapeHtml(src);
 
@@ -3195,6 +3215,9 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         html = html.replace(/^(?!<h\\d|<ul|<ol|<li|<pre|<blockquote|<table|<hr|<img|\\s*$)([^\\n<].*)$/gm, '<p>$1</p>');
 
         // 15) Restore inline code then fenced code blocks
+        html = html.replace(/\\u0000COMMENT(\\d+)\\u0000/g, (_, i) => {
+          return '<span class="md-comment">&lt;!--' + escapeHtml(comments[+i]) + '--&gt;</span>';
+        });
         html = html.replace(/\\u0000INLINECODE(\\d+)\\u0000/g, (_, i) => {
           return '<code>' + escapeHtml(inlineCodes[+i]) + '</code>';
         });

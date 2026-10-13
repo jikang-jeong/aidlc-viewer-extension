@@ -40,7 +40,7 @@ New artifacts are marked `NEW` until you open them, then `READ`, with counts rol
 
 ### The artifact itself
 
-Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit**, or double-click the text you want to change, to swap the same pane for the Markdown source with the cursor near that spot; **Save** returns you to the view. The view never rewrites your Markdown from the rendering, so what you type is exactly what is saved. Zoom works in both modes.
+Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit**, or double-click the text you want to change, to swap the same pane for the Markdown source with the cursor near that spot; **Save** returns you to the view. The view never rewrites your Markdown from the rendering, so what you type is exactly what is saved. Zoom works in both modes. HTML comments, which AI-DLC uses to instruct the agent, are shown dimmed rather than dropped.
 
 ### What Kiro spent, and what is waiting on you
 

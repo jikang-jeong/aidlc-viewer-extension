@@ -161,6 +161,17 @@ literal. Pin: viewer-single-pane "a Markdown table renders as rows". The viewer 
 execute the script against a DOM stub; a grep-based test would have passed on all three
 shapes.
 
+**`JSON.stringify` does not make a string safe inside an inline `<script>`.** A document
+that mentions `</script>` ended the viewer's script there, and the viewer never started.
+Every `<` in the embedded JSON is written `\u003c`, the same string to the JS parser and
+inert to the HTML tokenizer. Found by a test fixture about HTML comments, not by a user.
+Pin: viewer-single-pane "a document that mentions </script> still loads the viewer".
+
+**HTML comments are shown, dimmed, never dropped or rendered as prose.** AI-DLC puts the
+agent's instructions in them. They are extracted before escaping like code blocks, and the
+text inside is escaped on the way back, so a comment cannot carry markup. Pin:
+viewer-single-pane "HTML comments render dimmed, with their markup escaped".
+
 **A `display:none` textarea has no layout in the tick it becomes visible**, so a
 `scrollTop` set then is dropped (double-click to edit "went to the top"). Defer to
 `requestAnimationFrame`. And never keep the two panes in step by scroll ratio: rendered

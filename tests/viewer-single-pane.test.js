@@ -363,3 +363,28 @@ test('with no payload at all the strip stays hidden, as before', () => {
   const { dom } = runViewerScript('# T', {}, undefined);
   assert.equal(dom.elements.get('journey').hidden, true);
 });
+
+// ---------------------------------------------------------------------------
+// HTML comments, and what the document may contain
+// ---------------------------------------------------------------------------
+
+test('HTML comments render dimmed, with their markup escaped', () => {
+  // AI-DLC artifacts carry instructions to the agent in comments. A Markdown renderer
+  // drops them; this one used to escape them into body text. Shown dimmed instead, so
+  // a person sees what the file tells the agent without it reading as the document.
+  const { dom } = runViewerScript('# T\n\n<!-- Things agents must never do -->\n\nBody <!-- inline --> text.\n\n<!-- <script>alert(1)</script> -->\n');
+  const html = dom.elements.get('preview').innerHTML;
+  assert.match(html, /<span class="md-comment">&lt;!-- Things agents must never do --&gt;<\/span>/);
+  assert.match(html, /Body <span class="md-comment">&lt;!-- inline --&gt;<\/span> text\./);
+  // A comment is not a place to smuggle markup.
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test('a document that mentions </script> still loads the viewer', () => {
+  // JSON.stringify leaves "</script>" intact, and inside the inline <script> that ended
+  // the script early: the viewer never started. Found by the comment test's fixture.
+  const { dom } = runViewerScript('See </script> in prose, and <!-- </script> --> in a comment.\n');
+  assert.ok(dom.elements.get('editor').value.includes('</script> in prose'), 'the source survived intact');
+  assert.match(dom.elements.get('preview').innerHTML, /&lt;\/script&gt; in prose/);
+});
