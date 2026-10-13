@@ -622,12 +622,12 @@ test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', 
   // an engine to wait on nor one to record, and a row that promised either would be a
   // new thing for 6,000 people to wonder about.
   const { WaitingItem, EngineRecordsItem, CreditsItem } = loadExtensionInternals();
-  assert.equal(new CreditsItem().label, 'Credits (' + 'Tokens)');
+  assert.equal(new CreditsItem().label, 'Usage');
   const w = new WaitingItem({ count: 2, stages: ['intent-capture'] });
   assert.equal(w.label, 'Waiting for you');
   assert.equal(w.description, '2 items · intent-capture');
   assert.equal(new WaitingItem({ count: 0, stages: [] }).description, 'nothing right now');
-  assert.equal(new EngineRecordsItem().label, 'Engine records');
+  assert.equal(new EngineRecordsItem().label, 'Engine log');
 
   // The gate itself, read from the source: the two rows are spread in under `isV2`.
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');

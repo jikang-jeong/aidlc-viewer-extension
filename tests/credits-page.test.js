@@ -54,8 +54,8 @@ test('v1 shows Credits only -- no Waiting, no engine records -- so its page matc
     ({ project }) => {
       const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
       const s = sections(html);
-      assert.deepEqual(s.filter((x) => /Waiting|Engine records|stuck|Checks/.test(x)), []);
-      assert.ok(s.includes('Credits (Tokens)'));
+      assert.deepEqual(s.filter((x) => /Waiting|Engine log|stuck|Checks/.test(x)), []);
+      assert.ok(s.includes('Usage'));
     }
   ));
 
@@ -76,7 +76,7 @@ const V2_WAITING = (project) => ({
   }
 });
 
-test('three pages: Credits starts and ends with credits; Waiting and Engine records are their own', () =>
+test('three pages: Usage starts and ends with credits; Waiting and Engine log are their own', () =>
   withKiroHome(
     ({ home, project }) => ideSession(home, project, [{ at: T, credits: 5 }]),
     ({ project }) => {
@@ -85,7 +85,7 @@ test('three pages: Credits starts and ends with credits; Waiting and Engine reco
       const v2 = V2_WAITING(project);
       const credits = page.renderCreditsPage({ webview, root: project, project: v2 });
       const s = sections(credits);
-      assert.equal(s[0], 'Credits (' + 'Tokens)');
+      assert.equal(s[0], 'Usage');
       assert.ok(!s.includes('Waiting for you'), 'not on the Credits page any more');
       assert.doesNotMatch(credits, /<details class="records">/, 'nor the engine records');
 
@@ -100,7 +100,7 @@ test('three pages: Credits starts and ends with credits; Waiting and Engine reco
       assert.match(waiting, /fill in each empty <code>\[Answer\]:<\/code>/);
 
       const records = page.renderEngineRecordsPage({ webview, root: project, project: v2 });
-      assert.match(records, /<title>Engine records<\/title>/);
+      assert.match(records, /<title>Engine log<\/title>/);
       assert.doesNotMatch(records, /<details class="records">/, 'unfolded: it is the whole page now');
     }
   ));

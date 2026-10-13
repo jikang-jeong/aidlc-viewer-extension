@@ -84,7 +84,7 @@
       },
       {
         "command": "markdownWatchViewer.showCredits",
-        "title": "AI-DLC: Credits (Tokens)",
+        "title": "AI-DLC: Usage",
         "icon": "$(graph)"
       },
       {
@@ -93,7 +93,7 @@
       },
       {
         "command": "markdownWatchViewer.showEngineRecords",
-        "title": "AI-DLC: Engine records"
+        "title": "AI-DLC: Engine log"
       }
     ],
     "viewsContainers": {

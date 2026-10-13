@@ -311,15 +311,15 @@ ${detailRows}`;
 
 function creditsHeadline(model) {
   if (!model.ok) {
-    return `<section><h2>Credits (Tokens)</h2><p class="quiet">Kiro's session store was not found at <code>${escapeHtml(model.storePath)}</code>. Kiro writes credit usage there per prompt turn; until it exists there is nothing to show.</p></section>`;
+    return `<section><h2>Usage</h2><p class="quiet">Kiro's session store was not found at <code>${escapeHtml(model.storePath)}</code>. Kiro writes credit usage there per prompt turn; until it exists there is nothing to show.</p></section>`;
   }
   const a = model.attribution;
   if (a.totalTurns === 0) {
-    return `<section><h2>Credits (Tokens)</h2><p class="quiet">No Kiro session has been opened on this folder yet. Sessions opened on a parent folder are not counted, because nothing in Kiro's record says which project their turns were about.</p></section>`;
+    return `<section><h2>Usage</h2><p class="quiet">No Kiro session has been opened on this folder yet. Sessions opened on a parent folder are not counted, because nothing in Kiro's record says which project their turns were about.</p></section>`;
   }
   const wastedPct = a.total > 0 ? Math.round((a.wasted / a.total) * 100) : 0;
   return `<section>
-  <h2>Credits (Tokens)</h2>
+  <h2>Usage</h2>
   <div class="tiles">
     <div class="tile"><div class="big">${fmtCredits(a.total)}</div><div class="label">credits on this project</div><div class="sub">${a.totalTurns} prompt turn${a.totalTurns === 1 ? '' : 's'} across ${model.sessions.length} session${model.sessions.length === 1 ? '' : 's'}</div></div>
     <div class="tile ${a.wasted > 0 ? 'warn' : ''}"><div class="big">${fmtCredits(a.wasted)}</div><div class="label">spent on turns that were aborted or failed</div><div class="sub">${a.wastedTurns} turn${a.wastedTurns === 1 ? '' : 's'}${a.total > 0 ? `, ${wastedPct}% of the total` : ''}</div></div>
@@ -427,10 +427,10 @@ function waitingSection(project) {
 // they are below the fold because the two sections above are what a person acts on.
 function engineRecordsSection(project, root) {
   const intent = project?.v2?.active;
-  if (!intent) return `<section><h2>Engine records</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
+  if (!intent) return `<section><h2>Engine log</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
   const parts = [blocking(intent, root), sensors(intent, root), contrast(intent, root)].filter(Boolean);
   if (parts.length === 0) {
-    return `<section><h2>Engine records</h2><p class="quiet">The engine has recorded no refusal, no sensor finding and no self-report to compare for this intent.</p></section>`;
+    return `<section><h2>Engine log</h2><p class="quiet">The engine has recorded no refusal, no sensor finding and no self-report to compare for this intent.</p></section>`;
   }
   return `<p class="quiet">Refusals, what the engine\u2019s checks flagged, and the agent\u2019s own record beside the engine\u2019s check of it. These are the engine\u2019s records, shown as written.</p>\n${parts.join('\n')}`;
 }
@@ -439,7 +439,7 @@ function engineRecordsSection(project, root) {
 // this answers "when, and on what" -- and lets a person check that a figure in a table
 // is made of turns they recognise. Capped so a long-lived project does not render
 // thousands of rows; the cap is said on the page.
-const PAGE_TITLE = { credits: 'Credits (' + 'Tokens)', waiting: 'Waiting for you', records: 'Engine records' };
+const PAGE_TITLE = { credits: 'Usage', waiting: 'Waiting for you', records: 'Engine log' };
 const HISTORY_LIMIT = 200;
 function historySection(model) {
   if (!model.ok || !model.history || model.history.length === 0) return '';

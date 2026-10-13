@@ -1284,7 +1284,7 @@ class CreditsItem extends vscode.TreeItem {
     this.contextValue = 'credits';
     this.iconPath = new vscode.ThemeIcon('graph', new vscode.ThemeColor('charts.purple'));
     this.command = { command: 'markdownWatchViewer.showCredits', title: `Open the ${PAGE_TITLE.credits} page` };
-    this.description = 'Kiro credits, by stage and session';
+    this.description = 'credits Kiro spent, by stage and session';
     this.tooltip = 'What Kiro spent on this project: total, the share that bought nothing, by stage, by session, and every turn.';
   }
 }
@@ -1315,7 +1315,7 @@ class EngineRecordsItem extends vscode.TreeItem {
     this.contextValue = 'records';
     this.iconPath = new vscode.ThemeIcon('shield', new vscode.ThemeColor('descriptionForeground'));
     this.command = { command: 'markdownWatchViewer.showEngineRecords', title: `Open the ${PAGE_TITLE.records} page` };
-    this.description = 'refusals, checks, claims';
+    this.description = 'what the engine refused, flagged and checked';
     this.tooltip = "The engine's own records: refusals, what its checks flagged, and the agent's claim beside the engine's check of it.";
   }
 }
@@ -3455,14 +3455,31 @@ function getHelpHtml() {
 </div>
 
 <div class="stage-card supervision">
-  <h3>🟣 Credits — both generations</h3>
-  <p>The <strong>Credits (Tokens)</strong> row at the top of the tree opens a page with what Kiro spent on this project. Every number is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.</p>
+  <h3>🟣 Usage — both generations</h3>
+  <p>The <strong>Usage</strong> row at the top of the tree opens a page with what Kiro spent on this project. Every number is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.</p>
   <ul>
-    <li><strong>Total credits</strong>, and beside it the credits spent on turns Kiro marked <strong>aborted or failed</strong> — work that was paid for and produced nothing. That second number is the one to act on.</li>
-    <li><strong>By stage.</strong> A turn is placed in a stage when its time falls inside that stage's window: the engine's audit ledger on v2, the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.</li>
-    <li><strong>By session</strong>: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro CLI recorded them (Kiro IDE records credits only).</li>
+    <li><strong>Total credits</strong>, and beside it the credits spent on turns Kiro marked <strong>aborted or failed</strong> — work that was paid for and produced nothing. A bar under the tiles shows the split.</li>
+    <li><strong>By stage</strong>, each with a bar relative to the costliest stage. A turn is placed in a stage when its time falls inside that stage's window: the engine's audit ledger on v2, the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.</li>
+    <li><strong>By session</strong>: credits (with the aborted share marked on its bar), turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them.</li>
+    <li><strong>History</strong>, folded: every prompt turn, newest first, so any figure above can be traced to the turns that made it.</li>
   </ul>
-  <p><strong>On v2 the page also shows what is waiting on you.</strong> A stage at its gate is stopped, not slow, and the chat said so once and scrolled away. The page lists each item with the engine's own message and the remedies it marked as yours, and says whether the engine stated the wait or this extension inferred it from the ledger. The engine's other records — refusals, sensor findings, the agent's claim beside the engine's check — are folded below. Only this v2 content is generation-specific; the sidebar is the same for both.</p>
+  <p>The page re-reads every few seconds while it is open, so a running session shows up as it spends.</p>
+</div>
+
+<div class="stage-card supervision">
+  <h3>🔔 Waiting for you — v2 only</h3>
+  <p>A row with its count beside it, so you know without opening anything. A stage waiting on you is stopped, not slow, and the chat said so once and scrolled away. The page lists each item in the engine's own words:</p>
+  <ul>
+    <li><strong>Questions to answer</strong>: a questions file the engine wrote with empty <code>[Answer]:</code> lines, with the file and how many. Open it from the tree, fill them in, and tell the agent to continue.</li>
+    <li><strong>Refusals</strong> the engine marked as needing you, with the remedies it listed as yours.</li>
+    <li><strong>Plans</strong> parked for your approval.</li>
+  </ul>
+  <p>Each item says whether the engine stated the wait (a file it wrote) or this extension inferred it from the ledger's order.</p>
+</div>
+
+<div class="stage-card supervision">
+  <h3>🛡 Engine log — v2 only</h3>
+  <p>The engine's own account of the run: what it refused and why, what its checks flagged, and the agent's claim set beside the engine's check of it. Shown as written, never summarised.</p>
 </div>
 
 <h2>Toolbar Reference</h2>
@@ -3532,14 +3549,31 @@ function getHelpHtml() {
 </div>
 
 <div class="stage-card supervision">
-  <h3>🟣 크레딧(Credits) — 두 세대 공통</h3>
-  <p>트리 맨 위의 <strong>Credits (Tokens)</strong> 행을 누르면 Kiro가 이 프로젝트에 쓴 크레딧 페이지가 열립니다. 모든 숫자는 Kiro가 기록한 그대로입니다. 추정하지 않고, 금액으로 환산하지 않습니다. 크레딧 가격은 요금제마다 다르기 때문입니다.</p>
+  <h3>🟣 Usage(사용량) — 두 세대 공통</h3>
+  <p>트리 맨 위의 <strong>Usage</strong> 행을 누르면 Kiro가 이 프로젝트에 쓴 크레딧 페이지가 열립니다. 모든 숫자는 Kiro가 기록한 그대로입니다. 추정하지 않고, 금액으로 환산하지 않습니다. 크레딧 가격은 요금제마다 다르기 때문입니다.</p>
   <ul>
-    <li><strong>총 크레딧</strong>과 그 옆에 Kiro가 <strong>중단 또는 실패</strong>로 표시한 턴에 쓴 크레딧. 비용은 들었는데 결과가 없는 작업이고, 행동으로 이어질 수 있는 숫자는 이쪽입니다.</li>
-    <li><strong>단계별.</strong> 턴의 시각이 단계의 구간 안에 들면 그 단계에 귀속됩니다. 구간은 v2에서는 엔진의 감사 원장, v1에서는 산출물의 수정 시각에서 옵니다. 어느 구간에도 들지 않는 턴은 그렇다고 표시되어 합계가 항상 맞습니다.</li>
-    <li><strong>세션별</strong>: 크레딧, 턴 수, 소요 시간, 마지막 턴 뒤 컨텍스트 창 사용률, 그리고 Kiro CLI가 기록한 경우 토큰 수(Kiro IDE는 크레딧만 기록합니다).</li>
+    <li><strong>총 크레딧</strong>과 그 옆에 Kiro가 <strong>중단 또는 실패</strong>로 표시한 턴에 쓴 크레딧. 비용은 들었는데 결과가 없는 작업입니다. 타일 아래 막대가 그 비율을 보여줍니다.</li>
+    <li><strong>단계별</strong>, 가장 비싼 단계 기준의 막대와 함께. 턴의 시각이 단계의 구간 안에 들면 그 단계에 귀속됩니다. 구간은 v2에서는 엔진의 감사 원장, v1에서는 산출물의 수정 시각에서 옵니다. 어느 구간에도 들지 않는 턴은 그렇다고 표시되어 합계가 항상 맞습니다.</li>
+    <li><strong>세션별</strong>: 크레딧(막대에 중단분 표시), 턴 수, 소요 시간, 마지막 턴 뒤 컨텍스트 창 사용률, 그리고 Kiro가 기록한 경우 토큰 수.</li>
+    <li><strong>History</strong>(접힘): 모든 프롬프트 턴을 최신순으로. 위의 어떤 숫자든 그것을 만든 턴까지 추적할 수 있습니다.</li>
   </ul>
-  <p><strong>v2에서는 이 페이지가 당신을 기다리는 것도 보여줍니다.</strong> 게이트에 선 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 메시지와 엔진이 당신 몫으로 표시한 조치와 함께 보여주고, 그것이 엔진이 밝힌 것인지 이 익스텐션이 원장에서 추론한 것인지도 함께 적습니다. 엔진의 다른 기록(거부, 센서 발견, 에이전트의 주장과 엔진의 판정)은 아래에 접혀 있습니다. v2 전용인 것은 이 내용뿐이고, 사이드바는 두 세대가 같습니다.</p>
+  <p>페이지는 열려 있는 동안 몇 초마다 다시 읽으므로, 진행 중인 세션의 소비가 그때그때 반영됩니다.</p>
+</div>
+
+<div class="stage-card supervision">
+  <h3>🔔 Waiting for you(당신을 기다림) — v2 전용</h3>
+  <p>행 옆에 개수가 붙어 있어 열지 않아도 알 수 있습니다. 당신을 기다리는 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 말 그대로 보여줍니다.</p>
+  <ul>
+    <li><strong>답할 질문</strong>: 엔진이 쓴 질문 파일에 빈 <code>[Answer]:</code>가 남아 있는 것. 파일 이름과 개수가 함께 나옵니다. 트리에서 열어 채우고 에이전트에게 계속하라고 하면 됩니다.</li>
+    <li><strong>거부</strong>: 엔진이 당신이 필요하다고 표시한 것과, 당신 몫으로 적은 조치.</li>
+    <li><strong>승인 대기 계획</strong>.</li>
+  </ul>
+  <p>각 항목에는 엔진이 밝힌 것(엔진이 쓴 파일)인지 이 익스텐션이 원장의 순서에서 추론한 것인지가 적혀 있습니다.</p>
+</div>
+
+<div class="stage-card supervision">
+  <h3>🛡 Engine log(엔진 기록) — v2 전용</h3>
+  <p>엔진 자신의 기록입니다. 무엇을 왜 거부했는지, 점검이 무엇을 지적했는지, 에이전트의 주장 옆에 놓인 엔진의 판정. 요약하지 않고 쓰인 그대로 보여줍니다.</p>
 </div>
 
 <h2>툴바 안내</h2>
