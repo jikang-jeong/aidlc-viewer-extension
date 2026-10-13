@@ -256,14 +256,15 @@ commands. A test parses both and requires the sets to match, because a link to a
 the panel does not enable fails silently. Pins: credits-page "the start page" (two tests),
 v1-isolation "the start page opens only for a generation setup just added".
 
-**README images are relative paths to files shipped in the vsix, and stay relative in the
-vsix.** An absolute GitHub raw URL is broken locally and on the listing until that branch is
-pushed; vsce's default rewrite of relative paths to `raw/HEAD/...` has the same dependency.
-The package script passes `--no-rewrite-relative-links`, so open-vsx serves the images from
-inside the vsix and GitHub is not involved. `npm run package` must invoke vsce through
-`npx --yes @vscode/vsce@<pinned>`: a bare `vsce` is not installed, the script silently
-failed, and a stale vsix from the previous build was read as the result. The demo gif
-(5.7MB of a 7.4MB package) and `.kiro/` are excluded. Pin: tests/readme-images.test.js.
+**README images: relative in the source, rewritten to GitHub raw at packaging, and the files
+must be on `main`.** Three attempts on 2026-10-13. Absolute raw URLs were broken until the
+branch was pushed. Then the rewrite was turned off on the assumption that open-vsx serves
+files from inside the vsix; it does not (`/file/media/x.png` is 404), and 0.0.27 shipped with
+every image broken. The working arrangement: the source README keeps relative paths (GitHub
+and local render them), the package script passes `--githubBranch main` so vsce rewrites them
+to `raw/main/...`, and the five files are pushed to `main` (the user can push media even
+where code is blocked). The test checks each URL online and skips offline. The demo gif and
+`.kiro/` are excluded from the vsix. Pin: tests/readme-images.test.js.
 
 **The built-in guide is pinned to the build it ships with.** Prose does not fail a test
 when the behaviour it describes changes, and the guide fell behind the same day twice.
