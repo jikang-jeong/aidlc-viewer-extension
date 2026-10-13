@@ -513,6 +513,48 @@ function renderEngineRecordsPage({ webview, root, project, nonce: fixedNonce }) 
   return shell({ webview, root, project, nonce: fixedNonce, title: PAGE_TITLE.records }, [engineRecordsSection(project, root)]);
 }
 
+// The page that opens once, right after setup, in the editor area: the one thing to
+// type to start, large, with a button that puts it where it is typed. Asked for because
+// the completion toast led with what was installed and said what to do next in a
+// trailing sentence that was gone in seconds; a person who has just set this up has
+// exactly one question and it is not "which files were written".
+//
+// No script, like every page here: the buttons are command: links, which the webview
+// routes to the extension host when the panel enables them. What was installed is still
+// on the page, smaller, below the thing to do.
+function renderStartPage({ webview, root, project, nonce: fixedNonce, generation, installed = [], notices = [] }) {
+  const gen = generation === 'both' ? 'v2' : generation;
+  const isV2 = gen === 'v2';
+  const phrase = isV2 ? '/aidlc' : 'Using AI-DLC, build …';
+  const copyHref = `command:markdownWatchViewer.copyStartPhrase?${encodeURIComponent(JSON.stringify([phrase]))}`;
+  const chatHref = 'command:markdownWatchViewer.openChatToStart';
+  const guideHref = 'command:markdownWatchViewer.showHelp';
+  const what = isV2
+    ? `<p class="lead">Type <code class="big">/aidlc</code> in Kiro\u2019s chat, followed by what you want to build.</p>
+       <p class="quiet">Setup installed a conductor agent and a set of role agents, so <code>/aidlc</code> starts or resumes the workflow; the others are there when you want a specific one.</p>`
+    : `<p class="lead">Tell your agent: <code class="big">Using AI-DLC, build \u2026</code> and describe what you want.</p>
+       <p class="quiet">The rules your agent reads are in the project now. Any agent that reads them works: Kiro, Claude Code, or your editor\u2019s own.</p>`;
+  const buttons = isV2
+    ? `<a class="btn primary" href="${chatHref}">Open chat</a><a class="btn" href="${copyHref}">Copy /aidlc</a><a class="btn" href="${guideHref}">Guide</a>`
+    : `<a class="btn primary" href="${copyHref}">Copy the phrase</a><a class="btn" href="${guideHref}">Guide</a>`;
+  const installedList = installed.length
+    ? `<section><h2>What was set up</h2><ul class="plain">${installed.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul></section>`
+    : '';
+  const noticeList = notices.length
+    ? `<section><h2>Before you start</h2><ul class="plain">${notices.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul></section>`
+    : '';
+  return shell({ webview, root, project, nonce: fixedNonce, title: 'Ready to start' }, [
+    `<section class="start">
+      <h2>AI-DLC ${escapeHtml(gen ?? '')} is set up. Start it:</h2>
+      ${what}
+      <div class="btns">${buttons}</div>
+      <p class="quiet">This page opens once, after setup. The row at the top of the tree reads <strong>Not started</strong> with the same command until the first stage is reached.</p>
+    </section>`,
+    noticeList,
+    installedList
+  ]);
+}
+
 // What the tree row says beside "Waiting for you" without the page being open.
 function waitingSummary(project) {
   const intent = project?.v2?.active;
@@ -580,6 +622,13 @@ function shell({ webview, root, project, nonce: fixedNonce, title }, sections) {
   .split-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   .sw.ok { background: var(--purple); opacity: 0.8; }
   .sw.wasted { background: var(--warn); }
+  .start .lead { font-size: 18px; line-height: 1.5; margin: 10px 0 6px; }
+  code.big { font-size: 20px; padding: 3px 10px; border-radius: 6px; background: color-mix(in srgb, var(--vscode-editor-background) 85%, var(--purple) 15%); border: 1px solid var(--purple); }
+  .btns { display: flex; gap: 10px; margin: 16px 0 8px; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); text-decoration: none; font-size: 13px; }
+  .btn.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+  .btn:hover { filter: brightness(1.1); }
+  ul.plain { margin: 6px 0 0 18px; padding: 0; }
   details.records, details.history { margin-top: 26px; }
   details.history summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; list-style: none; }
   details.history summary::-webkit-details-marker { display: none; }
@@ -599,4 +648,4 @@ ${body}
 </html>`;
 }
 
-module.exports = { collectCreditsModel, renderCreditsPage, renderWaitingPage, renderEngineRecordsPage, waitingSummary, PAGE_TITLE, nonce, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };
+module.exports = { collectCreditsModel, renderCreditsPage, renderWaitingPage, renderEngineRecordsPage, renderStartPage, waitingSummary, PAGE_TITLE, nonce, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };

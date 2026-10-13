@@ -8,7 +8,7 @@ AI-DLC has your agent work through a lifecycle, producing Markdown artifacts as 
 
 | | What you get |
 | --- | --- |
-| **One-click setup** | Press one button, pick v1 or v2 (and for v2, Kiro IDE or Kiro CLI) on the same prompt, and the project is set up. v2's engine is installed for you from the official release. Nothing you already have is overwritten. |
+| **One-click setup** | Press one button, pick v1 or v2 (and for v2, Kiro IDE or Kiro CLI) on the same prompt, and the project is set up. v2's engine is installed for you from the official release. Nothing you already have is overwritten. When it is done, a page opens with the one thing to type to start. |
 | **Where the workflow is** | The furthest stage reached, at the top of the tree and in a strip above every open file. Not a percentage: AI-DLC decides its own stage list as it goes, so reached stages are counted and the list is shown. |
 | **Which file needs you** | New artifacts are marked and their folders open themselves, so what the agent just wrote is in front of you. |
 | **The artifact, rendered** | Markdown with Mermaid diagrams inline. Double-click to edit at that spot; Save returns you to the view. What you type is exactly what is saved. |
@@ -109,9 +109,13 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
   prompt now carries **v1**, **v2 · Kiro IDE** and **v2 · Kiro CLI** as its own buttons
   instead of a "Choose a version" step that opened a list elsewhere and came back, and a
   second list for the harness after that. A project that already recorded a harness keeps it.
-- **A project that has not run says what to type.** Until the first stage is reached, the
-  row at the top of the tree and the strip above an open file read **Not started** with the
-  command for your generation beside it, instead of v1's stage list on a v2 project.
+- **Setup ends on what to do next.** When setup finishes, a page opens in the editor with
+  the one thing to type, large: `/aidlc` on v2, `"Using AI-DLC, build …"` on v1, with a
+  button that copies it and, on v2, one that opens Kiro's chat. The completion toast used to
+  lead with which files were written and say this in a trailing sentence that was gone in
+  seconds. Until the first stage is reached, the row at the top of the tree and the strip
+  above an open file read **Not started** with the same command beside it, instead of v1's
+  stage list on a v2 project.
 - **One row says where the workflow is.** The tree used to open with two: one parsed
   from `aidlc-state.md`, one from the artifact tree. Upstream changed the state file's
   checklist wording, and the parsed row read **Operations** on a project in Inception

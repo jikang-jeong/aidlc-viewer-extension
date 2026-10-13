@@ -236,6 +236,15 @@ test that re-implements the logic it is testing proves only that it agrees with 
 the pin now also reads the `getChildren` source and requires no filter between the phase
 groups and the rows. Pin: v1-isolation "every phase is listed".
 
+**Setup's installers return nothing, so "did setup happen" is read from the folder.**
+`runSetup` compares `detectGeneration` before and after; a generation present after that was
+not present before is what was just set up, and only then does the start page open. A re-run
+over an installed project opens nothing. The page is script-free like the others; its
+buttons are `command:` links, and the panel's `enableCommandUris` names exactly those
+commands. A test parses both and requires the sets to match, because a link to a command
+the panel does not enable fails silently. Pins: credits-page "the start page" (two tests),
+v1-isolation "the start page opens only for a generation setup just added".
+
 **The built-in guide is pinned to the build it ships with.** Prose does not fail a test
 when the behaviour it describes changes, and the guide fell behind the same day twice.
 `tests/guide-current.test.js` renders `getHelpHtml` and requires the sentences a user

@@ -373,7 +373,7 @@ function loadExtensionInternals() {
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
     loaded._compile(
       `${fs.readFileSync(file, 'utf8')}
-module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, EngineRecordsItem, StageDecorationProvider, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
+module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, EngineRecordsItem, StageDecorationProvider, newlyInstalled, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
       file
     );
     return loaded.exports;
@@ -669,4 +669,19 @@ test('the Waiting row is coloured through the decoration provider: warning colou
   // The file-scheme path is untouched: a v1 tree's stage colours still come from it.
   const v1 = provider.provideFileDecoration({ scheme: 'file', fsPath: '/p/aidlc-docs/inception/x.md' });
   assert.equal(v1.badge, 'I');
+});
+
+test('the start page opens only for a generation setup just added, never on a re-run', () => {
+  // Setup's installers report through toasts and return nothing, so "did setup happen"
+  // is read from the folder before and after. A re-run over an installed project adds
+  // nothing and opens nothing: that person has started before.
+  const { newlyInstalled } = loadExtensionInternals();
+  assert.equal(newlyInstalled('none', 'v1'), 'v1');
+  assert.equal(newlyInstalled('none', 'v2'), 'v2');
+  assert.equal(newlyInstalled('v1', 'both'), 'v2', 'v2 added beside v1');
+  assert.equal(newlyInstalled('v2', 'both'), 'v1');
+  assert.equal(newlyInstalled('v1', 'v1'), undefined, 're-run');
+  assert.equal(newlyInstalled('v2', 'v2'), undefined);
+  assert.equal(newlyInstalled('both', 'both'), undefined);
+  assert.equal(newlyInstalled('none', 'none'), undefined, 'setup cancelled');
 });

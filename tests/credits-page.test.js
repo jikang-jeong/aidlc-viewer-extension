@@ -338,3 +338,31 @@ test('a session that is half the project draws a half bar, so the bar means some
       assert.deepEqual(bars, [100, 50, 50]);
     }
   ));
+
+// ---------------------------------------------------------------------------
+// The start page, opened once after setup
+// ---------------------------------------------------------------------------
+
+test('the start page leads with the one thing to type, per generation, with buttons that are command links', () => {
+  const v1 = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v1' }, generation: 'v1', installed: ['Kiro', 'Claude Code'] });
+  assert.match(v1, /<h2>AI-DLC v1 is set up\. Start it:<\/h2>/);
+  assert.match(v1, /Using AI-DLC, build/);
+  assert.match(v1, /href="command:markdownWatchViewer\.copyStartPhrase\?/);
+  assert.doesNotMatch(v1, /openChatToStart/, 'v1 has no chat to open: any agent reads the rules');
+  assert.match(v1, /What was set up[\s\S]*Claude Code/);
+
+  const v2 = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v2' }, generation: 'v2', notices: ['PATH note'] });
+  assert.match(v2, /<code class="big">\/aidlc<\/code>/);
+  assert.match(v2, /href="command:markdownWatchViewer\.openChatToStart"/);
+  assert.match(v2, /Before you start[\s\S]*PATH note/);
+  // Still no script: the buttons are links the webview routes to the host.
+  assert.doesNotMatch(v2, /<script/);
+});
+
+test('every command: link on the start page is one the panel enables, so no button can silently do nothing', () => {
+  const html = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v2' }, generation: 'v2' });
+  const linked = [...new Set([...html.matchAll(/href="command:([a-zA-Z.]+)/g)].map((m) => m[1]))].sort();
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
+  const enabled = JSON.parse(/enableCommandUris: (\[[^\]]+\])/.exec(src)[1].replace(/'/g, '"')).sort();
+  assert.deepEqual(linked, enabled);
+});

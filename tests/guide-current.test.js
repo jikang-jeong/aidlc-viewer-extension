@@ -54,7 +54,9 @@ const MUST_SAY = {
   'the Waiting row changes colour (EN)': ['changes colour'],
   'the Waiting row changes colour (KO)': ['색이 바뀌는 행'],
   'Usage re-reads while open (EN)': ['re-reads every few seconds'],
-  'start commands per generation': ['Using AI-DLC', '/aidlc']
+  'start commands per generation': ['Using AI-DLC', '/aidlc'],
+  'a start page opens after setup (EN)': ['a page opens in the editor'],
+  'a start page opens after setup (KO)': ['페이지가 열리고']
 };
 
 for (const [what, needles] of Object.entries(MUST_SAY)) {
