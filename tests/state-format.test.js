@@ -2,10 +2,9 @@
 
 // State-file format contract + regression characterization.
 //
-// These tests do NOT exercise src/extension.js (it requires the `vscode` module
-// and cannot be loaded outside the extension host). They pin the *shape of the
-// input* that any progress parser must handle, and they characterize the two
-// distinct failure modes of the current parser so that a fix is provably a fix.
+// The first half pins the *shape of the input* any progress parser must handle.
+// The second half loads parseAidlcState from src/extension.js (with `vscode`
+// stubbed) and runs it over the fixtures.
 //
 // Fixtures are synthetic and reproduce formats observed in real v1 projects.
 // Never commit customer project files here.
@@ -15,9 +14,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-// Verbatim regex and phase list from parseAidlcState() / computeProgressFromState()
-// in src/extension.js. Copied, not imported: extension.js requires `vscode`.
-const CURRENT_STEP_REGEX = /^\s*-\s*\[( |x|X)\]\s*([A-Za-z]+)\s*-\s*(.+?)\s*(?:\(([^)]*)\))?\s*$/;
 const KNOWN_PHASES = ['inception', 'construction', 'operations'];
 
 function readFixture(name) {
@@ -42,14 +38,6 @@ function stageProgressSection(text) {
     }
   }
   return out;
-}
-
-// Reproduces what parseAidlcState() would extract, without importing vscode.
-function currentParserSteps(text) {
-  return stageProgressSection(text)
-    .map((line) => line.match(CURRENT_STEP_REGEX))
-    .filter(Boolean)
-    .map((m) => ({ phase: m[2].toLowerCase(), name: m[3].trim(), done: m[1].toLowerCase() === 'x' }));
 }
 
 const ORDINAL_UNITS = readFixture('aidlc-state.real-format.md');
@@ -99,42 +87,95 @@ test('a skipped stage is marked unchecked with a SKIPPED reason', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Failure mode 1: ordinal unit labels (U1, U2) -> zero steps parsed.
-// parseAidlcState returns undefined, so the artifact-count fallback runs.
+// The parser itself, run over the fixtures.
+//
+// Until 0.0.26 the tests below this line characterised two failure modes of the
+// old regex instead: it required a one-word phase before the dash, so in a current
+// file it matched nothing (ordinal unit labels) or matched fragments of unit names
+// under a bogus phase (hyphenated unit labels). The user-visible form was a tree row
+// reading "Operations" on a project in Inception, because "Operations - PLACEHOLDER"
+// was the one line a current file has in the old shape. The parser reads the phase
+// from the ### heading now, and these run it rather than describe it.
 // ---------------------------------------------------------------------------
 
-test('FAILURE MODE 1: ordinal unit labels parse to zero steps', () => {
-  const steps = currentParserSteps(ORDINAL_UNITS);
-  assert.equal(
-    steps.length,
-    0,
-    'Expected the current regex to match nothing (it needs "Word - rest"). ' +
-      'If this now matches, the parser changed: update this characterization test.'
-  );
+function loadParser() {
+  const Module = require('module');
+  const file = path.join(__dirname, '..', 'src', 'extension.js');
+  const realLoad = Module._load;
+  Module._load = function stubbed(request, ...rest) {
+    if (request !== 'vscode') return realLoad.call(this, request, ...rest);
+    return {
+      TreeItem: class {}, TreeItemCollapsibleState: {}, ThemeIcon: class {}, ThemeColor: class {},
+      MarkdownString: class {}, Uri: { file: (p) => ({ fsPath: p }) }, window: {}, workspace: { fs: {} },
+      commands: {}, EventEmitter: class { constructor() { this.event = () => {}; this.fire = () => {}; } },
+      FileType: {}, RelativePattern: class {}, ProgressLocation: {}
+    };
+  };
+  try {
+    const loaded = new Module(file);
+    loaded.filename = file;
+    loaded.paths = Module._nodeModulePaths(path.dirname(file));
+    loaded._compile(`${fs.readFileSync(file, 'utf8')}\nmodule.exports = { parseAidlcState };`, file);
+    return loaded.exports.parseAidlcState;
+  } finally {
+    Module._load = realLoad;
+  }
+}
+
+test('the 14 top-level stages parse, each under the phase of its ### heading', () => {
+  const parse = loadParser();
+  for (const text of [ORDINAL_UNITS, HYPHENATED_UNITS]) {
+    const { steps } = parse(text);
+    assert.equal(steps.length, 14, 'one step per v1 stage; the indented unit rows are not steps');
+    const byPhase = {};
+    for (const s of steps) byPhase[s.stage] = (byPhase[s.stage] || 0) + 1;
+    assert.deepEqual(byPhase, { inception: 7, construction: 6, operations: 1 });
+    for (const s of steps) assert.ok(KNOWN_PHASES.includes(s.stage), `unknown phase ${s.stage}`);
+  }
 });
 
-// ---------------------------------------------------------------------------
-// Failure mode 2: hyphenated unit labels (bedrock-proxy) -> spurious matches
-// under a bogus phase key. parseAidlcState "succeeds", the fallback never runs,
-// and every phase reports 0%. This is the user-visible 0% bug.
-// ---------------------------------------------------------------------------
-
-test('FAILURE MODE 2: hyphenated unit labels produce spurious matches', () => {
-  const steps = currentParserSteps(HYPHENATED_UNITS);
-  assert.ok(steps.length > 0, 'hyphenated unit names are consumed as "phase - name"');
-  assert.deepEqual(
-    [...new Set(steps.map((s) => s.phase))],
-    ['bedrock'],
-    'the captured phase key is a fragment of the unit name'
-  );
+test('the status is the word after the dash; the parenthesis is a note about it', () => {
+  const parse = loadParser();
+  const { steps } = parse(ORDINAL_UNITS);
+  const reverse = steps.find((s) => s.name === 'Reverse Engineering');
+  assert.equal(reverse.status, 'SKIPPED', '"— SKIPPED (Greenfield)" is skipped, not "greenfield"');
+  const infra = parse(HYPHENATED_UNITS).steps.find((s) => s.name === 'Infrastructure Design');
+  assert.equal(infra.status, 'IN PROGRESS', '"— IN PROGRESS (per unit)" is in progress, not "per unit"');
 });
 
-test('FAILURE MODE 2: no parsed step lands in a known phase, so progress is 0%', () => {
-  const steps = currentParserSteps(HYPHENATED_UNITS);
-  const inKnownPhase = steps.filter((s) => KNOWN_PHASES.includes(s.phase));
-  assert.equal(
-    inKnownPhase.length,
-    0,
-    'Every phase bucket stays empty, which is why the UI shows 0% on a project full of artifacts.'
+test('the in-progress step is the one marked so, never a skipped or placeholder one', () => {
+  const parse = loadParser();
+  assert.equal(parse(HYPHENATED_UNITS).inProgressStep.name, 'Infrastructure Design');
+  // Every stage done; the unchecked rows are SKIPPED and PLACEHOLDER, which are not work.
+  assert.equal(parse(ORDINAL_UNITS).inProgressStep, undefined);
+});
+
+test('a file in the current shape with plain hyphens and no emoji parses the same', () => {
+  // The shape seen on 2026-10-13 from current upstream rules: no emoji, ASCII hyphen,
+  // "- [ ] Application Design - IN PROGRESS". This is the file that read "Operations".
+  const parse = loadParser();
+  const text = [
+    '## Stage Progress', '### INCEPTION PHASE',
+    '- [x] Workspace Detection', '- [x] Reverse Engineering (skipped - greenfield project)',
+    '- [x] Workflow Planning (approved 2026-10-13)', '- [ ] Application Design - IN PROGRESS',
+    '- [ ] Units Generation - EXECUTE', '', '### CONSTRUCTION PHASE', '- [ ] Code Generation - EXECUTE',
+    '', '### OPERATIONS PHASE', '- [ ] Operations - PLACEHOLDER', '', '## Next'
+  ].join('\n');
+  const { steps, inProgressStep } = parse(text);
+  assert.equal(steps.length, 7);
+  assert.equal(inProgressStep.name, 'Application Design');
+  assert.equal(inProgressStep.stage, 'inception');
+});
+
+test('the older one-line shape, "Phase - Step (STATUS)", still parses', () => {
+  const parse = loadParser();
+  const { steps, inProgressStep } = parse(
+    '## Stage Progress\n- [x] Inception - Requirements (COMPLETE)\n- [ ] Inception - Design (IN PROGRESS)\n- [ ] Construction - Code\n## Next'
   );
+  assert.deepEqual(steps.map((s) => [s.stage, s.name, s.done, s.status]), [
+    ['inception', 'Requirements', true, 'COMPLETE'],
+    ['inception', 'Design', false, 'IN PROGRESS'],
+    ['construction', 'Code', false, '']
+  ]);
+  assert.equal(inProgressStep.name, 'Design');
 });

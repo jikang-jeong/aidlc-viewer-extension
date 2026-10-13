@@ -97,6 +97,12 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 - **Setup asks once, where it asks.** The "Set up the AI-DLC workflow for this folder?"
   prompt now carries **v1** and **v2** as its own buttons instead of a "Choose a version"
   step that opened a list elsewhere and came back.
+- **One row says where the workflow is.** The tree used to open with two: one parsed
+  from `aidlc-state.md`, one from the artifact tree. Upstream changed the state file's
+  checklist wording, and the parsed row read **Operations** on a project in Inception
+  while the row below it was right. The parsed row is gone; what the state file says is
+  in the remaining row's tooltip as a second opinion, and the parser reads the current
+  wording as well as the old.
 - Fixes: the setup list no longer claims v2 needs bun (the engine has not needed it since
   2.8.0), and **Check setup** no longer fails on a machine where bun is absent.
 

@@ -809,8 +809,14 @@ class MarkdownTreeDataProvider {
     if (!element) {
       const stageSummary = await this.getStageSummary(this.rootUri);
       const entries = await this.getDirectoryEntries(this.rootUri, null);
+      // One row says where the workflow is. There used to be two: this one, from
+      // the artifact tree, and above it one from parsing aidlc-state.md. They
+      // answered the same question from different sources, and when upstream
+      // changed the state file's checklist wording the parsed row read
+      // "Operations" on a project in Inception while this row was right. What the
+      // state file says is still shown, in this row's tooltip, beside what the
+      // tree says -- as a second opinion, not as the answer.
       return [
-        new StageItem(stageSummary),
         new ProgressItem(stageSummary),
         // One row for both generations. Clicking opens the Credits page; on v2 the
         // row also says when something is waiting on the person, because that is the
@@ -1245,24 +1251,6 @@ class StageProgressChild extends vscode.TreeItem {
   }
 }
 
-class StageItem extends vscode.TreeItem {
-  constructor(summary) {
-    super(formatStageLabel(summary), vscode.TreeItemCollapsibleState.None);
-    // With a parseable aidlc-state.md, show the actual in-progress step name
-    // (the most useful fact); otherwise keep the artifact-count summary.
-    this.description = summary.inProgressLabel
-      ? `▸ ${summary.inProgressLabel}`
-      : formatStageDescription(summary);
-    this.tooltip = buildStageTooltip(summary);
-    this.contextValue = 'stageSummary';
-    // The journey's phase when there is one, so a v2 project gets its own phase's
-    // icon and tone rather than the grey question mark the v1 detection produces
-    // on a tree with no aidlc-docs/ to count.
-    const phase = currentPhaseFromJourney(summary) ?? summary.currentStage;
-    this.iconPath = new vscode.ThemeIcon(getStageIcon(phase), getStageColor(phase));
-  }
-}
-
 class DirectoryItem extends vscode.TreeItem {
   constructor(resourceUri, stats, visualState) {
     // Folders that contain unread NEW files below them start expanded so
@@ -1546,34 +1534,94 @@ function parseAidlcState(content) {
   const lines = content.split(/\r?\n/);
   const steps = [];
   let inSection = false;
+  let phaseFromHeading;
   for (const line of lines) {
     if (/^##\s+Stage Progress/i.test(line)) {
       inSection = true;
       continue;
     }
-    if (inSection && /^##\s/.test(line)) {
-      break; // next section
+    if (inSection && /^##\s/.test(line) && !/^###/.test(line)) {
+      break; // next section; "### ... PHASE" sub-headings stay inside
     }
     if (!inSection) {
       continue;
     }
-    const m = line.match(/^\s*-\s*\[( |x|X)\]\s*([A-Za-z]+)\s*-\s*(.+?)\s*(?:\(([^)]*)\))?\s*$/);
-    if (!m) {
+    // Two checklist shapes have been seen in the wild.
+    //
+    //   older:  - [x] Inception - Requirements (COMPLETE)
+    //           phase first, a dash, then the step; status in parentheses
+    //   current: ### INCEPTION PHASE
+    //            - [ ] Application Design - IN PROGRESS
+    //            - [x] Reverse Engineering (skipped - greenfield project)
+    //           the phase is the heading above; the step name comes first and may
+    //           be several words; the status, if any, follows a dash or sits in
+    //           parentheses
+    //
+    // The older regex required a one-word phase before the dash, so in a current
+    // file it matched exactly one line -- "Operations - PLACEHOLDER" -- and the row
+    // read "Operations" on a project in Inception. The heading is read now, and a
+    // step is whatever follows the checkbox.
+    // "### 🔵 INCEPTION PHASE", "### 🟢 CONSTRUCTION PHASE (per unit: ...)" -- an
+    // emoji before and a note after are both seen in real files.
+    const heading = line.match(/^###\s+(?:\S+\s+)?(INCEPTION|CONSTRUCTION|OPERATIONS?)\s+PHASE\b/i);
+    if (heading) {
+      phaseFromHeading = normalizeStageName(heading[1]);
+      continue;
+    }
+    // Top-level rows only. Construction indents one row per unit of work under
+    // each stage; those are the unit's progress, not a stage, and counting them
+    // would both inflate the step count and put a unit's name where a stage's goes.
+    const box = line.match(/^-\s*\[( |x|X)\]\s*(.+?)\s*$/);
+    if (!box) {
+      continue;
+    }
+    const done = box[1].toLowerCase() === 'x';
+    // Markdown emphasis and status emoji carry no information the words do not.
+    let rest = box[2].replace(/\*\*/g, '').replace(/[\u2705\u274C\u26A0\uFE0F]/g, '').replace(/\s+/g, ' ').trim();
+    // "— SKIPPED (Greenfield)", "— IN PROGRESS (per unit)": the word after the
+    // dash is the status and the parenthesis is a note about it. Only the older
+    // shape, "(COMPLETE)" with no dash, carries the status in the parenthesis.
+    let parenNote = '';
+    const paren = rest.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+    if (paren) {
+      rest = paren[1];
+      parenNote = paren[2];
+    }
+    let status = '';
+    let stage = phaseFromHeading;
+    let name = rest;
+    const dash = rest.match(/^(.+?)\s+[-\u2014\u2013]\s+(.+)$/);
+    if (dash) {
+      if (!phaseFromHeading && /^(inception|construction|operations?)$/i.test(dash[1])) {
+        // Older shape: the phase is on the line itself.
+        stage = normalizeStageName(dash[1]);
+        name = dash[2];
+      } else {
+        // Current shape: "<step> - <status>".
+        name = dash[1];
+        status = dash[2];
+      }
+    }
+    if (!status) status = parenNote;
+    if (!stage) {
       continue;
     }
     steps.push({
-      stage: normalizeStageName(m[2]),
-      name: m[3].trim(),
-      done: m[1].toLowerCase() === 'x',
-      status: (m[4] || '').toUpperCase()
+      stage,
+      name: name.trim(),
+      done,
+      status: status.trim().toUpperCase()
     });
   }
   if (steps.length === 0) {
     return undefined;
   }
+  // An unchecked step that the file itself marks SKIPPED or PLACEHOLDER is not
+  // the one being worked on; without this, a greenfield project's skipped Reverse
+  // Engineering read as "in progress" for the entire run.
   const inProgressStep =
     steps.find((s) => !s.done && s.status.includes('PROGRESS')) ||
-    steps.find((s) => !s.done);
+    steps.find((s) => !s.done && !/SKIP|PLACEHOLDER|N\/A/.test(s.status));
   return { steps, inProgressStep };
 }
 
@@ -1668,6 +1716,12 @@ function buildProgressTooltip(summary) {
   }
 
   lines.push('', `**Reached**: ${formatJourneyCounts(journey)}`);
+  // What the project's own state file says, when it has one. It is the agent's
+  // record rather than the tree's evidence, so it is reported as such and never
+  // decides the row's label; when the two disagree, both are visible here.
+  if (summary.inProgressLabel) {
+    lines.push(`**State file says**: ${summary.inProgressLabel}`);
+  }
   if (journey.units.length) {
     lines.push(`**Units**: ${journey.units.join(', ')}`);
   }
@@ -1678,97 +1732,6 @@ function buildProgressTooltip(summary) {
   const md = new vscode.MarkdownString(lines.join('\n'));
   md.isTrusted = false;
   return md;
-}
-
-// The phase of the furthest checkpoint with evidence, for a v2 project only.
-//
-// Gating on the generation rather than on "does the journey say anything" matters:
-// a v1 journey answers too. A first attempt keyed on the journey alone and changed
-// what a v1 project shows in its label, description and tooltip, which is exactly
-// the regression this whole layer is built to avoid. v1 keeps its artifact-count
-// summary; only v2, which has no artifacts under those directories to count, falls
-// back to the journey.
-function currentPhaseFromJourney(summary) {
-  if (!summary || summary.generation !== 'v2') return undefined;
-  const journey = summary.journey;
-  if (!journey || !Array.isArray(journey.checkpoints)) return undefined;
-  const index = journey.currentIndex;
-  if (typeof index !== 'number' || index < 0 || index >= journey.checkpoints.length) {
-    return undefined;
-  }
-  return journey.checkpoints[index].phase;
-}
-
-function formatStageLabel(summary) {
-  // v2 has no aidlc-docs/ to count artifacts in, so the v1 detection returns
-  // 'unknown' and every count is zero. The journey has already been resolved
-  // through the adapter by this point, so the phase of the furthest reached
-  // checkpoint is both available and more accurate than the artifact heuristic
-  // ever was.
-  const fromJourney = currentPhaseFromJourney(summary);
-  if (fromJourney) return capitalize(fromJourney);
-  if (summary.currentStage === 'unknown') {
-    return 'Unknown';
-  }
-  return capitalize(summary.currentStage);
-}
-
-function formatStageDescription(summary) {
-  const parts = [];
-  if (summary.counts.inception > 0) {
-    parts.push(`I ${summary.counts.inception}`);
-  }
-  if (summary.counts.construction > 0) {
-    parts.push(`C ${summary.counts.construction}`);
-  }
-  if (summary.counts.operations > 0) {
-    parts.push(`O ${summary.counts.operations}`);
-  }
-  if (parts.length > 0) return parts.join(' • ');
-  // A v2 project has no artifacts under the v1 stage directories, so the counts
-  // above are all zero and "No stage files detected" would be a false negative on
-  // a project that is plainly running. A v1 project with no artifacts genuinely
-  // has none, and keeps the original wording.
-  if (currentPhaseFromJourney(summary)) {
-    const journey = summary.journey;
-    const done = journey.counts ? journey.counts.done : 0;
-    return `${done}/${journey.plannedTotal} stages`;
-  }
-  return 'No stage files detected';
-}
-
-function buildStageTooltip(summary) {
-  const phase = currentPhaseFromJourney(summary);
-  if (phase) {
-    // A v2 project. The v1 artifact counts below would all read zero, which says
-    // nothing true, so the journey's own numbers are reported instead.
-    const journey = summary.journey;
-    const at = journey.checkpoints[journey.currentIndex];
-    const lines = [
-      `Phase: ${capitalize(phase)}`,
-      `Furthest stage reached: ${at.label} (${at.status})`,
-      `In scope: ${journey.counts.done}/${journey.plannedTotal} done`
-    ];
-    if (journey.counts.skipped > 0) {
-      // Wording matched to the strip and the phase rows. "Skipped" would claim the
-      // run went past these, and this branch is v2-only where that is never what
-      // the count means.
-      lines.push(`Not in this scope: ${journey.counts.skipped}`);
-    }
-    if (journey.units.length > 0) {
-      lines.push(`Units of work: ${journey.units.join(', ')}`);
-    }
-    return lines.join('\n');
-  }
-  return [
-    `Detected stage: ${summary.currentStage === 'unknown' ? 'unknown' : capitalize(summary.currentStage)}`,
-    `Inception files: ${summary.counts.inception}`,
-    `Construction files: ${summary.counts.construction}`,
-    `Operations files: ${summary.counts.operations}`,
-    summary.latestFile ? `Latest stage file: ${summary.latestFile.fsPath}` : 'No stage file detected yet'
-  ]
-    .filter(Boolean)
-    .join('\n');
 }
 
 function getStageIcon(stage) {

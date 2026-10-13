@@ -362,7 +362,7 @@ function loadExtensionInternals() {
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
     loaded._compile(
       `${fs.readFileSync(file, 'utf8')}
-module.exports = { currentPhaseFromJourney, buildStageTooltip, isIgnoredEventPath, shouldSkipDirectory };`,
+module.exports = { ProgressItem, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
       file
     );
     return loaded.exports;
@@ -486,23 +486,26 @@ test('v1 carries none of the fields the v2 labels are keyed off', () => {
   }
 });
 
-test('the v2-only tooltip branch is unreachable from a v1 journey', () => {
-  // buildStageTooltip reports scope figures that would all be meaningless for v1, and
-  // it is gated on the phase lookup rather than on the presence of a journey -- a v1
-  // journey answers that question too, which is how the first attempt at this leaked.
-  const { currentPhaseFromJourney } = loadExtensionInternals();
+test('the tree has one summary row, labelled from the journey alone', () => {
+  // There used to be two rows above the tree: a StageItem whose label came from the
+  // artifact-count heuristic and the state-file parser, and the ProgressItem whose
+  // label comes from the journey. The StageItem's branch for v2 (currentPhaseFromJourney)
+  // had to be gated with care so that v1 never reached it; the row is gone now, so the
+  // branch is too. This pins that the surviving row reads nothing but the journey's
+  // furthest checkpoint, so no v1 or v2 field added elsewhere can move its label.
+  const { ProgressItem } = loadExtensionInternals();
   for (const journey of everyV1Journey()) {
     const summary = {
       generation: 'v1',
       journey,
-      currentStage: 'inception',
-      counts: { inception: 1, construction: 0, operations: 0 }
+      // Deliberately contradictory other fields: none of them may win.
+      currentStage: 'operations',
+      inProgressLabel: 'PLACEHOLDER',
+      counts: { inception: 0, construction: 0, operations: 9 }
     };
-    assert.equal(
-      currentPhaseFromJourney(summary),
-      undefined,
-      'a v1 summary reached the v2 tooltip branch'
-    );
+    const item = new ProgressItem(summary);
+    const expected = journey.currentIndex >= 0 ? journey.checkpoints[journey.currentIndex].label : 'Not started';
+    assert.equal(item.label, expected, 'the row label came from somewhere other than the journey');
   }
 });
 
