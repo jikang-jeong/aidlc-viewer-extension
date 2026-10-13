@@ -519,7 +519,17 @@ class WatchController {
 
     // Polling fallback: catches external changes (Finder, git, CLI scripts) even if native watchers miss events
     if (this.pollTimer) clearInterval(this.pollTimer);
-    this.pollTimer = setInterval(() => this.scheduleRefresh(), 15000);
+    // One 5s tick. At rest the tree re-reads every third tick (15s, as before). While
+    // the agent has a turn open or a question pending on this project it re-reads every
+    // tick, because that is when the Waiting row is about to change and a 15s lag there
+    // read as "the row is stuck". The tree's last read says which; a project at rest
+    // costs what it always did.
+    this.pollTick = 0;
+    this.pollTimer = setInterval(() => {
+      this.pollTick += 1;
+      const live = this.treeDataProvider.lastKiroLive === true;
+      if (live || this.pollTick % 3 === 0) this.scheduleRefresh();
+    }, 5000);
 
     if (options.showMessage) {
       vscode.window.showInformationMessage(`Watching folder: ${folderUri.fsPath}`);
@@ -1030,6 +1040,9 @@ class MarkdownTreeDataProvider {
           waiting = undefined;
         }
       }
+      // For the controller's poll: the project is "live" while the agent has a turn open
+      // or a question pending, and the tree should re-read faster then.
+      this.lastKiroLive = Boolean(waiting && (waiting.agentBusy || waiting.count > 0));
       return [
         new ProgressItem(stageSummary),
         ...(isV2 ? [new WaitingItem(waiting)] : []),
@@ -3608,8 +3621,9 @@ function getHelpHtml() {
 
 <div class="stage-card supervision">
   <h3>🔔 Waiting for you — v2 only</h3>
-  <p>A row that <strong>changes colour</strong>: when something is waiting, its label turns to the warning colour with the count as a badge and the bell gets a dot; when nothing is, it dims to <em>nothing right now</em>. So you know without opening anything. A stage waiting on you is stopped, not slow, and the chat said so once and scrolled away. The page lists each item in the engine's own words:</p>
+  <p>A row that <strong>changes colour</strong>: when something is waiting, its label turns to the warning colour with the count as a badge and the bell gets a dot; while the agent is working on your last answer it reads <em>agent is working</em>; when nothing is happening it dims to <em>nothing right now</em>. So you know without opening anything. A stage waiting on you is stopped, not slow, and the chat said so once and scrolled away. The page lists each item in the engine's own words:</p>
   <ul>
+    <li><strong>A question in the chat</strong>: the agent asked you something and stopped. Kiro records the question itself, so the row lights up with it and goes quiet when you answer. Tool approvals are not shown: they take seconds on the button beside the chat.</li>
     <li><strong>Questions to answer</strong>: a questions file the engine wrote with empty <code>[Answer]:</code> lines, with the file and how many. Open it from the tree, fill them in, and tell the agent to continue.</li>
     <li><strong>Refusals</strong> the engine marked as needing you, with the remedies it listed as yours.</li>
     <li><strong>Plans</strong> parked for your approval.</li>
@@ -3704,8 +3718,9 @@ function getHelpHtml() {
 
 <div class="stage-card supervision">
   <h3>🔔 Waiting for you(당신을 기다림) — v2 전용</h3>
-  <p><strong>색이 바뀌는 행</strong>입니다. 기다리는 것이 있으면 라벨이 경고색으로 바뀌고 개수 배지가 붙고 벨에 점이 생기며, 없으면 <em>nothing right now</em>로 흐려집니다. 열지 않아도 알 수 있습니다. 당신을 기다리는 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 말 그대로 보여줍니다.</p>
+  <p><strong>색이 바뀌는 행</strong>입니다. 기다리는 것이 있으면 라벨이 경고색으로 바뀌고 개수 배지가 붙고 벨에 점이 생기며, 에이전트가 방금 답한 것을 처리하는 동안은 <em>agent is working</em>, 아무 일도 없으면 <em>nothing right now</em>로 흐려집니다. 열지 않아도 알 수 있습니다. 당신을 기다리는 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 말 그대로 보여줍니다.</p>
   <ul>
+    <li><strong>채팅의 질문</strong>: 에이전트가 무언가 물어보고 멈춘 것. Kiro가 질문 자체를 기록하므로 행이 그 질문과 함께 켜지고, 답하면 조용해집니다. 도구 실행 승인은 보여주지 않습니다. 채팅 옆 버튼으로 몇 초 안에 끝나는 일이기 때문입니다.</li>
     <li><strong>답할 질문</strong>: 엔진이 쓴 질문 파일에 빈 <code>[Answer]:</code>가 남아 있는 것. 파일 이름과 개수가 함께 나옵니다. 트리에서 열어 채우고 에이전트에게 계속하라고 하면 됩니다.</li>
     <li><strong>거부</strong>: 엔진이 당신이 필요하다고 표시한 것과, 당신 몫으로 적은 조치.</li>
     <li><strong>승인 대기 계획</strong>.</li>

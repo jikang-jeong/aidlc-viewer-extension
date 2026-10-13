@@ -380,3 +380,14 @@ test('every command: link on the start page is one the panel enables, so no butt
   const enabled = JSON.parse(/enableCommandUris: (\[[^\]]+\])/.exec(src)[1].replace(/'/g, '"')).sort();
   assert.deepEqual(linked, enabled);
 });
+
+
+test('a chat question on the Waiting page shows the question, the options, and says to answer in the chat', () => {
+  const project = { generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [{ kind: 'chat', stated: true, interaction: 'user_input', message: 'Reply `Looks correct` to proceed.', options: ['Looks correct', 'Request changes'], session: 'Demo' }] } } } };
+  const html = page.renderWaitingPage({ webview, root: '/p/x', project });
+  assert.match(html, /The agent is asking you in the chat · Demo/);
+  assert.match(html, /Reply `Looks correct` to proceed\./);
+  assert.match(html, /Answer in Kiro\u2019s chat\./);
+  assert.match(html, /<code>Looks correct<\/code> <code>Request changes<\/code>/);
+  assert.deepEqual(page.waitingSummary(project).stages, ['in the chat']);
+});

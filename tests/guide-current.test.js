@@ -53,6 +53,8 @@ const MUST_SAY = {
   'bars are the share of the total (KO)': ['프로젝트 전체에서 차지하는 비율'],
   'the Waiting row changes colour (EN)': ['changes colour'],
   'the Waiting row changes colour (KO)': ['색이 바뀌는 행'],
+  'the Waiting row has an agent-is-working state': ['agent is working'],
+  'chat questions are a source (EN, KO)': ['A question in the chat', '채팅의 질문'],
   'Usage re-reads while open (EN)': ['re-reads every few seconds'],
   'start commands per generation': ['Using AI-DLC', '/aidlc'],
   'a start page opens after setup (EN)': ['a page opens in the editor'],

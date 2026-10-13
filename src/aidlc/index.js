@@ -109,15 +109,15 @@ function readProject(root, options = {}) {
   // closes. It is part of the cache stamp for that reason: without it, the Waiting row
   // kept its colour through the agent's whole reply, because nothing in the project had
   // moved yet. The reader behind it caches for 5s, so this is cheap.
-  const agentBusy = readAgentBusy(root);
+  const kiro = readKiroState(root);
   const key = root;
-  const stamp = `${signature(root)}|busy=${agentBusy}`;
+  const stamp = `${signature(root)}|busy=${kiro.agentBusy}|asks=${kiro.chatQuestions.map((q) => q.at).join(',')}`;
   const hit = cache.get(key);
   if (hit && hit.stamp === stamp) {
     return { ...hit.value, journey: hit.value.journey ?? options.v1Journey };
   }
 
-  const value = buildProject(root, generation, markers, agentBusy);
+  const value = buildProject(root, generation, markers, kiro);
   cache.set(key, { stamp, value });
   // A user watches one project at a time; the cap exists so a long session that
   // moved between several does not hold every ledger it ever read.
@@ -127,15 +127,19 @@ function readProject(root, options = {}) {
   return { ...value, journey: value.journey ?? options.v1Journey };
 }
 
-function readAgentBusy(root) {
+// What Kiro's session store says about this project right now: whether a turn is open,
+// and what the agent has asked in the chat and not had answered. Both are outside the
+// project folder, so both go into the cache stamp.
+function readKiroState(root) {
   try {
-    return Boolean(readKiroUsage(root).agentBusySince);
+    const u = readKiroUsage(root);
+    return { agentBusy: Boolean(u.agentBusySince), chatQuestions: u.pendingInteractions ?? [] };
   } catch {
-    return false;
+    return { agentBusy: false, chatQuestions: [] };
   }
 }
 
-function buildProject(root, generation, markers, agentBusy = false) {
+function buildProject(root, generation, markers, kiro = { agentBusy: false, chatQuestions: [] }) {
   const model = buildV2(root);
   if (!model.ok) {
     // A v2 install whose compiled graph cannot be read. Reported rather than
@@ -148,7 +152,7 @@ function buildProject(root, generation, markers, agentBusy = false) {
   // Kiro's session record (a turn open on a session bound to this folder), read by the
   // caller and part of its cache stamp.
   const intents = model.intents.map((intent) => {
-    const diagnosis = diagnose(intent.dir, { runtime: intent.runtime, knownStages: intent.stageSlugs, projectRoot: root, agentBusy });
+    const diagnosis = diagnose(intent.dir, { runtime: intent.runtime, knownStages: intent.stageSlugs, projectRoot: root, agentBusy: kiro.agentBusy, chatQuestions: kiro.chatQuestions });
     return {
       ...intent,
       diagnosis,

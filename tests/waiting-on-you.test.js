@@ -249,3 +249,19 @@ test('diagnose carries agentBusy through so the page can say the agent is workin
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('a question pending in the chat is waiting on you, in Kiro\u2019s own words, whether or not a turn is open', () => {
+  // The question IS the open turn's state: the agent asked and stopped. So, unlike an
+  // inferred gate, it is listed while agentBusy.
+  const chat = [{ kind: 'user_input', at: Date.now(), question: 'Reply `Looks correct` to proceed.', options: ['Looks correct'], sessionTitle: 'Demo' }];
+  for (const busy of [false, true]) {
+    const out = diag.mergeWaiting([], [], [], [], busy, chat);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].kind, 'chat');
+    assert.equal(out[0].stated, true, 'Kiro recorded the question; nothing is inferred');
+    assert.equal(out[0].message, 'Reply `Looks correct` to proceed.');
+    assert.deepEqual(out[0].options, ['Looks correct']);
+    assert.equal(out[0].session, 'Demo');
+  }
+});

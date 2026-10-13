@@ -37,7 +37,7 @@ New artifacts are marked and their folders open themselves, so what the agent ju
 
 ## Know when it is waiting on you (v2)
 
-A stage waiting for your answer is stopped, not slow, and the chat said so once and scrolled away. The **Waiting for you** row changes colour when there is something: the questions file the engine wrote and you have not answered, the refusal only you can clear, the plan parked for your approval. Each item is in the engine's own words, labelled as its word or as this extension's inference.
+A stage waiting for your answer is stopped, not slow, and the chat said so once and scrolled away. The **Waiting for you** row changes colour when there is something: the question the agent asked in the chat and stopped on, the questions file the engine wrote and you have not answered, the refusal only you can clear, the plan parked for your approval. While the agent is working on your last answer, the row says so. Each item is in the engine's own words, labelled as its word or as this extension's inference.
 
 ## Know what it cost
 

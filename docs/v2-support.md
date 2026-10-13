@@ -152,6 +152,22 @@ changed on purpose: its Build and Test is `pending` in the runtime graph with ar
 written and nothing after, which is a wait by the rule. Pins: v2-robustness, four tests
 under "2.11.0 ledgers put the stage in a Context path".
 
+**The most common wait leaves no file: the agent asked in the chat.** Kiro records it:
+`pending_interaction` (`interactionType`, `toolCallId`, `question`, `options`) when the agent
+asks, `interaction_resolved` with the same `toolCallId` when the person answers. 342 on this
+machine; one session had 17 while the extension showed nothing. Only `user_input` is read:
+`tool_approval` is 96% of the records and is answered in 3 to 10 seconds on a button beside
+the chat, so a row refreshing every few seconds would show it after it was gone; `user_input`
+took over 15s half the time and up to 83 minutes. Replayed against the real session log at
+three instants: nothing before the question, the question while it stood, nothing after the
+answer. It is listed while the agent's turn is open (the question is the turn's state), it
+names no stage, and it ages out after an hour like an open turn. The tree re-reads every 5s
+while a turn or a question is open, 15s otherwise. What it still cannot see: an agent that
+asks in prose and ends its turn without a `pending_interaction`; that is not a question Kiro
+recorded, and reading message bodies to find it is where this extension stops. Pins:
+kiro-usage "a question the agent asked in the chat"; waiting-on-you "a question pending in
+the chat"; credits-page "a chat question on the Waiting page".
+
 **While the agent has a turn open, it is not the person's turn.** The inferred gate
 ("artifact written, nothing after") and a questions file with empty answers are both what a
 stage looks like in the middle of the agent's reply: the artifact is there, the next event

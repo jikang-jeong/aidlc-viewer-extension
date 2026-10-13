@@ -33,7 +33,7 @@ function withStore(build, run) {
   }
 }
 
-function ideSession(sessions, { id, workspace, model = 'claude-opus-4.8', turns = [], context = [], openTurnAt } = {}) {
+function ideSession(sessions, { id, workspace, model = 'claude-opus-4.8', turns = [], context = [], openTurnAt, interactions = [] } = {}) {
   const dir = path.join(sessions, 'wshash', `sess_${id}`);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
@@ -63,6 +63,14 @@ function ideSession(sessions, { id, workspace, model = 'claude-opus-4.8', turns 
   }
   for (const c of context) {
     lines.push(JSON.stringify({ id: `c-${lines.length}`, timestamp: c.at, payload: { type: 'session_metadata', key: 'contextUsage', value: { usagePercentage: c.percent } } }));
+  }
+  // Questions the agent put to the person in the chat, as Kiro records them. Each has a
+  // pending record and, when `answeredAt` is given, a resolved record with the same id.
+  for (const q of interactions) {
+    lines.push(JSON.stringify({ id: `p-${lines.length}`, timestamp: q.at, payload: { type: 'pending_interaction', interactionType: q.kind ?? 'user_input', toolCallId: q.id, question: q.question, options: q.options ?? [] } }));
+    if (q.answeredAt !== undefined) {
+      lines.push(JSON.stringify({ id: `r-${lines.length}`, timestamp: q.answeredAt, payload: { type: 'interaction_resolved', toolCallId: q.id, outcome: 'answered' } }));
+    }
   }
   // A turn the agent is still working on: turn_start with nothing closing it.
   if (openTurnAt !== undefined) {
@@ -454,5 +462,51 @@ test('a closed turn is not busy, and an open turn older than an hour is a crashe
     },
     ({ project }) => {
       assert.equal(usage.readKiroUsage(project).agentBusySince, undefined);
+    }
+  ));
+
+
+test('a question the agent asked in the chat and has no answer for is pending; answered, it is gone', () =>
+  withStore(
+    ({ sessions, project }) => {
+      const now = Date.now();
+      ideSession(sessions, {
+        id: 'ask',
+        workspace: project,
+        turns: [],
+        interactions: [
+          { id: 'c1', at: now - 120_000, answeredAt: now - 100_000, question: 'Earlier, answered' },
+          { id: 'c2', at: now - 20_000, question: '**Please confirm the summary.** Reply `Looks correct` to proceed.', options: ['Looks correct', 'Request changes'] }
+        ]
+      });
+    },
+    ({ project }) => {
+      const u = usage.readKiroUsage(project);
+      assert.equal(u.pendingInteractions.length, 1, 'the answered one is not pending');
+      const [q] = u.pendingInteractions;
+      assert.equal(q.kind, 'user_input');
+      assert.match(q.question, /Please confirm the summary/);
+      assert.deepEqual(q.options, ['Looks correct', 'Request changes']);
+      assert.equal(q.sessionId, 'sess_ask');
+    }
+  ));
+
+test('tool approvals are not pending questions: they are answered in seconds on a button beside the chat', () =>
+  withStore(
+    ({ sessions, project }) => {
+      ideSession(sessions, { id: 'tool', workspace: project, turns: [], interactions: [{ id: 't1', at: Date.now() - 5000, kind: 'tool_approval', question: 'Read File' }] });
+    },
+    ({ project }) => {
+      assert.deepEqual(usage.readKiroUsage(project).pendingInteractions, []);
+    }
+  ));
+
+test('a question left pending for over an hour is one the person walked away from, not a live wait', () =>
+  withStore(
+    ({ sessions, project }) => {
+      ideSession(sessions, { id: 'old', workspace: project, turns: [], interactions: [{ id: 'o1', at: Date.now() - 2 * 60 * 60 * 1000, question: 'Still there?' }] });
+    },
+    ({ project }) => {
+      assert.deepEqual(usage.readKiroUsage(project).pendingInteractions, []);
     }
   ));

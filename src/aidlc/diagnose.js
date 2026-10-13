@@ -334,7 +334,7 @@ function diagnose(intentDir, options = {}) {
     openQuestions,
     // `agentBusy` comes from Kiro's session record, read by the caller.
     agentBusy: Boolean(options.agentBusy),
-    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions, Boolean(options.agentBusy)),
+    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions, Boolean(options.agentBusy), options.chatQuestions ?? []),
     // An event name this build has no meaning for. Not an error: the vocabulary
     // differs between projects, and reporting it is how the next project tells
     // us what we have not met yet.
@@ -391,9 +391,24 @@ function readOpenQuestions(intentDir) {
 // One list for the page. A guard refusal with a human remedy, a parked plan, and an
 // inferred gate wait can all name the same stage; the stated ones win and the inferred
 // one is kept only when nothing stated covers that stage.
-function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions = [], agentBusy = false) {
+function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions = [], agentBusy = false, chatQuestions = []) {
   const out = [];
   const covered = new Set();
+  // What Kiro recorded the agent asking in the chat, unanswered. The most direct form of
+  // "waiting on you" there is: the question is on screen and the agent has stopped. It
+  // names no stage (the chat does not know stages), so it never covers one, and it is
+  // listed whether or not a turn is open -- a pending question IS the open turn's state.
+  for (const q of chatQuestions) {
+    out.push({
+      kind: 'chat',
+      stated: true,
+      interaction: q.kind,
+      message: q.question ?? 'The agent asked a question in the chat and is waiting for your answer.',
+      options: q.options,
+      session: q.sessionTitle,
+      updatedAt: Number.isFinite(q.at) ? new Date(q.at).toISOString() : undefined
+    });
+  }
   // While the agent has a turn open on this project, a questions file with empty
   // answers is most likely the one it is writing right now -- seen live: the file
   // appeared with one open [Answer]: while the agent's turn was still running. It

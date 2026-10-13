@@ -172,6 +172,19 @@ function readIdeSession(dir, projectRoot, gaps) {
   // who is being waited on. Nothing in the AI-DLC ledger says it: HUMAN_TURN there means
   // the person spoke, not that the agent is still busy with it.
   let openTurnSince;
+  // Questions Kiro itself put to the person and has no answer for yet. Kiro writes a
+  // `pending_interaction` when the agent asks and an `interaction_resolved` with the same
+  // toolCallId when the person answers, picks, dismisses or cancels. One without the
+  // other is a question the person is being waited on for, right now, in the chat -- the
+  // wait that leaves nothing in the AI-DLC ledger and no questions file. The question
+  // text is Kiro's own field, not a message body.
+  //
+  // Only interactionType `user_input` is kept. `tool_approval` (the agent asking to run
+  // a tool) is 96% of these records and is answered in three to ten seconds on a button
+  // beside the chat; a row that refreshes every few seconds would show it after it was
+  // gone. `user_input` is a real question: on this machine half of them took longer than
+  // 15s to answer and three took minutes to over an hour. Checked across 342 records.
+  const pendingInteractions = new Map();
   // The model seen on assistant messages since the last usage_summary. A turn's model is
   // the last one seen before its summary; cleared after each summary so a model from one
   // turn cannot leak into the next.
@@ -194,7 +207,16 @@ function readIdeSession(dir, projectRoot, gaps) {
     }
     const payload = record?.payload;
     if (!payload || typeof payload.type !== 'string') continue;
-    if (payload.type === 'turn_start') {
+    if (payload.type === 'pending_interaction' && payload.toolCallId && payload.interactionType === 'user_input') {
+      pendingInteractions.set(payload.toolCallId, {
+        at: typeof record.timestamp === 'number' ? record.timestamp : Date.parse(record.timestamp),
+        kind: payload.interactionType,
+        question: typeof payload.question === 'string' ? payload.question : undefined,
+        options: Array.isArray(payload.options) ? payload.options.filter((o) => typeof o === 'string') : []
+      });
+    } else if (payload.type === 'interaction_resolved' && payload.toolCallId) {
+      pendingInteractions.delete(payload.toolCallId);
+    } else if (payload.type === 'turn_start') {
       openTurnSince = typeof record.timestamp === 'number' ? record.timestamp : Date.parse(record.timestamp);
     } else if (payload.type === 'turn_end') {
       openTurnSince = undefined;
@@ -218,7 +240,16 @@ function readIdeSession(dir, projectRoot, gaps) {
   // picking one would be the same mistake as reading session.json.
   const seen = [...new Set(turns.map((t) => t.model).filter(Boolean))];
   const model = seen.length === 0 ? undefined : seen.join(', ');
-  return { id: meta.id, model, createdAt: Date.parse(meta.createdAt), turns, contextSamples, title: meta.title, openTurnSince };
+  return {
+    id: meta.id,
+    model,
+    createdAt: Date.parse(meta.createdAt),
+    turns,
+    contextSamples,
+    title: meta.title,
+    openTurnSince,
+    pendingInteractions: [...pendingInteractions.values()].sort((a, b) => a.at - b.at)
+  };
 }
 
 // Reads one CLI session file. The turn records sit at varying depths inside
@@ -354,7 +385,14 @@ function readKiroUsageUncached(projectRoot) {
   // turn that runs longer than that has not been seen.
   const openTurns = sessions.map((s) => s.openTurnSince).filter((t) => Number.isFinite(t) && Date.now() - t < 60 * 60 * 1000);
   const agentBusySince = openTurns.length ? Math.max(...openTurns) : undefined;
-  return { ok: true, storePath: root, sessions, turns, agentBusySince, gaps: finishGaps(gaps) };
+  // Questions the agent asked in the chat and is still waiting on, across the project's
+  // sessions. A pending interaction from a session whose turn closed long ago is one the
+  // person walked away from; the same hour as for open turns applies.
+  const pendingInteractions = sessions
+    .flatMap((s) => (s.pendingInteractions ?? []).map((p) => ({ ...p, sessionId: s.id, sessionTitle: s.title })))
+    .filter((p) => Number.isFinite(p.at) && Date.now() - p.at < 60 * 60 * 1000)
+    .sort((a, b) => a.at - b.at);
+  return { ok: true, storePath: root, sessions, turns, agentBusySince, pendingInteractions, gaps: finishGaps(gaps) };
 }
 
 function finishGaps(gaps) {

@@ -422,8 +422,14 @@ function waitingSection(project) {
           ? `Plan approval${w.unit ? ` · unit ${escapeHtml(w.unit)}` : ''}`
           : w.kind === 'questions'
             ? `Questions to answer · ${escapeHtml(w.stage ?? 'unknown stage')}`
-            : `${escapeHtml(w.stage ?? 'unknown stage')}${w.code ? ` · ${escapeHtml(w.code)}` : ''}`;
-      const how = w.kind === 'questions' ? `<div class="sub">Open the file from the tree and fill in each empty <code>[Answer]:</code>, then tell the agent to continue.</div>` : '';
+            : w.kind === 'chat'
+              ? `The agent is asking you in the chat${w.session ? ` · ${escapeHtml(w.session)}` : ''}`
+              : `${escapeHtml(w.stage ?? 'unknown stage')}${w.code ? ` · ${escapeHtml(w.code)}` : ''}`;
+      const how = w.kind === 'questions'
+        ? `<div class="sub">Open the file from the tree and fill in each empty <code>[Answer]:</code>, then tell the agent to continue.</div>`
+        : w.kind === 'chat'
+          ? `<div class="sub">Answer in Kiro\u2019s chat.${w.options && w.options.length ? ` Options the agent offered: ${w.options.map((o) => `<code>${escapeHtml(o)}</code>`).join(' ')}` : ''}</div>`
+          : '';
       return `<li class="wait">
         <div class="wait-head">${head} ${who}${typeof w.count === 'number' && w.count > 1 ? ` <span class="sub">×${w.count}</span>` : ''}</div>
         ${w.message ? `<div class="wait-msg">${escapeHtml(w.message)}</div>` : ''}
@@ -562,7 +568,9 @@ function waitingSummary(project) {
   const intent = project?.v2?.active;
   if (!intent) return undefined;
   const waits = intent.diagnosis?.waitingOnYou ?? [];
-  return { count: waits.length, stages: [...new Set(waits.map((w) => w.stage).filter(Boolean))], agentBusy: Boolean(intent.diagnosis?.agentBusy) };
+  const stages = [...new Set(waits.map((w) => w.stage).filter(Boolean))];
+  if (waits.some((w) => w.kind === 'chat')) stages.unshift('in the chat');
+  return { count: waits.length, stages, agentBusy: Boolean(intent.diagnosis?.agentBusy) };
 }
 
 function shell({ webview, root, project, nonce: fixedNonce, title }, sections) {
