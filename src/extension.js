@@ -2529,8 +2529,8 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         <div class="header">
           <div class="title">${title}</div>
           <div class="mode" role="tablist" aria-label="View mode">
-            <button class="mode-btn active" id="modeRead" role="tab" aria-selected="true" title="Rendered view">Read</button>
-            <button class="mode-btn" id="modeEdit" role="tab" aria-selected="false" title="Edit the Markdown source">Edit</button>
+            <button class="mode-btn active" id="modeRead" role="tab" aria-selected="true" title="Rendered view (Ctrl/Cmd+E toggles)">🔍 View</button>
+            <button class="mode-btn" id="modeEdit" role="tab" aria-selected="false" title="Edit the Markdown source (double-click the view, or Ctrl/Cmd+E)">✎ Edit</button>
           </div>
           <div class="zoom-controls">
             <button class="zoom-btn" id="zoomOut" title="Zoom out (Ctrl/Cmd + -)">−</button>
@@ -2839,6 +2839,10 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         const s = vscode.getState() || {};
         delete s.editorText;
         vscode.setState(s);
+        // Saving is the end of an edit, so the pane returns to the view. The rendering
+        // was already refreshed from the textarea as the person typed; this only swaps
+        // which of the two is visible.
+        if (document.body.classList.contains('editing')) setMode('read');
       }
 
       document.getElementById('save').addEventListener('click', saveNow);
@@ -2885,6 +2889,32 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
       modeRead.addEventListener('click', () => setMode('read'));
       modeEdit.addEventListener('click', () => setMode('edit'));
+
+      // Double-click anywhere in the view to edit there.
+      //
+      // There is no exact map from a rendered position back to a source offset -- the
+      // renderer drops the syntax -- so this is an approximation that is honest about
+      // being one: the text of the double-clicked block is looked up in the source and
+      // the cursor is placed at its first occurrence; a block that cannot be found (a
+      // Mermaid diagram, an image) still switches to Edit, at the top. Links, SVGs and
+      // code blocks are excluded as targets, because a double-click there usually means
+      // "select this", not "edit here".
+      preview.addEventListener('dblclick', (e) => {
+        if (e.target.closest('a, svg, .mermaid, pre')) return;
+        const block = e.target.closest('p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote');
+        const needle = block ? (block.textContent || '').trim().slice(0, 80) : '';
+        setMode('edit');
+        if (!needle) return;
+        const at = editor.value.indexOf(needle);
+        if (at >= 0) {
+          editor.setSelectionRange(at, at);
+          // Scroll so the cursor line is in view: lines up to the match, times the line
+          // height the textarea is actually using.
+          const lines = editor.value.slice(0, at).split('\\\\n').length - 1;
+          const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 20;
+          editor.scrollTop = Math.max(0, lines * lineHeight - editor.clientHeight / 3);
+        }
+      });
       // Ctrl/Cmd+E toggles, the way an editor's own preview toggle does.
       document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
@@ -3242,7 +3272,7 @@ function getHelpHtml() {
   <h3>📝 Viewer</h3>
   <ul>
     <li>Click any file to open it <strong>rendered</strong>, with Mermaid diagrams drawn inline.</li>
-    <li>Press <strong>Edit</strong> (or <code>Ctrl/Cmd + E</code>) to swap the same pane for the <strong>Markdown source</strong>; press <strong>Read</strong> to go back. What you type is exactly what is saved, so the view can never alter your file.</li>
+    <li>Press <strong>✎ Edit</strong>, or <strong>double-click</strong> the text you want to change, or <code>Ctrl/Cmd + E</code>, to swap the same pane for the <strong>Markdown source</strong> with the cursor near that spot. <strong>Save</strong> returns you to <strong>🔍 View</strong>. What you type is exactly what is saved, so the view can never alter your file.</li>
     <li><strong>Save</strong> with the Save button or <code>Ctrl/Cmd + S</code>; <strong>Reload</strong> discards local edits and re-reads the file.</li>
     <li><strong>Zoom</strong>: +/− buttons, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, mouse wheel with <code>Ctrl/Cmd</code>, or trackpad pinch.</li>
   </ul>
@@ -3319,7 +3349,7 @@ function getHelpHtml() {
   <h3>📝 뷰어</h3>
   <ul>
     <li>파일을 클릭하면 <strong>렌더링된 화면</strong>으로 열리고 Mermaid 다이어그램이 인라인으로 그려집니다.</li>
-    <li><strong>Edit</strong>(또는 <code>Ctrl/Cmd + E</code>)를 누르면 같은 자리에 <strong>Markdown 원본</strong>이 나타나고, <strong>Read</strong>로 돌아옵니다. 입력한 그대로 저장되므로 뷰어가 파일을 바꾸는 일은 없습니다.</li>
+    <li><strong>✎ Edit</strong>를 누르거나, 고치려는 글을 <strong>더블클릭</strong>하거나, <code>Ctrl/Cmd + E</code>를 누르면 같은 자리에 <strong>Markdown 원본</strong>이 나타나고 커서가 그 근처에 놓입니다. <strong>Save</strong>하면 <strong>🔍 View</strong>로 돌아옵니다. 입력한 그대로 저장되므로 뷰어가 파일을 바꾸는 일은 없습니다.</li>
     <li>Save 버튼 또는 <code>Ctrl/Cmd + S</code>로 <strong>저장</strong>, <strong>Reload</strong>로 로컬 편집을 버리고 파일을 다시 읽습니다.</li>
     <li><strong>줌</strong>: +/− 버튼, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, <code>Ctrl/Cmd</code> + 휠, 트랙패드 핀치.</li>
   </ul>

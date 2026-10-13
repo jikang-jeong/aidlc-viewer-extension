@@ -40,7 +40,7 @@ New artifacts are marked `NEW` until you open them, then `READ`, with counts rol
 
 ### The artifact itself
 
-Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit** to swap the same pane for the Markdown source, change it, and save back to the file; press **Read** to return. The view never rewrites your Markdown from the rendering, so what you type is exactly what is saved. Zoom works in both modes.
+Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit**, or double-click the text you want to change, to swap the same pane for the Markdown source with the cursor near that spot; **Save** returns you to the view. The view never rewrites your Markdown from the rendering, so what you type is exactly what is saved. Zoom works in both modes.
 
 ### What Kiro spent, and what is waiting on you
 
@@ -76,8 +76,9 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
 
 ### 0.0.26
 
-- **The viewer is one pane.** It opens rendered; press **Edit** (or `Ctrl/Cmd+E`) to swap
-  the same space for the Markdown source, and **Read** to swap back. The split view with
+- **The viewer is one pane.** It opens rendered; press **Edit**, double-click the text you
+  want to change, or `Ctrl/Cmd+E` to swap the same space for the Markdown source, and
+  **Save** brings the view back. The split view with
   the source on one side showed everything twice and left room for neither. What you
   type is exactly what is saved — the view never rewrites your Markdown from the
   rendering, which is the one way a viewer could silently alter a file.

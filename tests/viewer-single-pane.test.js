@@ -90,6 +90,7 @@ function makeDom(html) {
       addEventListener: (type, fn) => { const key = `${id}:${type}`; (listeners.get(key) ?? listeners.set(key, []).get(key)).push(fn); },
       removeEventListener() {},
       focus() { node.focused = true; },
+      setSelectionRange(a, b) { node.selectionStart = a; node.selectionEnd = b; },
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 800 }),
       querySelectorAll: () => [],
       querySelector: () => null,
@@ -130,6 +131,7 @@ function runViewerScript(markdown, state = {}) {
     mermaid: { initialize() {}, run: async () => {}, render: async () => ({ svg: '' }) },
     DOMPurify: { sanitize: (s) => s },
     requestAnimationFrame: (fn) => fn(),
+    getComputedStyle: () => ({ lineHeight: '20px' }),
     setTimeout: (fn) => fn(),
     clearTimeout() {},
     console
@@ -203,4 +205,60 @@ test('the markup carries one pane and no splitter', () => {
   assert.match(html, /id="modeEdit"/);
   // The textarea still exists -- it is the save path -- and starts hidden.
   assert.match(html, /<textarea id="editor"[^>]*hidden/);
+});
+
+// ---------------------------------------------------------------------------
+// Double-click to edit, save to view
+// ---------------------------------------------------------------------------
+
+function blockTarget(text) {
+  // A rendered block the person double-clicked: closest() finds itself for block
+  // selectors and nothing for the excluded ones.
+  return {
+    textContent: text,
+    closest: (sel) => (/^a, svg/.test(sel) ? null : /p, li/.test(sel) ? { textContent: text } : null)
+  };
+}
+
+test('double-clicking a block switches to Edit with the cursor at that block\'s source', () => {
+  const md = '# Title\n\nFirst paragraph here.\n\nSecond paragraph, the one I want.\n';
+  const { dom } = runViewerScript(md);
+  dom.fire('preview', 'dblclick', { target: blockTarget('Second paragraph, the one I want.') });
+  assert.equal(dom.body.classList.contains('editing'), true);
+  const editor = dom.elements.get('editor');
+  assert.equal(editor.selectionStart, md.indexOf('Second paragraph'));
+});
+
+test('double-clicking a link, diagram or code block does not switch modes', () => {
+  // A double-click there usually means "select this", not "edit here".
+  const { dom } = runViewerScript('# T\n\n[x](y)\n');
+  const linkTarget = { textContent: 'x', closest: (sel) => (/^a, svg/.test(sel) ? {} : null) };
+  dom.fire('preview', 'dblclick', { target: linkTarget });
+  assert.equal(dom.body.classList.contains('editing'), false);
+});
+
+test('a block whose text is not found in the source still opens Edit, at the top', () => {
+  // The renderer may have changed the text (an image alt, a diagram caption). Edit
+  // still opens; the cursor just has nowhere specific to go.
+  const { dom } = runViewerScript('# T\n\nbody\n');
+  dom.fire('preview', 'dblclick', { target: blockTarget('text that is not in the source') });
+  assert.equal(dom.body.classList.contains('editing'), true);
+  assert.equal(dom.elements.get('editor').selectionStart, undefined);
+});
+
+test('saving from Edit returns to View; saving from View stays in View', () => {
+  const { dom, posted } = runViewerScript('# T\n');
+  dom.fire('modeEdit', 'click');
+  dom.elements.get('editor').value = '# T\n\nmore\n';
+  dom.fire('save', 'click');
+  assert.equal(dom.body.classList.contains('editing'), false, 'save ends the edit');
+  assert.equal(posted.filter((m) => m.type === 'save').length, 1);
+  dom.fire('save', 'click');
+  assert.equal(dom.body.classList.contains('editing'), false);
+});
+
+test('the mode buttons read View and Edit, each with an icon', () => {
+  const html = renderHtml('# T');
+  assert.match(html, /id="modeRead"[^>]*>\u{1F50D} View</u);
+  assert.match(html, /id="modeEdit"[^>]*>\u270E Edit</);
 });
