@@ -59,10 +59,10 @@ function loadGetWebviewHtml() {
   }
 }
 
-function renderHtml(markdown) {
+function renderHtml(markdown, journey) {
   const getWebviewHtml = loadGetWebviewHtml();
   const webview = { cspSource: 'vscode-resource:', asWebviewUri: (u) => ({ toString: () => String(u) }) };
-  return getWebviewHtml(webview, { fsPath: '/p/doc.md' }, markdown, { fsPath: '/ext' }, undefined);
+  return getWebviewHtml(webview, { fsPath: '/p/doc.md' }, markdown, { fsPath: '/ext' }, journey);
 }
 
 // A DOM small enough to read, large enough for the viewer script's event wiring.
@@ -95,6 +95,7 @@ function makeDom(html) {
       querySelectorAll: () => [],
       querySelector: () => null,
       appendChild() {},
+      replaceChildren(...kids) { node.children = kids; },
       scrollTop: 0, scrollHeight: 1000, clientHeight: 500,
       ...extra
     };
@@ -117,8 +118,8 @@ function makeDom(html) {
   return { document, elements, listeners, fire, body, html };
 }
 
-function runViewerScript(markdown, state = {}) {
-  const html = renderHtml(markdown);
+function runViewerScript(markdown, state = {}, journey) {
+  const html = renderHtml(markdown, journey);
   const script = /<script nonce="[^"]+">([\s\S]*?)<\/script>/.exec(html)[1];
   const dom = makeDom(html);
   const posted = [];
@@ -335,4 +336,30 @@ test('a Markdown table renders as rows, which pins the escaping inside the templ
   const html = dom.elements.get('preview').innerHTML;
   const rows = (html.match(/<tr>/g) || []).length;
   assert.ok(rows >= 3, `expected a header row and two body rows, got ${rows} in: ${html.slice(0, 200)}`);
+});
+
+
+// ---------------------------------------------------------------------------
+// Before anything has run
+// ---------------------------------------------------------------------------
+//
+// A freshly set-up project has no position to show. The strip used to hide; it now
+// says "Not started" and what to type, because that is the question for the next
+// several minutes and a toast is gone in seconds.
+
+test('with a not-started payload the strip shows the hint instead of hiding', () => {
+  const { dom } = runViewerScript('# T', {}, { notStarted: true, hint: 'Type /aidlc followed by what you want to build.' });
+  const strip = dom.elements.get('journey');
+  assert.equal(strip.hidden, false);
+  assert.ok(strip.classList.contains('not-started'));
+  const texts = (dom.elements.get('jCollapsed').children || []).map((c) => c.textContent);
+  assert.deepEqual(texts, ['Not started', 'Type /aidlc followed by what you want to build.']);
+  // Clicking it does not expand: there is no stage list yet.
+  dom.fire('journey', 'click');
+  assert.ok(!strip.classList.contains('expanded'));
+});
+
+test('with no payload at all the strip stays hidden, as before', () => {
+  const { dom } = runViewerScript('# T', {}, undefined);
+  assert.equal(dom.elements.get('journey').hidden, true);
 });

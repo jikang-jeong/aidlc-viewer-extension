@@ -135,6 +135,18 @@ had characterised the parser's failure in January without the row being traced t
 it now runs the real parser over both fixtures. Pins: v1-isolation "the tree has one
 summary row, labelled from the journey alone"; state-format, all parser tests.
 
+**A v2 project with no intent has no journey, and v1's must not stand in.** `readProject`
+returns the caller's v1 journey when v2 has no active intent, "so a caller that only knows
+about journeys keeps working". The tree took that literally and a freshly set-up v2
+project showed Setup / Inception / Construction / Operations, fifteen stages that are not
+its stages. The tree now checks `project.v2.active` and shows "Not started" with what to
+type (`/aidlc …` on v2, `"Using AI-DLC, build …"` on v1) in the row's description and in
+the viewer's strip, in place of the position that will appear once there is one. v1's
+Setup repo is done the moment rules are installed, so a v1 project that has reached only
+that is treated the same way; its label stays "Setup repo". Pins: v1-isolation "a set-up
+project that has not run shows what to type"; viewer-single-pane "with a not-started
+payload the strip shows the hint".
+
 ## Pitfalls in the viewer and the shell, found in the field
 
 These are not v2 rules but belong with them: each cost a build or a blank screen, and

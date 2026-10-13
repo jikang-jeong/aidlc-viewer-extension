@@ -329,8 +329,9 @@ function loadExtensionInternals() {
     if (request !== 'vscode') return realLoad.call(this, request, ...rest);
     return {
       TreeItem: class {
-        constructor(label) {
+        constructor(label, collapsibleState) {
           this.label = label;
+          this.collapsibleState = collapsibleState;
         }
       },
       TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
@@ -583,4 +584,31 @@ test('v1 paths are unaffected by the dot-directory exception', () => {
   assert.equal(shouldSkipDirectory('.kiro'), true);
   assert.equal(shouldSkipDirectory('.aidlc-sensors'), true);
   assert.equal(shouldSkipDirectory('aidlc-docs'), false);
+});
+
+// ---------------------------------------------------------------------------
+// Before anything has run
+// ---------------------------------------------------------------------------
+
+test('a set-up project that has not run shows what to type, per generation, and does not expand', () => {
+  // A v2 project with no intent used to be handed the v1 journey "to stand in", so a
+  // freshly set-up v2 project showed Setup / Inception / Construction / Operations --
+  // fifteen stages that are not its stages. Reported from a screenshot.
+  const { ProgressItem } = loadExtensionInternals();
+  const v2 = new ProgressItem({ generation: 'v2', journey: undefined, currentStage: 'unknown', counts: {} });
+  assert.equal(v2.label, 'Not started');
+  assert.match(v2.description, /\/aidlc/);
+  assert.equal(v2.collapsibleState, 0, 'nothing to expand yet');
+
+  const v1 = new ProgressItem({
+    generation: 'v1',
+    journey: buildJourney({ artifacts: [], rulesInstalled: true }),
+    currentStage: 'unknown',
+    counts: {}
+  });
+  // Rules installed makes v1's Setup repo done, so its label is "Setup repo" as it
+  // always was; the hint replaces the "1/14" beside it.
+  assert.equal(v1.label, 'Setup repo');
+  assert.match(v1.description, /Using AI-DLC/);
+  assert.doesNotMatch(v1.description, /\/aidlc/, 'v1 is not started with a slash command');
 });

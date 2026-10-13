@@ -6,6 +6,21 @@ const { renderCreditsPage, nonce: creditsNonce } = require('./credits-page');
 // Drives the `when` clause on the v2-only command (Remove AI-DLC v2). Set from the
 // project the tree reads, since the panel that used to set it is gone.
 const CREDITS_POLL_MS = 10_000;
+
+// What to do next when AI-DLC is set up and nothing has run. Shown wherever the
+// workflow's position would be shown once it has one: the tree's summary row and the
+// viewer's strip. The setup toasts say the same, but a toast is gone in seconds and
+// this is the question people have for the next several minutes.
+const START_HINT = {
+  v1: 'Tell your agent: "Using AI-DLC, build …" to start the workflow.',
+  v2: 'Type /aidlc followed by what you want to build.',
+  none: 'Set up AI-DLC Rules from the toolbar to begin.'
+};
+function startHint(generation) {
+  if (generation === 'v2' || generation === 'both') return START_HINT.v2;
+  if (generation === 'v1') return START_HINT.v1;
+  return START_HINT.none;
+}
 const V2_CONTEXT_KEY = 'aidlcViewer.v2Detected';
 const { readProject } = require('./aidlc/index');
 const { checkpointIndexForPath } = require('./aidlc/journey-v2');
@@ -586,7 +601,9 @@ class WatchController {
       const summary = await this.treeDataProvider.getStageSummary(vscode.Uri.file(folder));
       const journey = summary && summary.journey;
       if (!journey || journey.currentIndex < 0) {
-        return undefined; // nothing has run yet; a strip would be noise
+        // Nothing has run yet. The strip used to be hidden here; it now carries what
+        // to type, in the place the position will appear once there is one.
+        return { notStarted: true, hint: startHint(summary && summary.generation) };
       }
 
       let openIndex = -1;
@@ -617,7 +634,9 @@ class WatchController {
         }
       }
 
-      return { ...journey, openIndex };
+      const cur = journey.checkpoints[journey.currentIndex];
+      const hint = cur && cur.id === 'setup-repo' ? startHint(summary.generation) : undefined;
+      return { ...journey, openIndex, hint };
     } catch (err) {
       // The strip must never break the viewer, but a silent catch here hid a real
       // bug: a reference to a property that does not exist on this class threw, and
@@ -1081,6 +1100,13 @@ class MarkdownTreeDataProvider {
   resolveJourney(rootUri, v1Journey) {
     try {
       const project = readProject(rootUri.fsPath, { v1Journey });
+      // A v2 project with no intent yet has no journey. The v1 journey used to stand in
+      // here, so a freshly set-up v2 project showed v1's Setup / Inception /
+      // Construction / Operations -- fifteen stages that are not its stages. Reported
+      // from a screenshot. It now shows "Not started" and what to type.
+      if (project.generation === 'v2' && !(project.v2 && project.v2.active)) {
+        return { journey: undefined, generation: 'v2' };
+      }
       return { journey: project.journey ?? v1Journey, generation: project.generation };
     } catch {
       return { journey: v1Journey, generation: undefined };
@@ -1229,9 +1255,18 @@ class ProgressItem extends vscode.TreeItem {
     const journey = summary.journey;
     const current =
       journey && journey.currentIndex >= 0 ? journey.checkpoints[journey.currentIndex] : undefined;
-    super(current ? current.label : 'Not started', vscode.TreeItemCollapsibleState.Collapsed);
+    // Before anything has run there is no stage list worth expanding, and the space
+    // beside the label carries what to type instead of a 0/15 count.
+    super(
+      current ? current.label : 'Not started',
+      current ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+    );
     this.summary = summary;
-    this.description = formatJourneyCounts(journey);
+    // v1's Setup repo is done the moment rules are installed, so a v1 project that
+    // has reached only that has not started either; its label stays "Setup repo", as
+    // it always has, and the hint takes the place of a "1/14" that said nothing.
+    const onlySetup = current && current.id === 'setup-repo';
+    this.description = current && !onlySetup ? formatJourneyCounts(journey) : startHint(summary.generation);
     this.tooltip = buildProgressTooltip(summary);
     this.contextValue = 'progress';
     this.iconPath = new vscode.ThemeIcon('pulse', getStageColor(summary.currentStage));
@@ -1727,8 +1762,8 @@ function computeProgress(counts) {
 
 function buildProgressTooltip(summary) {
   const journey = summary.journey;
-  if (!journey || !Array.isArray(journey.checkpoints)) {
-    return new vscode.MarkdownString('**AI-DLC Progress**\n\nNo artifacts detected yet.');
+  if (!journey || !Array.isArray(journey.checkpoints) || journey.currentIndex < 0) {
+    return new vscode.MarkdownString(`**AI-DLC Progress**\n\nNothing has run yet.\n\n${startHint(summary.generation)}`);
   }
 
   const MARK = { done: '●', active: '◐', pending: '○', skipped: '⌁' };
@@ -2092,6 +2127,9 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         overflow: hidden;
       }
       .journey[hidden] { display: none; }
+    .journey.not-started { cursor: default; }
+    .journey.not-started:hover { background: transparent; }
+    .j-hint { color: var(--muted); font-weight: 400; margin-left: 10px; }
       .journey:hover { background: color-mix(in srgb, var(--bg) 80%, var(--text) 20%); }
       /* Plain focus drew a full-width browser outline around the whole band. */
       .journey:focus { outline: none; }
@@ -2654,6 +2692,13 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         });
         frag.appendChild(rail);
 
+        if (journey.hint) {
+          const hint = document.createElement('span');
+          hint.className = 'j-hint';
+          hint.textContent = journey.hint;
+          frag.appendChild(hint);
+        }
+
         // The denominator comes from the model: skipped stages and the unreached
         // Operations placeholder are not work left to do.
         const c = journey.counts || {};
@@ -2761,14 +2806,24 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
 
       function renderJourney() {
-        const usable = journey && Array.isArray(journey.checkpoints) && journey.checkpoints.length > 0;
-        journeyEl.hidden = !usable;
-        if (!usable) return;
-        renderCollapsed();
-        if (journeyEl.classList.contains('expanded')) renderExpanded();
-      }
-
-      function renderJourney() {
+        // Before anything has run the host sends { notStarted, hint } instead of a
+        // model. The strip shows the hint where the position will go, and does not
+        // expand: there is no stage list yet.
+        if (journey && journey.notStarted) {
+          journeyEl.hidden = false;
+          journeyEl.classList.remove('expanded');
+          journeyEl.classList.add('not-started');
+          const now = document.createElement('span');
+          now.className = 'j-now';
+          now.textContent = 'Not started';
+          const hint = document.createElement('span');
+          hint.className = 'j-hint';
+          hint.textContent = journey.hint || '';
+          jCollapsedEl.replaceChildren(now, hint);
+          jExpandedEl.replaceChildren();
+          return;
+        }
+        journeyEl.classList.remove('not-started');
         const usable = journey && Array.isArray(journey.checkpoints) && journey.checkpoints.length > 0;
         journeyEl.hidden = !usable;
         if (!usable) return;
@@ -2777,7 +2832,7 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
 
       function toggleJourney() {
-        if (journeyEl.hidden) return;
+        if (journeyEl.hidden || journeyEl.classList.contains('not-started')) return;
         journeyEl.classList.toggle('expanded');
         journeyEl.setAttribute('aria-expanded', journeyEl.classList.contains('expanded') ? 'true' : 'false');
         renderJourney();
