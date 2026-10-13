@@ -120,6 +120,16 @@ run on 2026-10-13 landed there, not in `sessions/cli/`). The layout does not say
 wrote it, so a label that did was a guess read as a fact. Sessions show their model and
 nothing about their origin. Pin: kiro-usage "a session names the store it came from".
 
+**A person's turn on v2 is a questions file with an open `[Answer]:`.** Guard refusals
+and parked plans are two sources; the third, and on real intents the common one, is a
+`*questions*.md` under `<phase>/<stage>/` with unanswered `[Answer]:` lines, the same
+convention v1 uses, with `.aidlc-human-turn` touched when the engine handed the turn over.
+Verified on four intents: the two in progress had open answers and the human turn later
+than `.aidlc-engine-touch`; the two finished had neither. Before this was read, a project
+with three unanswered questions showed "Nothing is waiting on your decision". The
+regression baseline for v2-probe2 changed on purpose: it is parked at CI Pipeline with one
+question open, which is the truth about that sample. Pin: waiting-on-you, four tests.
+
 **Attribute a session to the project folder itself or a subfolder, never a parent.** A
 parent-folder session attributed to two unrelated projects at once (646 credits
 counted where 282 were spent).

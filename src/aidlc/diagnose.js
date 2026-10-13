@@ -305,6 +305,7 @@ function diagnose(intentDir, options = {}) {
   const refusals = describeRefusals(summary, options);
   const approvalWaits = describeApprovalWaits(summary, options.runtime);
   const guardRefusals = readGuardRefusals(intentDir);
+  const openQuestions = readOpenQuestions(intentDir);
   const intentId = path.basename(intentDir);
   const planApproval = options.projectRoot
     ? readPlanApprovalRequests(options.projectRoot).filter(
@@ -329,7 +330,9 @@ function diagnose(intentDir, options = {}) {
     planApproval,
     // Everything waiting on a person, from every source, deduplicated by stage. Stated
     // entries first because they carry the engine's own words and remedies.
-    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval),
+    // Questions the engine wrote and a person has not answered yet.
+    openQuestions,
+    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions),
     // An event name this build has no meaning for. Not an error: the vocabulary
     // differs between projects, and reporting it is how the next project tells
     // us what we have not met yet.
@@ -338,12 +341,70 @@ function diagnose(intentDir, options = {}) {
   };
 }
 
+// Questions the engine wrote for a person and that are still unanswered.
+//
+// Seen on four real v2 intents (2026-10-13): a stage that needs decisions writes a
+// `*questions*.md` under the stage's directory with one `[Answer]:` per question, the
+// same convention v1 uses, and touches `.aidlc-human-turn` with the time it handed the
+// turn over. On the two finished intents every `[Answer]:` was filled and
+// `.aidlc-engine-touch` was later than `.aidlc-human-turn`; on the two in progress,
+// answers were open and the human turn was the later of the two. The open `[Answer]:`
+// lines are the concrete thing the person has to do, so they are what is reported;
+// the two timestamps are carried for the page to say when the turn was handed over.
+//
+// This is a third, distinct source from guard refusals and plan approvals. Before it
+// was read, a project with three unanswered questions showed "Nothing is waiting on
+// your decision", which was false in the one way this page must never be.
+function readOpenQuestions(intentDir) {
+  const out = [];
+  if (!intentDir) return out;
+  let humanTurn;
+  let engineTouch;
+  try { humanTurn = fs.readFileSync(path.join(intentDir, '.aidlc-human-turn'), 'utf8').trim(); } catch { /* absent */ }
+  try { engineTouch = fs.readFileSync(path.join(intentDir, '.aidlc-engine-touch'), 'utf8').trim(); } catch { /* absent */ }
+  const walk = (dir, depth) => {
+    if (depth > 4) return;
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(full, depth + 1); continue; }
+      if (!/questions.*\.md$/i.test(e.name)) continue;
+      let text;
+      try { text = fs.readFileSync(full, 'utf8'); } catch { continue; }
+      const open = (text.match(/^\[Answer\]:\s*$/gm) || []).length;
+      if (open === 0) continue;
+      const total = (text.match(/^\[Answer\]:/gm) || []).length;
+      const rel = path.relative(intentDir, full).split(path.sep);
+      // <phase>/<stage>/<file>: the stage is the directory the file sits in.
+      const stage = rel.length >= 2 ? rel[rel.length - 2] : undefined;
+      out.push({ file: full, relPath: rel.join('/'), stage, open, total, humanTurn, engineTouch });
+    }
+  };
+  walk(intentDir, 0);
+  return out;
+}
+
 // One list for the page. A guard refusal with a human remedy, a parked plan, and an
 // inferred gate wait can all name the same stage; the stated ones win and the inferred
 // one is kept only when nothing stated covers that stage.
-function mergeWaiting(approvalWaits, guardRefusals, planApproval) {
+function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions = []) {
   const out = [];
   const covered = new Set();
+  for (const q of openQuestions) {
+    out.push({
+      kind: 'questions',
+      stated: true,
+      stage: q.stage,
+      message: `${q.open} of ${q.total} question${q.total === 1 ? '' : 's'} unanswered in ${q.relPath}`,
+      file: q.file,
+      open: q.open,
+      total: q.total,
+      updatedAt: q.humanTurn
+    });
+    if (q.stage) covered.add(q.stage);
+  }
   for (const r of guardRefusals) {
     if (r.unreadable || !r.requiresHuman) continue;
     out.push({
@@ -395,6 +456,7 @@ function byTimestamp(events) {
 }
 
 module.exports = {
+  readOpenQuestions,
   readGuardRefusals,
   readPlanApprovalRequests,
   mergeWaiting,

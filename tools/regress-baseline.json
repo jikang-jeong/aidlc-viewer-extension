@@ -212,7 +212,9 @@
       "refusals": 10,
       "refusalsLive": 0,
       "approvalGates": 0,
-      "waitingOnYou": [],
+      "waitingOnYou": [
+        "ci-pipeline"
+      ],
       "sensorFailureTotal": 27,
       "sensorsByStage": {
         "code-generation": 1,

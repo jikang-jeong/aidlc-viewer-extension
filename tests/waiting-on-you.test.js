@@ -135,3 +135,79 @@ test('a stated wait and an inferred wait on the same stage collapse to the state
   assert.equal(merged[1].kind, 'gate');
   assert.equal(merged[1].stage, 'other');
 });
+
+// ---------------------------------------------------------------------------
+// Questions the engine asked and a person has not answered
+// ---------------------------------------------------------------------------
+//
+// Seen on four real v2 intents on 2026-10-13. A stage that needs decisions writes a
+// *questions*.md under <phase>/<stage>/ with one [Answer]: per question -- v1's own
+// convention -- and touches .aidlc-human-turn. A project in exactly that state showed
+// "Nothing is waiting on your decision", because only guard refusals and plan approvals
+// were read. That is the one false statement this page must never make.
+
+function questionsFile(intent, rel, body) {
+  const full = path.join(intent, ...rel.split('/'));
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, body);
+}
+
+const Q = (answers) =>
+  answers.map((a, i) => `## Q${i + 1}. Question ${i + 1}?\n\n- A. One\n- B. Two\n\n[Answer]:${a === '' ? '' : ` ${a}`}\n`).join('\n');
+
+test('unanswered [Answer]: lines in a stage\u2019s questions file are waiting on you, with the count and the file', () => {
+  const { root, intent } = intentWith();
+  questionsFile(intent, 'ideation/intent-capture/intent-capture-questions.md', Q(['A', '', '', 'B', '']));
+  fs.writeFileSync(path.join(intent, '.aidlc-human-turn'), '2026-10-13T02:17:56Z');
+  try {
+    const d = diag.diagnose(intent, { projectRoot: root });
+    assert.equal(d.waitingOnYou.length, 1);
+    const w = d.waitingOnYou[0];
+    assert.equal(w.kind, 'questions');
+    assert.equal(w.stated, true, 'the engine wrote the file; this is not inferred');
+    assert.equal(w.stage, 'intent-capture', 'the stage is the directory the file sits in');
+    assert.equal(w.open, 3);
+    assert.equal(w.total, 5);
+    assert.equal(w.message, '3 of 5 questions unanswered in ideation/intent-capture/intent-capture-questions.md');
+    assert.equal(w.updatedAt, '2026-10-13T02:17:56Z');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a questions file with every answer filled is not waiting on anyone', () => {
+  const { root, intent } = intentWith();
+  questionsFile(intent, 'ideation/intent-capture/intent-capture-questions.md', Q(['A', 'B', 'X. Something else']));
+  try {
+    assert.deepEqual(diag.diagnose(intent, { projectRoot: root }).waitingOnYou, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an inferred gate wait on the same stage as open questions collapses into the questions', () => {
+  // The questions name the concrete thing to do; the gate wait only says the stage is
+  // parked. Showing both would list one wait twice.
+  const merged = diag.mergeWaiting(
+    [{ stage: 'intent-capture', stated: false, evidence: 'STAGE_AWAITING_APPROVAL' }],
+    [],
+    [],
+    [{ relPath: 'ideation/intent-capture/q.md', stage: 'intent-capture', open: 1, total: 1 }]
+  );
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].kind, 'questions');
+});
+
+test('questions files are found at the depth real intents use, and dot-directories are not searched', () => {
+  const { root, intent } = intentWith();
+  questionsFile(intent, 'inception/requirements-analysis/requirements-analysis-questions.md', Q(['']));
+  // A copy the engine keeps for itself must not count twice.
+  questionsFile(intent, '.aidlc-engine/cache/requirements-analysis-questions.md', Q(['']));
+  try {
+    const d = diag.diagnose(intent, { projectRoot: root });
+    assert.equal(d.waitingOnYou.length, 1);
+    assert.equal(d.waitingOnYou[0].stage, 'requirements-analysis');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
