@@ -11,3 +11,5 @@ media/icon-drafts/**
 *.vsix
 node_modules/**
 docs/**
+.kiro/**
+media/merged.gif

@@ -2,7 +2,6 @@
 
 The companion to **[AI-DLC](https://github.com/awslabs/aidlc-workflows)**, the AWS AI-Driven Development Lifecycle. Set the workflow up in one click, see where it is, read what it wrote, know when it is waiting on you, and know what it cost.
 
-![AIDLC-VIEWER demo](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/merged.gif)
 
 AI-DLC hands your agent a lifecycle and the agent works through it, writing Markdown artifacts and asking you questions along the way. That run happens in a chat window and a folder tree, and both are bad at the questions you actually have: *where is it, what does it need from me, how much has this cost.* This extension answers them in the sidebar.
 
@@ -10,19 +9,19 @@ Works in **Kiro** and in VS Code and its forks, with both generations of AI-DLC.
 
 ## Set up in one click
 
-![One toast asks which generation](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/setup_aidlc.png)
+![One toast asks which generation](media/setup_aidlc.png)
 
 Pick the folder, press one button, answer one question. **v1** is the rule files your agent reads; **v2** is an engine that drives the workflow itself, and the extension installs it for you from the official release and configures the project with it. For v2 a second prompt in the same place asks Kiro IDE or Kiro CLI. Nothing you already have is overwritten.
 
 ## Start it
 
-![The start page, with the one thing to type](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/lets_start_ai-dlc.png)
+![The start page, with the one thing to type](media/lets_start_ai-dlc.png)
 
 When setup finishes, a page opens with the one thing to type, large. One button opens Kiro's chat with it already in the input: `/aidlc` on v2, `Using AI-DLC, build …` on v1. Until the first stage is reached, the row at the top of the tree reads **Not started** with the same command beside it.
 
 ## Know where it is
 
-![The tree and the strip, five phases, every stage](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/whereami_in_ai-dlc-phase.png)
+![The tree and the strip, five phases, every stage](media/whereami_in_ai-dlc-phase.png)
 
 The top of the tree names the furthest stage reached. Above every open file, a strip draws the whole workflow: each phase, each stage, done or in progress or skipped or never in scope. Click it for the list.
 
@@ -32,7 +31,7 @@ Position comes from the project's structure, never from parsing the Markdown, so
 
 ## Read what it wrote
 
-![An artifact, rendered, with the strip above it](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/ai-dlc_viewer.png)
+![An artifact, rendered, with the strip above it](media/ai-dlc_viewer.png)
 
 New artifacts are marked and their folders open themselves, so what the agent just wrote is in front of you. Each one opens rendered, Mermaid diagrams inline. **Edit**, or double-click the text you want to change, swaps the same pane for the source with the cursor near that spot; **Save** brings the view back. What you type is exactly what is saved. The HTML comments AI-DLC uses to instruct the agent are shown dimmed rather than dropped.
 
@@ -42,7 +41,7 @@ A stage waiting for your answer is stopped, not slow, and the chat said so once 
 
 ## Know what it cost
 
-![Usage: credits by stage, by session, every turn](https://github.com/jikang-jeong/aidlc-viewer-extension/raw/main/media/credit_token.png)
+![Usage: credits by stage, by session, every turn](media/credit_token.png)
 
 **Usage** shows what Kiro spent on this project, in the credits Kiro itself recorded. The total, and beside it the credits spent on turns that were aborted or failed: paid for, produced nothing. By stage and by session, each as its share of the whole. Every turn, newest first, so any figure can be traced to the turns behind it. The page re-reads while it is open, so a running session shows up as it spends.
 

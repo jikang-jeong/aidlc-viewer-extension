@@ -256,6 +256,13 @@ commands. A test parses both and requires the sets to match, because a link to a
 the panel does not enable fails silently. Pins: credits-page "the start page" (two tests),
 v1-isolation "the start page opens only for a generation setup just added".
 
+**README images are relative paths to files shipped in the vsix, never absolute URLs.**
+An absolute GitHub raw URL is broken locally and on the listing until that branch is
+pushed, and vsce cannot rewrite it; a relative path renders on GitHub and locally as is,
+and vsce rewrites it to `raw/HEAD/...` when packaging, which is what open-vsx shows. The
+demo gif (5.7MB of a 7.4MB package) and `.kiro/` are excluded from the vsix. Pin:
+tests/readme-images.test.js.
+
 **The built-in guide is pinned to the build it ships with.** Prose does not fail a test
 when the behaviour it describes changes, and the guide fell behind the same day twice.
 `tests/guide-current.test.js` renders `getHelpHtml` and requires the sentences a user
