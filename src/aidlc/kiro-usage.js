@@ -232,7 +232,29 @@ function readCliSession(file, projectRoot, gaps) {
 //
 // Never throws. A missing store is "no data", and the report says so in a way the UI can
 // render as a sentence rather than as an empty table.
+//
+// Cached per project for a short window. A full read walks every session on the machine
+// (59 sessions, ~300ms on a real one), and the page re-renders on the same debounced
+// file-event path as the tree, so without a cache an open page would rescan the whole
+// store on every artifact the agent writes. Credit records only change when a turn ends,
+// which is seconds apart at the fastest, so a few seconds of staleness costs nothing a
+// person could notice.
+const USAGE_CACHE_MS = 5000;
+const usageCache = new Map();
+
 function readKiroUsage(projectRoot) {
+  const key = path.resolve(projectRoot);
+  const hit = usageCache.get(key);
+  if (hit && Date.now() - hit.at < USAGE_CACHE_MS) return hit.value;
+  const value = readKiroUsageUncached(projectRoot);
+  usageCache.set(key, { at: Date.now(), value });
+  // A person watches one project at a time; the cap keeps a long session that moved
+  // between several from holding every store it ever read.
+  if (usageCache.size > 8) usageCache.delete(usageCache.keys().next().value);
+  return value;
+}
+
+function readKiroUsageUncached(projectRoot) {
   const gaps = { unknownStatuses: new Set(), unreadable: [] };
   const sessions = [];
   const root = sessionsRoot();
