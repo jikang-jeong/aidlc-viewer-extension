@@ -107,6 +107,81 @@ each: it returned, and it said what it did not understand. A reader that crashes
 an unfamiliar file takes the tree down with it, which defeats the point of the
 layer.
 
+**Report only what Kiro recorded.** The Credits page shows no money and estimates no
+tokens. The CLI store carries four token-count fields on every turn, and on one machine
+all 930 of them were zero while credits were consumed: the field exists, the value is
+not filled in. "Field present" is not "recorded"; zeros across the board read as not
+recorded, the same as the IDE's absence. Pin: kiro-usage "all-zero token fields read as
+not recorded".
+
+**Do not name the program that wrote a session.** Kiro IDE and current `kiro-cli` both
+write to `~/.kiro/sessions/<workspace-hash>/sess_*` (a `kiro-cli --resume-id sess_…`
+run on 2026-10-13 landed there, not in `sessions/cli/`). The layout does not say who
+wrote it, so a label that did was a guess read as a fact. Sessions show their model and
+nothing about their origin. Pin: kiro-usage "a session names the store it came from".
+
+**Attribute a session to the project folder itself or a subfolder, never a parent.** A
+parent-folder session attributed to two unrelated projects at once (646 credits
+counted where 282 were spent).
+
+**Position comes from the project's structure, never from parsing Markdown.** This was
+0.0.19's rule, and the tree's first row broke it until 0.0.26: it was labelled by the
+`aidlc-state.md` parser, whose regex needed a one-word phase before a dash. In a current
+state file exactly one line has that shape, `- [ ] Operations - PLACEHOLDER`, so a v1
+project in Inception read **Operations**. The row is gone; the one summary row reads
+`journey.currentIndex` and nothing else, and what the state file says appears in its
+tooltip as "State file says", labelled as the agent's record. `tests/state-format.test.js`
+had characterised the parser's failure in January without the row being traced to it;
+it now runs the real parser over both fixtures. Pins: v1-isolation "the tree has one
+summary row, labelled from the journey alone"; state-format, all parser tests.
+
+## Pitfalls in the viewer and the shell, found in the field
+
+These are not v2 rules but belong with them: each cost a build or a blank screen, and
+each has a test that executes the code rather than reads it.
+
+**The webview script is inside a template literal.** Everything in `getWebviewHtml` is
+unescaped once before the browser sees it. `'\n'` in the webview code is `'\\n'` in the
+source file; `'\n'` becomes a literal line break (SyntaxError, viewer blank) and `'\\\\n'`
+becomes a split on the two characters backslash-n (Markdown tables collapsed into one
+row; this had shipped). A backtick anywhere inside, including in a comment, ends the
+literal. Pin: viewer-single-pane "a Markdown table renders as rows". The viewer tests
+execute the script against a DOM stub; a grep-based test would have passed on all three
+shapes.
+
+**A `display:none` textarea has no layout in the tick it becomes visible**, so a
+`scrollTop` set then is dropped (double-click to edit "went to the top"). Defer to
+`requestAnimationFrame`. And never keep the two panes in step by scroll ratio: rendered
+Markdown and its source differ in height, so the same ratio is different text (the Edit
+button "jumped a little"). Place is kept by text, both directions. Pins: viewer-single-pane
+"Edit opens on the text that was at the top of the view" and "View returns to the text
+that was at the top of the editor".
+
+**A re-rendered webview must be byte-identical when nothing changed.** The Credits page
+re-reads every 10 s (its store is outside the watched folder, so no file event fires on a
+spent turn) and assigns `webview.html` only when it differs, because assigning it folds
+every `<details>` and resets scroll. A fresh CSP nonce per render made every render
+differ, and History closed itself every ten seconds. The panel fixes one nonce for its
+lifetime. Pin: credits-page "rendering twice with the same nonce is byte-identical".
+
+**`summary { display:flex }` drops the browser's disclosure marker.** Draw ▸/▾ with
+`::before`.
+
+**Every command the UI invokes must be in `package.json` and registered in
+`activate()`.** `showCredits` shipped unregistered once ("command not found"), with 276
+tests green, because nothing executed `activate()`'s wiring. Pin:
+command-registration.test.js, a three-way check that named the missing command when the
+bug was reintroduced.
+
+**Run the tests in a separate shell call from the commit.** A chained
+`npm test … && git commit` committed with one failing test (71e2f4f, fixed in eea86b1).
+
+**Editing `src/extension.js` from a Python heredoc misses on indentation** (the file is
+two-space; `sed -n` output shows two more) and on escapes. Prefer the `strReplace` tool
+after a `read` of the exact line. Commit messages go in a temp file and `git commit -F`;
+the agent's shell policy blocks command text matching `kiro…crew … token` and paths under
+`~/Library/Application Support` and `~/.aws`.
+
 ## Units of work
 
 `stage-graph.json` declares `for_each: "unit-of-work"` on five stages. The unit
