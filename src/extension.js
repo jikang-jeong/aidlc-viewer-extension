@@ -1,7 +1,7 @@
 const vscode = require('vscode');
 const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
-const { renderCreditsPage } = require('./credits-page');
+const { renderCreditsPage, nonce: creditsNonce } = require('./credits-page');
 
 // Drives the `when` clause on the v2-only command (Remove AI-DLC v2). Set from the
 // project the tree reads, since the panel that used to set it is gone.
@@ -152,7 +152,8 @@ class WatchController {
     vscode.commands.executeCommand('setContext', V2_CONTEXT_KEY, isV2);
     if (this.creditsPanel && root) {
       try {
-        const html = renderCreditsPage({ webview: this.creditsPanel.webview, root: root.fsPath, project });
+        if (!this.creditsNonce) this.creditsNonce = creditsNonce();
+        const html = renderCreditsPage({ webview: this.creditsPanel.webview, root: root.fsPath, project, nonce: this.creditsNonce });
         // Assigning html resets the page's scroll and folds every <details>, so it is
         // assigned only when the report actually changed. The poll below calls this
         // every few seconds; most of those calls must be no-ops to the reader.
@@ -204,6 +205,7 @@ class WatchController {
     this.creditsPanel.onDidDispose(() => {
       this.creditsPanel = undefined;
       this.creditsHtml = undefined;
+      this.creditsNonce = undefined;
       this.stopCreditsPoll();
     });
     this.refreshSupervision();

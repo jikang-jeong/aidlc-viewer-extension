@@ -205,12 +205,39 @@ test('token detail appears only where Kiro recorded non-zero tokens, as in/out w
   assert.equal(page.fmtTokens(undefined), '—');
 });
 
-test('the session table says which store a session came from, never which program', () =>
+test('the session table names the model and nothing about where the session was read from', () =>
   withKiroHome(
     ({ home, project }) => ideSession(home, project, [{ at: T, credits: 10 }]),
     ({ project }) => {
       const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
-      assert.match(html, /sessions\/&lt;workspace&gt;/);
-      assert.doesNotMatch(html, /Kiro IDE<\/div>/, 'a kiro-cli session lands in the same store, so "IDE" would be a guess');
+      // Neither the store nor a program name: the layout does not say which program
+      // wrote a session, and the store path meant nothing to the reader. Model only.
+      assert.doesNotMatch(html, /sessions\/&lt;workspace&gt;|sessions\/cli|Kiro IDE<\/div>|Kiro CLI<\/div>/);
+      assert.match(html, /claude-opus-4\.8<\/div>/);
+    }
+  ));
+
+
+test('rendering twice with the same nonce is byte-identical, so the poll leaves an unchanged page alone', () =>
+  withKiroHome(
+    ({ home, project }) => ideSession(home, project, [{ at: T, credits: 10 }]),
+    ({ project }) => {
+      // The panel assigns webview.html only when it differs from the last render, because
+      // assigning it folds every <details> and resets the scroll. A fresh nonce per call
+      // made every render differ, and History closed itself every ten seconds.
+      const opts = { webview, root: project, project: { generation: 'v1' }, nonce: 'n0nce' };
+      assert.equal(page.renderCreditsPage(opts), page.renderCreditsPage(opts));
+      assert.notEqual(page.renderCreditsPage({ ...opts, nonce: undefined }), page.renderCreditsPage({ ...opts, nonce: undefined }), 'without a fixed nonce each render is distinct, as before');
+    }
+  ));
+
+test('the folded sections draw their own disclosure marker', () =>
+  withKiroHome(
+    ({ home, project }) => ideSession(home, project, [{ at: T, credits: 10 }]),
+    ({ project }) => {
+      // summary is display:flex, which drops the browser's default triangle.
+      const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
+      assert.match(html, /details\.history summary::before[^}]*content: '\u25B8'/);
+      assert.match(html, /details\.history\[open\] summary::before[^}]*content: '\u25BE'/);
     }
   ));

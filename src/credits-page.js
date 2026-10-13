@@ -354,7 +354,7 @@ function creditsBySession(model) {
       const ctx = typeof s.lastContextPercent === 'number' ? `${Math.round(s.lastContextPercent)}%` : '—';
       const wasted = s.wasted > 0 ? `<span class="warn-text">${fmtCredits(s.wasted)} lost</span>` : '';
       return `<tr>
-        <td><div>${escapeHtml(s.title || s.id)}</div><div class="sub">${escapeHtml(s.model ?? 'model not recorded')} · ${escapeHtml(s.source === 'cli' ? 'sessions/cli' : 'sessions/<workspace>')}</div></td>
+        <td><div>${escapeHtml(s.title || s.id)}</div><div class="sub">${escapeHtml(s.model ?? 'model not recorded')}</div></td>
         <td class="num">${fmtCredits(s.credits)}${wasted ? `<div class="sub">${wasted}</div>` : ''}</td>
         <td class="num">${s.turns}</td>
         <td class="num">${fmtDuration(s.elapsedMs)}</td>
@@ -451,9 +451,14 @@ function gapsSection(model) {
 // Page
 // ---------------------------------------------------------------------------
 
-function renderCreditsPage({ webview, root, project }) {
+// `nonce` may be supplied so that re-rendering the same panel yields byte-identical
+// HTML when nothing changed. The panel re-renders on a timer and assigns the HTML only
+// when it differs; a fresh nonce on every call made every render differ, and every
+// assignment folds the page's <details> and resets its scroll -- reported as "History
+// closes by itself after a moment".
+function renderCreditsPage({ webview, root, project, nonce: fixedNonce }) {
   const model = collectCreditsModel(root, project);
-  const n = nonce();
+  const n = fixedNonce || nonce();
   const folder = path.basename(root);
   const body = [
     `<h1>${escapeHtml(folder)} <span class="gen">${escapeHtml(project?.generation === 'both' ? 'v2' : project?.generation ?? '')}</span></h1>`,
@@ -504,10 +509,14 @@ function renderCreditsPage({ webview, root, project }) {
   .wait-msg { margin: 4px 0; }
   .remedies { margin: 6px 0 0 16px; padding: 0; font-size: 13px; }
   details.records, details.history { margin-top: 26px; }
-  details.history summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; }
+  details.history summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; list-style: none; }
+  details.history summary::-webkit-details-marker { display: none; }
   details.history summary h2 { margin: 0; display: inline; }
+  details.history summary::before, details.records summary::before { content: '\u25B8'; color: var(--muted); font-size: 0.9em; width: 1em; flex: none; }
+  details.history[open] summary::before, details.records[open] summary::before { content: '\u25BE'; }
   tr.wasted td { color: var(--warn); }
-  details.records summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; }
+  details.records summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; list-style: none; }
+  details.records summary::-webkit-details-marker { display: none; }
   details.records summary h2 { margin: 0; display: inline; }
   .gaps { margin-top: 30px; }
 </style>
@@ -518,4 +527,4 @@ ${body}
 </html>`;
 }
 
-module.exports = { collectCreditsModel, renderCreditsPage, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };
+module.exports = { collectCreditsModel, renderCreditsPage, nonce, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };
