@@ -475,3 +475,19 @@ test('the generation list no longer claims v2 needs bun', async () => {
     assert.equal(/\bbun\b/i.test(`${item.label} ${item.description} ${item.detail}`), false, item.label);
   }
 });
+
+test("v1's installer is called without its own confirmation, because the generation choice was the decision", () => {
+  // Every path into installV1 has already asked which generation -- the toast's v1
+  // button or the list's v1 row. The installer's "Set up AI-DLC rules in this project?"
+  // toast on top of that was a second question with one answer, asked from a different
+  // corner of the screen. Reported from a screenshot; pinned at the call site because
+  // the function itself still supports confirm for any future caller that has not asked.
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
+  const calls = [...source.matchAll(/ensureAidlcRules\(([^)]*)\)/g)]
+    .map((m) => m[1])
+    .filter((args) => !/^folderUri, extensionUri, options/.test(args)); // skip the definition
+  assert.ok(calls.length >= 1, 'installV1 must call ensureAidlcRules');
+  for (const args of calls) {
+    assert.match(args, /confirm:\s*false/, `must not re-ask: ensureAidlcRules(${args})`);
+  }
+});

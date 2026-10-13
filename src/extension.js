@@ -278,11 +278,18 @@ class WatchController {
     this.refreshSupervision();
   }
 
-  // v1's installer, unchanged. Kept as a method so the generation chooser can call
-  // it without knowing about the extension's bundle layout.
+  // v1's installer. Kept as a method so the generation chooser can call it without
+  // knowing about the extension's bundle layout.
+  //
+  // No confirmation here. Every path into this method has already asked which
+  // generation to install -- the toast's v1 button or the list's v1 row -- and that
+  // answer is the decision. The installer's own "Set up AI-DLC rules in this project?"
+  // toast on top of it was a second question with one answer, which v2 lost a release
+  // ago for the same reason. Reported from a screenshot: pick v1, then be asked again
+  // from a different corner of the screen.
   async installV1(folderUri) {
     try {
-      await ensureAidlcRules(folderUri, this.context.extensionUri);
+      await ensureAidlcRules(folderUri, this.context.extensionUri, { confirm: false });
     } catch (err) {
       vscode.window.showErrorMessage(`AI-DLC setup failed: ${err && err.message ? err.message : err}`);
     }
