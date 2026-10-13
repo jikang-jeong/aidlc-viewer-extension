@@ -3428,7 +3428,7 @@ function getHelpHtml() {
 </head>
 <body>
 <h1>AI-DLC Viewer Guide</h1>
-<p>AI-DLC Viewer watches your <strong>AI-DLC workflow folder</strong>, visualizes stage progress, and lets you read and edit the generated Markdown artifacts — all inside VS Code.</p>
+<p>AI-DLC Viewer sits beside an <strong>AI-DLC</strong> run: it sets the workflow up, shows where it is, puts the file that needs you in front of you, renders each artifact, and reports what Kiro spent and what the engine is waiting on you for — all inside VS Code.</p>
 
 <div class="callout">
   <strong>Two generations of AI-DLC.</strong> <strong>v1</strong> is rule files your agent reads, with artifacts under <code>aidlc-docs/</code>. <strong>v2</strong> is an engine that drives the workflow itself, with enforced gates and an audit ledger. The viewer detects which one a project uses. Everything below applies to both; only the <em>waiting for you</em> part of the Credits page is v2-specific.
@@ -3437,8 +3437,8 @@ function getHelpHtml() {
 <h2>Getting Started</h2>
 <ol>
   <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root.</li>
-  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
-  <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Either way, new artifacts appear in the tree as they are generated.</li>
+  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want — <strong>v1</strong>, <strong>v2 · Kiro IDE</strong> or <strong>v2 · Kiro CLI</strong>, as three buttons on one prompt. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
+  <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with this command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
 </ol>
 
 <h2>Key Features</h2>
@@ -3451,6 +3451,7 @@ function getHelpHtml() {
     <li>Everything is derived from <strong>structure, not prose</strong>. In v1 that means which folders exist under <code>aidlc-docs/</code> plus the plan files under <code>plans/</code>; in v2 it means the engine's own compiled graph and runtime record. No file contents are parsed either way, so a state file in an unexpected format cannot make the position wrong.</li>
     <li><strong>There is no percentage.</strong> AI-DLC is adaptive: most stages are conditional, and Construction repeats per unit of work with a unit count that does not exist until units have been generated. A denominator would be guesswork, so reached stages are counted instead. Stages that repeat per unit also show their unit progress, for example <code>2/3</code>.</li>
     <li>A stage with no artifacts that the workflow has already moved past is marked <strong>skipped</strong> (hatched), not pending. That is normal: Reverse Engineering is skipped on a greenfield project, and design stages are skipped whenever the workflow decides they add nothing.</li>
+    <li>On v2, a whole phase the project's scope never included stays in the list and reads <strong>not in scope</strong>, dimmed, so the tree and the strip above the viewer always show the same phases.</li>
     <li><strong>Operations is a placeholder in AI-DLC v1.</strong> The v1 rules state that the workflow ends after Build and Test in Construction, so an unreached Operations stage is excluded from the count and a project that finished Build and Test reads as complete. v2 declares its own phases, and the viewer takes them from the project rather than from a list built into this extension.</li>
     <li>Stage folders and files keep their badges: <strong>I</strong> (blue), <strong>C</strong> (purple), <strong>O</strong> (green). Progress itself uses purple, because green already marks unread <code>NEW</code> artifacts.</li>
     <li>An artifact that matches no known stage layout is reported at the bottom of the expanded strip rather than guessed into a stage.</li>
@@ -3474,6 +3475,7 @@ function getHelpHtml() {
     <li>Press <strong>✎ Edit</strong>, or <strong>double-click</strong> the text you want to change, or <code>Ctrl/Cmd + E</code>, to swap the same pane for the <strong>Markdown source</strong> with the cursor near that spot. <strong>Save</strong> returns you to <strong>🔍 View</strong>. What you type is exactly what is saved, so the view can never alter your file.</li>
     <li><strong>Save</strong> with the Save button or <code>Ctrl/Cmd + S</code>; <strong>Reload</strong> discards local edits and re-reads the file.</li>
     <li><strong>Zoom</strong>: +/− buttons, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, mouse wheel with <code>Ctrl/Cmd</code>, or trackpad pinch.</li>
+    <li>HTML comments, which AI-DLC uses to instruct the agent (<code>&lt;!-- Things agents must never do --&gt;</code>), are shown <strong>dimmed</strong> rather than dropped, so you can see what the file tells the agent.</li>
   </ul>
 </div>
 
@@ -3482,8 +3484,8 @@ function getHelpHtml() {
   <p>The <strong>Usage</strong> row at the top of the tree opens a page with what Kiro spent on this project. Every number is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.</p>
   <ul>
     <li><strong>Total credits</strong>, and beside it the credits spent on turns Kiro marked <strong>aborted or failed</strong> — work that was paid for and produced nothing. A bar under the tiles shows the split.</li>
-    <li><strong>By stage</strong>, each with a bar relative to the costliest stage. A turn is placed in a stage when its time falls inside that stage's window: the engine's audit ledger on v2, the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.</li>
-    <li><strong>By session</strong>: credits (with the aborted share marked on its bar), turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them.</li>
+    <li><strong>By stage</strong>, each with a bar showing its <strong>share of the project's total</strong> (hover for the percentage). A turn is placed in a stage when its time falls inside that stage's window: the engine's audit ledger on v2, the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.</li>
+    <li><strong>By session</strong>: credits, with a bar for its share of the total and the aborted share marked on it; turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them.</li>
     <li><strong>History</strong>, folded: every prompt turn, newest first, so any figure above can be traced to the turns that made it.</li>
   </ul>
   <p>The page re-reads every few seconds while it is open, so a running session shows up as it spends.</p>
@@ -3491,7 +3493,7 @@ function getHelpHtml() {
 
 <div class="stage-card supervision">
   <h3>🔔 Waiting for you — v2 only</h3>
-  <p>A row with its count beside it, so you know without opening anything. A stage waiting on you is stopped, not slow, and the chat said so once and scrolled away. The page lists each item in the engine's own words:</p>
+  <p>A row that <strong>changes colour</strong>: when something is waiting, its label turns to the warning colour with the count as a badge and the bell gets a dot; when nothing is, it dims to <em>nothing right now</em>. So you know without opening anything. A stage waiting on you is stopped, not slow, and the chat said so once and scrolled away. The page lists each item in the engine's own words:</p>
   <ul>
     <li><strong>Questions to answer</strong>: a questions file the engine wrote with empty <code>[Answer]:</code> lines, with the file and how many. Open it from the tree, fill them in, and tell the agent to continue.</li>
     <li><strong>Refusals</strong> the engine marked as needing you, with the remedies it listed as yours.</li>
@@ -3522,7 +3524,7 @@ function getHelpHtml() {
 <hr/>
 
 <h1>AI-DLC 뷰어 가이드 (한국어)</h1>
-<p>AI-DLC Viewer는 <strong>AI-DLC 워크플로우 폴더</strong>를 감시하며 단계별 진행 상황을 시각화하고, 생성된 Markdown 산출물을 VS Code 안에서 바로 읽고 편집할 수 있게 해줍니다.</p>
+<p>AI-DLC Viewer는 <strong>AI-DLC</strong> 실행 옆에 붙어서 워크플로우를 설치하고, 지금 어디인지 보여주고, 당신이 봐야 할 파일을 앞에 꺼내 놓고, 산출물을 렌더링하고, Kiro가 쓴 크레딧과 엔진이 당신을 기다리는 일을 알려줍니다. 모두 VS Code 안에서입니다.</p>
 
 <div class="callout">
   <strong>AI-DLC에는 두 세대가 있습니다.</strong> <strong>v1</strong>은 에이전트가 읽는 룰 파일이고 산출물은 <code>aidlc-docs/</code> 아래에 생깁니다. <strong>v2</strong>는 워크플로우 자체를 구동하는 엔진이며 게이트를 강제하고 감사 원장을 남깁니다. 뷰어는 프로젝트가 어느 쪽인지 감지해 그에 맞는 화면을 보여줍니다. 아래 트리·스트립·에디터 설명은 <strong>양쪽 모두에 적용</strong>되고, <em>감독</em> 섹션만 v2 전용입니다.
@@ -3531,8 +3533,8 @@ function getHelpHtml() {
 <h2>시작하기</h2>
 <ol>
   <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트를 선택합니다.</li>
-  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
-  <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다.</li>
+  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>, <strong>v2 · Kiro IDE</strong>, <strong>v2 · Kiro CLI</strong> 세 버튼이 한 알림에 함께 있습니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
+  <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 이 명령을 보여줍니다.</li>
 </ol>
 
 <h2>주요 기능</h2>
@@ -3545,6 +3547,7 @@ function getHelpHtml() {
     <li>모든 판정은 <strong>서술이 아니라 구조</strong>에서 나옵니다. v1에서는 <code>aidlc-docs/</code> 아래 어떤 폴더가 있는지와 <code>plans/</code>의 계획 파일이 근거이고, v2에서는 엔진이 컴파일한 그래프와 런타임 기록이 근거입니다. 어느 쪽이든 파일 내용은 파싱하지 않으므로 상태 파일 서식이 예상과 달라도 위치가 틀리지 않습니다.</li>
     <li><strong>퍼센트는 없습니다.</strong> AI-DLC는 적응형 워크플로우라 대부분의 단계가 조건부이고, Construction은 유닛별로 반복되는데 그 유닛 수는 유닛이 생성되기 전에는 존재하지 않습니다. 분모를 정할 수 없으니 도달한 단계 수를 셉니다. 유닛별로 반복되는 단계는 <code>2/3</code>처럼 유닛 진행도 함께 보여줍니다.</li>
     <li>산출물이 없는데 워크플로우가 이미 그 단계를 지나갔다면 <strong>skipped</strong>(빗살무늬)로 표시됩니다. 정상입니다. 그린필드에서는 Reverse Engineering이 생략되고, 설계 단계도 필요 없다고 판단되면 건너뜁니다.</li>
+    <li>v2에서 프로젝트 범위에 아예 들지 않은 phase는 목록에 남아 <strong>not in scope</strong>로 흐리게 표시됩니다. 트리와 뷰어 위 스트립이 항상 같은 phase를 보여주기 위해서입니다.</li>
     <li><strong>Operations는 AI-DLC v1에서 placeholder입니다.</strong> v1 규칙이 워크플로우가 Construction의 Build and Test에서 끝난다고 명시하므로, 도달하지 않은 Operations는 분모에서 제외되고 Build and Test를 마쳤다면 완료로 표시됩니다. v2는 자기 phase를 스스로 선언하며, 뷰어는 그것을 익스텐션에 박아둔 목록이 아니라 프로젝트에서 읽어옵니다.</li>
     <li>단계 폴더와 파일의 배지는 그대로입니다: <strong>I</strong>(파랑), <strong>C</strong>(보라), <strong>O</strong>(초록). 진행 표시 자신은 보라를 씁니다. 초록은 아직 읽지 않은 <code>NEW</code> 산출물을 뜻하기 때문입니다.</li>
     <li>알려진 단계 구조에 맞지 않는 산출물은 짐작하지 않고 펼침 스트립 하단에 그대로 알려줍니다.</li>
@@ -3568,6 +3571,7 @@ function getHelpHtml() {
     <li><strong>✎ Edit</strong>를 누르거나, 고치려는 글을 <strong>더블클릭</strong>하거나, <code>Ctrl/Cmd + E</code>를 누르면 같은 자리에 <strong>Markdown 원본</strong>이 나타나고 커서가 그 근처에 놓입니다. <strong>Save</strong>하면 <strong>🔍 View</strong>로 돌아옵니다. 입력한 그대로 저장되므로 뷰어가 파일을 바꾸는 일은 없습니다.</li>
     <li>Save 버튼 또는 <code>Ctrl/Cmd + S</code>로 <strong>저장</strong>, <strong>Reload</strong>로 로컬 편집을 버리고 파일을 다시 읽습니다.</li>
     <li><strong>줌</strong>: +/− 버튼, <code>Ctrl/Cmd</code> + <code>+</code>/<code>−</code>/<code>0</code>, <code>Ctrl/Cmd</code> + 휠, 트랙패드 핀치.</li>
+    <li>AI-DLC가 에이전트에게 지시를 담는 HTML 주석(<code>&lt;!-- Things agents must never do --&gt;</code>)은 지우지 않고 <strong>흐리게</strong> 표시합니다. 파일이 에이전트에게 무엇을 말하는지 볼 수 있습니다.</li>
   </ul>
 </div>
 
@@ -3576,8 +3580,8 @@ function getHelpHtml() {
   <p>트리 맨 위의 <strong>Usage</strong> 행을 누르면 Kiro가 이 프로젝트에 쓴 크레딧 페이지가 열립니다. 모든 숫자는 Kiro가 기록한 그대로입니다. 추정하지 않고, 금액으로 환산하지 않습니다. 크레딧 가격은 요금제마다 다르기 때문입니다.</p>
   <ul>
     <li><strong>총 크레딧</strong>과 그 옆에 Kiro가 <strong>중단 또는 실패</strong>로 표시한 턴에 쓴 크레딧. 비용은 들었는데 결과가 없는 작업입니다. 타일 아래 막대가 그 비율을 보여줍니다.</li>
-    <li><strong>단계별</strong>, 가장 비싼 단계 기준의 막대와 함께. 턴의 시각이 단계의 구간 안에 들면 그 단계에 귀속됩니다. 구간은 v2에서는 엔진의 감사 원장, v1에서는 산출물의 수정 시각에서 옵니다. 어느 구간에도 들지 않는 턴은 그렇다고 표시되어 합계가 항상 맞습니다.</li>
-    <li><strong>세션별</strong>: 크레딧(막대에 중단분 표시), 턴 수, 소요 시간, 마지막 턴 뒤 컨텍스트 창 사용률, 그리고 Kiro가 기록한 경우 토큰 수.</li>
+    <li><strong>단계별</strong>, 각 단계가 <strong>프로젝트 전체에서 차지하는 비율</strong>을 막대로 (마우스를 올리면 퍼센트). 턴의 시각이 단계의 구간 안에 들면 그 단계에 귀속됩니다. 구간은 v2에서는 엔진의 감사 원장, v1에서는 산출물의 수정 시각에서 옵니다. 어느 구간에도 들지 않는 턴은 그렇다고 표시되어 합계가 항상 맞습니다.</li>
+    <li><strong>세션별</strong>: 크레딧과 전체 대비 비율 막대(중단분은 다른 색으로), 턴 수, 소요 시간, 마지막 턴 뒤 컨텍스트 창 사용률, 그리고 Kiro가 기록한 경우 토큰 수.</li>
     <li><strong>History</strong>(접힘): 모든 프롬프트 턴을 최신순으로. 위의 어떤 숫자든 그것을 만든 턴까지 추적할 수 있습니다.</li>
   </ul>
   <p>페이지는 열려 있는 동안 몇 초마다 다시 읽으므로, 진행 중인 세션의 소비가 그때그때 반영됩니다.</p>
@@ -3585,7 +3589,7 @@ function getHelpHtml() {
 
 <div class="stage-card supervision">
   <h3>🔔 Waiting for you(당신을 기다림) — v2 전용</h3>
-  <p>행 옆에 개수가 붙어 있어 열지 않아도 알 수 있습니다. 당신을 기다리는 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 말 그대로 보여줍니다.</p>
+  <p><strong>색이 바뀌는 행</strong>입니다. 기다리는 것이 있으면 라벨이 경고색으로 바뀌고 개수 배지가 붙고 벨에 점이 생기며, 없으면 <em>nothing right now</em>로 흐려집니다. 열지 않아도 알 수 있습니다. 당신을 기다리는 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 말 그대로 보여줍니다.</p>
   <ul>
     <li><strong>답할 질문</strong>: 엔진이 쓴 질문 파일에 빈 <code>[Answer]:</code>가 남아 있는 것. 파일 이름과 개수가 함께 나옵니다. 트리에서 열어 채우고 에이전트에게 계속하라고 하면 됩니다.</li>
     <li><strong>거부</strong>: 엔진이 당신이 필요하다고 표시한 것과, 당신 몫으로 적은 조치.</li>

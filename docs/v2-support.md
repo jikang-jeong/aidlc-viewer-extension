@@ -236,6 +236,14 @@ test that re-implements the logic it is testing proves only that it agrees with 
 the pin now also reads the `getChildren` source and requires no filter between the phase
 groups and the rows. Pin: v1-isolation "every phase is listed".
 
+**The built-in guide is pinned to the build it ships with.** Prose does not fail a test
+when the behaviour it describes changes, and the guide fell behind the same day twice.
+`tests/guide-current.test.js` renders `getHelpHtml` and requires the sentences a user
+would act on (page names from `PAGE_TITLE`, the harness buttons, "Not started", the bar
+rule, the Waiting row colour) in both languages, and forbids the wording of previous
+builds (largest-row bars, old page names, "Kiro IDE records credits only"). A feature
+change that touches any of these fails the test and names the sentence to rewrite.
+
 **A tree row's label is coloured only through a FileDecorationProvider.** A TreeItem can
 colour its icon (`ThemeIcon` with a `ThemeColor`) but not its label, and an icon alone did
 not make the Waiting row stand out. The row carries a URI in a private scheme
