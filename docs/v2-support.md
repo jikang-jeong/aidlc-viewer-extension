@@ -152,6 +152,20 @@ changed on purpose: its Build and Test is `pending` in the runtime graph with ar
 written and nothing after, which is a wait by the rule. Pins: v2-robustness, four tests
 under "2.11.0 ledgers put the stage in a Context path".
 
+**While the agent has a turn open, it is not the person's turn.** The inferred gate
+("artifact written, nothing after") and a questions file with empty answers are both what a
+stage looks like in the middle of the agent's reply: the artifact is there, the next event
+has not landed, the file is being written. Seen live: the person answered and the Waiting
+row kept its colour through the whole reply. Nothing in the AI-DLC ledger says the agent is
+busy (HUMAN_TURN means the person spoke); Kiro's session store does, as a `turn_start` with
+no `turn_end` or `usage_summary` after it. `readKiroUsage` reports it as `agentBusySince`
+(open turns older than an hour are a crashed session, not work), `index.js` puts it in the
+project cache stamp (nothing under the project changes when a turn opens, so without that
+the row never refreshed), and `mergeWaiting` drops inferred gates and open questions while
+busy. Engine-stated waits (STAGE_AWAITING_APPROVAL, guard refusals) are kept. The row has a
+third state, "agent is working". Pins: kiro-usage "a turn_start with no turn_end";
+waiting-on-you "while the agent is busy".
+
 **A person's turn on v2 is a questions file with an open `[Answer]:`.** Guard refusals
 and parked plans are two sources; the third, and on real intents the common one, is a
 `*questions*.md` under `<phase>/<stage>/` with unanswered `[Answer]:` lines, the same

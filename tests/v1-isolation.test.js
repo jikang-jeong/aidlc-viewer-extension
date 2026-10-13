@@ -634,6 +634,7 @@ test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', 
   assert.equal(w.label, 'Waiting for you');
   assert.equal(w.description, '2 items · intent-capture');
   assert.equal(new WaitingItem({ count: 0, stages: [] }).description, 'nothing right now');
+  assert.equal(new WaitingItem({ count: 0, stages: [], agentBusy: true }).description, 'agent is working', 'a third state: the next question is on its way');
   assert.equal(new EngineRecordsItem().label, 'v2 Engine Log');
 
   // The gate itself, read from the source: the two rows are spread in under `isV2`.

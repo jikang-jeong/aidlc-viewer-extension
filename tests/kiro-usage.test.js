@@ -33,7 +33,7 @@ function withStore(build, run) {
   }
 }
 
-function ideSession(sessions, { id, workspace, model = 'claude-opus-4.8', turns = [], context = [] }) {
+function ideSession(sessions, { id, workspace, model = 'claude-opus-4.8', turns = [], context = [], openTurnAt } = {}) {
   const dir = path.join(sessions, 'wshash', `sess_${id}`);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
@@ -63,6 +63,10 @@ function ideSession(sessions, { id, workspace, model = 'claude-opus-4.8', turns 
   }
   for (const c of context) {
     lines.push(JSON.stringify({ id: `c-${lines.length}`, timestamp: c.at, payload: { type: 'session_metadata', key: 'contextUsage', value: { usagePercentage: c.percent } } }));
+  }
+  // A turn the agent is still working on: turn_start with nothing closing it.
+  if (openTurnAt !== undefined) {
+    lines.push(JSON.stringify({ id: `t-${lines.length}`, timestamp: openTurnAt, payload: { type: 'turn_start' } }));
   }
   fs.writeFileSync(path.join(dir, 'messages.jsonl'), lines.join('\n') + '\n');
 }
@@ -424,5 +428,31 @@ test('a turn with no assistant model is "not recorded", and does not borrow the 
     ({ project }) => {
       const u = usage.readKiroUsage(project);
       assert.deepEqual(u.turns.map((t) => t.model), ['gpt-5.6-sol', undefined]);
+    }
+  ));
+
+
+test('a turn_start with no turn_end or usage_summary after it means the agent is busy on this project', () =>
+  withStore(
+    ({ sessions, project }) => {
+      ideSession(sessions, { id: 'busy', workspace: project, turns: [{ at: min(1), credits: 1 }], openTurnAt: Date.now() - 30_000 });
+    },
+    ({ project }) => {
+      const u = usage.readKiroUsage(project);
+      assert.ok(Number.isFinite(u.agentBusySince), 'an open turn is reported');
+      assert.ok(Date.now() - u.agentBusySince < 60_000);
+    }
+  ));
+
+test('a closed turn is not busy, and an open turn older than an hour is a crashed session, not work', () =>
+  withStore(
+    ({ sessions, project }) => {
+      // Every turn closed by its usage_summary.
+      ideSession(sessions, { id: 'done', workspace: project, turns: [{ at: min(1), credits: 1 }, { at: min(2), credits: 1 }] });
+      // A turn_start from two hours ago with nothing after it.
+      ideSession(sessions, { id: 'stale', workspace: project, turns: [], openTurnAt: Date.now() - 2 * 60 * 60 * 1000 });
+    },
+    ({ project }) => {
+      assert.equal(usage.readKiroUsage(project).agentBusySince, undefined);
     }
   ));

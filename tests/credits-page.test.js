@@ -115,9 +115,13 @@ test('the Waiting row summary carries the count and the stages, and says nothing
   withKiroHome(
     () => {},
     ({ project }) => {
-      assert.deepEqual(page.waitingSummary(V2_WAITING(project)), { count: 2, stages: ['intent-capture', 'requirements-analysis'] });
+      assert.deepEqual(page.waitingSummary(V2_WAITING(project)), { count: 2, stages: ['intent-capture', 'requirements-analysis'], agentBusy: false });
       assert.equal(page.waitingSummary({ generation: 'v1' }), undefined);
-      assert.deepEqual(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [] } } } }), { count: 0, stages: [] });
+      assert.deepEqual(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [] } } } }), { count: 0, stages: [], agentBusy: false });
+      assert.deepEqual(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [], agentBusy: true } } } }), { count: 0, stages: [], agentBusy: true });
+      // And the page says why nothing is listed when the agent is mid-turn.
+      const html = page.renderWaitingPage({ webview, root: project, project: { generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [], agentBusy: true } } } } });
+      assert.match(html, /The agent is working on this project right now/);
     }
   ));
 

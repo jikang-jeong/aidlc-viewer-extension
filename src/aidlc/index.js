@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { GENERATION, detectGeneration } = require('./detect');
 const { buildV2 } = require('./journey-v2');
+const { readKiroUsage } = require('./kiro-usage');
 const { diagnose } = require('./diagnose');
 const { contested } = require('./contrast');
 
@@ -103,14 +104,20 @@ function readProject(root, options = {}) {
 
   // The v1 journey is not part of the cached value: the caller rebuilds it from
   // its own artifact walk each time, and for a v2 project it is only a fallback.
+  // Whether the agent is mid-turn on this project comes from Kiro's session store,
+  // outside the project folder, so no file under `root` changes when a turn opens or
+  // closes. It is part of the cache stamp for that reason: without it, the Waiting row
+  // kept its colour through the agent's whole reply, because nothing in the project had
+  // moved yet. The reader behind it caches for 5s, so this is cheap.
+  const agentBusy = readAgentBusy(root);
   const key = root;
-  const stamp = signature(root);
+  const stamp = `${signature(root)}|busy=${agentBusy}`;
   const hit = cache.get(key);
   if (hit && hit.stamp === stamp) {
     return { ...hit.value, journey: hit.value.journey ?? options.v1Journey };
   }
 
-  const value = buildProject(root, generation, markers);
+  const value = buildProject(root, generation, markers, agentBusy);
   cache.set(key, { stamp, value });
   // A user watches one project at a time; the cap exists so a long session that
   // moved between several does not hold every ledger it ever read.
@@ -120,7 +127,15 @@ function readProject(root, options = {}) {
   return { ...value, journey: value.journey ?? options.v1Journey };
 }
 
-function buildProject(root, generation, markers) {
+function readAgentBusy(root) {
+  try {
+    return Boolean(readKiroUsage(root).agentBusySince);
+  } catch {
+    return false;
+  }
+}
+
+function buildProject(root, generation, markers, agentBusy = false) {
   const model = buildV2(root);
   if (!model.ok) {
     // A v2 install whose compiled graph cannot be read. Reported rather than
@@ -129,9 +144,11 @@ function buildProject(root, generation, markers) {
     return { generation, markers, v2: { ok: false, reason: model.reason }, journey: undefined };
   }
 
-  // Supervision facts per intent, attached alongside its journey.
+  // Supervision facts per intent, attached alongside its journey. `agentBusy` is from
+  // Kiro's session record (a turn open on a session bound to this folder), read by the
+  // caller and part of its cache stamp.
   const intents = model.intents.map((intent) => {
-    const diagnosis = diagnose(intent.dir, { runtime: intent.runtime, knownStages: intent.stageSlugs, projectRoot: root });
+    const diagnosis = diagnose(intent.dir, { runtime: intent.runtime, knownStages: intent.stageSlugs, projectRoot: root, agentBusy });
     return {
       ...intent,
       diagnosis,

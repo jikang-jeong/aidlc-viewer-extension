@@ -211,3 +211,41 @@ test('questions files are found at the depth real intents use, and dot-directori
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+// ---------------------------------------------------------------------------
+// While the agent is working, it is not the person's turn
+// ---------------------------------------------------------------------------
+//
+// Seen live: the person answered, the agent began its reply, and for the whole reply the
+// Waiting row kept its colour. The inferred gate ("artifact written, nothing after")
+// and an open-answers questions file are both what a stage looks like mid-reply. The one
+// record that says "the agent is busy" is a turn open in Kiro's session store, read by
+// the caller and passed in as agentBusy.
+
+test('while the agent is busy, inferred gates and open questions are not listed, but a stated gate is', () => {
+  const inferred = [{ stage: 'requirements-analysis', stated: false, evidence: 'ARTIFACT_UPDATED' }];
+  const stated = [{ stage: 'functional-design', stated: true, evidence: 'STAGE_AWAITING_APPROVAL' }];
+  const questions = [{ relPath: 'inception/requirements-analysis/q.md', stage: 'requirements-analysis', open: 1, total: 3 }];
+
+  const idle = diag.mergeWaiting([...inferred, ...stated], [], [], questions, false);
+  assert.deepEqual(idle.map((w) => `${w.kind}:${w.stage}`).sort(), ['gate:functional-design', 'questions:requirements-analysis']);
+
+  const busy = diag.mergeWaiting([...inferred, ...stated], [], [], questions, true);
+  assert.deepEqual(busy.map((w) => `${w.kind}:${w.stage}`), ['gate:functional-design'], 'only what the engine itself stated survives a busy agent');
+});
+
+test('a guard refusal that needs a person is listed whether or not the agent is busy', () => {
+  const refusal = { requiresHuman: true, stage: 'code-generation', code: 'X', userMessage: 'm', remedies: [{ requiresHuman: true, label: 'r' }], count: 1 };
+  assert.equal(diag.mergeWaiting([], [refusal], [], [], true).length, 1);
+});
+
+test('diagnose carries agentBusy through so the page can say the agent is working', () => {
+  const { root, intent } = intentWith();
+  try {
+    assert.equal(diag.diagnose(intent, { projectRoot: root, agentBusy: true }).agentBusy, true);
+    assert.equal(diag.diagnose(intent, { projectRoot: root }).agentBusy, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

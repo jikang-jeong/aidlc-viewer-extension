@@ -166,6 +166,12 @@ function readIdeSession(dir, projectRoot, gaps) {
 
   const turns = [];
   const contextSamples = [];
+  // Whether the agent is in the middle of a turn: a turn_start with no turn_end or
+  // usage_summary after it. This is the one record that says "the agent is working
+  // right now", and it is what tells a person who has just answered apart from a person
+  // who is being waited on. Nothing in the AI-DLC ledger says it: HUMAN_TURN there means
+  // the person spoke, not that the agent is still busy with it.
+  let openTurnSince;
   // The model seen on assistant messages since the last usage_summary. A turn's model is
   // the last one seen before its summary; cleared after each summary so a model from one
   // turn cannot leak into the next.
@@ -188,11 +194,16 @@ function readIdeSession(dir, projectRoot, gaps) {
     }
     const payload = record?.payload;
     if (!payload || typeof payload.type !== 'string') continue;
-    if (payload.type === 'assistant' && payload.reasoningModelId !== undefined) {
+    if (payload.type === 'turn_start') {
+      openTurnSince = typeof record.timestamp === 'number' ? record.timestamp : Date.parse(record.timestamp);
+    } else if (payload.type === 'turn_end') {
+      openTurnSince = undefined;
+    } else if (payload.type === 'assistant' && payload.reasoningModelId !== undefined) {
       turnModel = modelFromReasoningId(payload.reasoningModelId) ?? turnModel;
     } else if (payload.type === IDE_USAGE_EVENT) {
       const turn = normaliseIdeTurn(record, meta, turnModel);
       turnModel = undefined;
+      openTurnSince = undefined;
       if (turn.status !== undefined && !KNOWN_STATUSES.has(turn.status)) gaps.unknownStatuses.add(turn.status);
       turns.push(turn);
     } else if (payload.type === IDE_METADATA_EVENT && payload.key === 'contextUsage') {
@@ -207,7 +218,7 @@ function readIdeSession(dir, projectRoot, gaps) {
   // picking one would be the same mistake as reading session.json.
   const seen = [...new Set(turns.map((t) => t.model).filter(Boolean))];
   const model = seen.length === 0 ? undefined : seen.join(', ');
-  return { id: meta.id, model, createdAt: Date.parse(meta.createdAt), turns, contextSamples, title: meta.title };
+  return { id: meta.id, model, createdAt: Date.parse(meta.createdAt), turns, contextSamples, title: meta.title, openTurnSince };
 }
 
 // Reads one CLI session file. The turn records sit at varying depths inside
@@ -337,7 +348,13 @@ function readKiroUsageUncached(projectRoot) {
   }
 
   const turns = sessions.flatMap((s) => s.turns).filter((t) => Number.isFinite(t.at)).sort((a, b) => a.at - b.at);
-  return { ok: true, storePath: root, sessions, turns, gaps: finishGaps(gaps) };
+  // The agent is working on this project right now if any of its sessions has a turn
+  // open. A stale open turn -- a session that crashed mid-turn months ago -- would keep
+  // saying "working" forever, so only an open turn younger than an hour counts; a real
+  // turn that runs longer than that has not been seen.
+  const openTurns = sessions.map((s) => s.openTurnSince).filter((t) => Number.isFinite(t) && Date.now() - t < 60 * 60 * 1000);
+  const agentBusySince = openTurns.length ? Math.max(...openTurns) : undefined;
+  return { ok: true, storePath: root, sessions, turns, agentBusySince, gaps: finishGaps(gaps) };
 }
 
 function finishGaps(gaps) {

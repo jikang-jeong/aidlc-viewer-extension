@@ -332,7 +332,9 @@ function diagnose(intentDir, options = {}) {
     // entries first because they carry the engine's own words and remedies.
     // Questions the engine wrote and a person has not answered yet.
     openQuestions,
-    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions),
+    // `agentBusy` comes from Kiro's session record, read by the caller.
+    agentBusy: Boolean(options.agentBusy),
+    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions, Boolean(options.agentBusy)),
     // An event name this build has no meaning for. Not an error: the vocabulary
     // differs between projects, and reporting it is how the next project tells
     // us what we have not met yet.
@@ -389,10 +391,14 @@ function readOpenQuestions(intentDir) {
 // One list for the page. A guard refusal with a human remedy, a parked plan, and an
 // inferred gate wait can all name the same stage; the stated ones win and the inferred
 // one is kept only when nothing stated covers that stage.
-function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions = []) {
+function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions = [], agentBusy = false) {
   const out = [];
   const covered = new Set();
-  for (const q of openQuestions) {
+  // While the agent has a turn open on this project, a questions file with empty
+  // answers is most likely the one it is writing right now -- seen live: the file
+  // appeared with one open [Answer]: while the agent's turn was still running. It
+  // becomes the person's turn when the agent's turn ends. Until then it is not listed.
+  for (const q of agentBusy ? [] : openQuestions) {
     out.push({
       kind: 'questions',
       stated: true,
@@ -434,6 +440,13 @@ function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions 
   }
   for (const w of approvalWaits ?? []) {
     if (w.stage && covered.has(w.stage)) continue;
+    // An INFERRED gate -- "an artifact was written and nothing moved the stage since" --
+    // is also what a stage looks like while the agent is working on the person's answer:
+    // the artifact is there, the next event has not landed yet. If Kiro's own record
+    // says a turn is open on this project, the agent is busy and this is not the
+    // person's turn. A gate the engine STATED (STAGE_AWAITING_APPROVAL) is kept: that
+    // is the engine's word, and a turn can be open for other reasons.
+    if (agentBusy && w.stated !== true) continue;
     out.push({ kind: 'gate', stated: w.stated === true, ...w });
   }
   return out;

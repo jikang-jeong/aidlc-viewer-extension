@@ -406,7 +406,10 @@ function waitingSection(project) {
   if (!intent) return `<section><h2>Waiting for you</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
   const waits = intent.diagnosis?.waitingOnYou ?? [];
   if (waits.length === 0) {
-    return `<section><h2>Waiting for you</h2><p class="quiet">Nothing is waiting on your decision. The engine recorded no unanswered question, no refusal that needs you, no parked plan, and no gate left open.</p></section>`;
+    const why = intent.diagnosis?.agentBusy
+      ? 'The agent is working on this project right now (a turn is open in Kiro), so the next question has not been asked yet.'
+      : 'The engine recorded no unanswered question, no refusal that needs you, no parked plan, and no gate left open.';
+    return `<section><h2>Waiting for you</h2><p class="quiet">Nothing is waiting on your decision. ${why}</p></section>`;
   }
   const items = waits
     .map((w) => {
@@ -559,7 +562,7 @@ function waitingSummary(project) {
   const intent = project?.v2?.active;
   if (!intent) return undefined;
   const waits = intent.diagnosis?.waitingOnYou ?? [];
-  return { count: waits.length, stages: [...new Set(waits.map((w) => w.stage).filter(Boolean))] };
+  return { count: waits.length, stages: [...new Set(waits.map((w) => w.stage).filter(Boolean))], agentBusy: Boolean(intent.diagnosis?.agentBusy) };
 }
 
 function shell({ webview, root, project, nonce: fixedNonce, title }, sections) {

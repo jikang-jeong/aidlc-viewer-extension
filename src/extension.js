@@ -1435,10 +1435,15 @@ class WaitingItem extends vscode.TreeItem {
       new vscode.ThemeColor(n > 0 ? 'editorWarning.foreground' : 'descriptionForeground')
     );
     this.command = { command: 'markdownWatchViewer.showWaiting', title: `Open the ${PAGE_TITLE.waiting} page` };
-    this.description = n > 0 ? `${n} item${n === 1 ? '' : 's'}${summary.stages.length ? ` · ${summary.stages.join(', ')}` : ''}` : 'nothing right now';
+    // Three states, not two: something waits; nothing waits and the agent is working
+    // (so the next question is on its way); nothing waits and nothing is happening.
+    const busy = Boolean(summary && summary.agentBusy);
+    this.description = n > 0
+      ? `${n} item${n === 1 ? '' : 's'}${summary.stages.length ? ` · ${summary.stages.join(', ')}` : ''}`
+      : busy ? 'agent is working' : 'nothing right now';
     this.tooltip = n > 0
       ? `${n} item(s) are waiting on your decision. Open the page to see what the engine asked for.`
-      : 'Nothing is waiting on your decision.';
+      : busy ? 'The agent has a turn open on this project. Nothing is waiting on you until it finishes.' : 'Nothing is waiting on your decision.';
   }
 }
 
