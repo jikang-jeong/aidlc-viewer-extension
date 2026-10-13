@@ -55,6 +55,8 @@ const MUST_SAY = {
   'the Waiting row changes colour (KO)': ['색이 바뀌는 행'],
   'the Waiting row has an agent-is-working state': ['agent is working'],
   'chat questions are a source (EN, KO)': ['A question in the chat', '채팅의 질문'],
+  'the engine stop reason is a source (EN, KO)': ['The engine stopped for you', '엔진이 당신 때문에 멈춤'],
+  'the see-the-chat state': ['see the agent'],
   'Usage re-reads while open (EN)': ['re-reads every few seconds'],
   'start commands per generation': ['Using AI-DLC', '/aidlc'],
   'a start page opens after setup (EN)': ['a page opens in the editor'],

@@ -265,3 +265,72 @@ test('a question pending in the chat is waiting on you, in Kiro\u2019s own words
     assert.equal(out[0].session, 'Demo');
   }
 });
+
+
+// ---------------------------------------------------------------------------
+// Why the engine let the last turn end
+// ---------------------------------------------------------------------------
+//
+// The engine's continue-workflow hook writes one line per allowed stop to
+// .aidlc-hooks-health/continue-workflow.drops: "<iso>\t<reason>; allowing the stop
+// (<kind> carve-out)". Five kinds across 164 lines in the samples; three of them say the
+// person is being waited on, in the engine's words.
+
+function dropsFile(intent, lines) {
+  fs.mkdirSync(path.join(intent, '.aidlc-hooks-health'), { recursive: true });
+  fs.writeFileSync(path.join(intent, '.aidlc-hooks-health', 'continue-workflow.drops'), lines.join('\n') + '\n');
+}
+
+test('the last human-wait stop reason is a stated wait on its stage, and covers an inferred gate there', () => {
+  const { root, intent } = intentWith();
+  dropsFile(intent, [
+    '2026-10-13T07:32:43Z\tactive stage requirements-analysis has an unanswered question; allowing the stop (pending-question carve-out)',
+    '2026-10-13T07:48:47Z\tcurrent stage requirements-analysis is awaiting approval or being revised; allowing the stop (human-wait carve-out)'
+  ]);
+  try {
+    const d = diag.diagnose(intent, { projectRoot: root });
+    assert.equal(d.lastStop.kind, 'human-wait');
+    assert.equal(d.lastStop.stage, 'requirements-analysis');
+    assert.equal(d.lastStop.humanWait, true);
+    const w = d.waitingOnYou;
+    assert.equal(w.length, 1);
+    assert.equal(w[0].kind, 'engine-stop');
+    assert.equal(w[0].stated, true);
+    assert.equal(w[0].stage, 'requirements-analysis');
+    assert.match(w[0].detail, /human-wait carve-out/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a conversational stop is not a wait, and is reported so the row can say "see the chat"', () => {
+  const { root, intent } = intentWith();
+  dropsFile(intent, ["2026-10-13T09:12:23Z\tthe ending turn was conversational (human's last prompt answered with no workflow-engine call); allowing the stop (conversational carve-out)"]);
+  try {
+    const d = diag.diagnose(intent, { projectRoot: root });
+    assert.equal(d.lastStop.kind, 'conversational');
+    assert.equal(d.lastStop.humanWait, false);
+    assert.deepEqual(d.waitingOnYou, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a stop reason older than the ledger\u2019s last event is stale: the stop it explains is over', () => {
+  const { root, intent } = intentWith();
+  dropsFile(intent, ['2026-10-13T04:12:06Z\tcurrent stage intent-capture has an unanswered logged decision; allowing the stop (pending-decision carve-out)']);
+  fs.writeFileSync(path.join(intent, 'audit', 'shard.md'), '**Timestamp**: 2026-10-13T04:26:47Z\n**Event**: ERROR_LOGGED\n');
+  try {
+    const d = diag.diagnose(intent, { projectRoot: root });
+    assert.equal(d.lastStop.stale, true);
+    assert.deepEqual(d.waitingOnYou, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a human-wait stop is not listed while the agent is busy: a new turn supersedes the old stop', () => {
+  const stop = { at: Date.now(), kind: 'human-wait', stage: 's', humanWait: true, stale: false, reason: 'r' };
+  assert.equal(diag.mergeWaiting([], [], [], [], false, [], stop).length, 1);
+  assert.equal(diag.mergeWaiting([], [], [], [], true, [], stop).length, 0);
+});

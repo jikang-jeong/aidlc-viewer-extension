@@ -306,6 +306,8 @@ function diagnose(intentDir, options = {}) {
   const approvalWaits = describeApprovalWaits(summary, options.runtime);
   const guardRefusals = readGuardRefusals(intentDir);
   const openQuestions = readOpenQuestions(intentDir);
+  const ledgerLatest = Math.max(-Infinity, ...summary.events.map((e) => Date.parse(e.timestamp)).filter(Number.isFinite));
+  const lastStop = readLastStopReason(intentDir, ledgerLatest);
   const intentId = path.basename(intentDir);
   const planApproval = options.projectRoot
     ? readPlanApprovalRequests(options.projectRoot).filter(
@@ -334,7 +336,9 @@ function diagnose(intentDir, options = {}) {
     openQuestions,
     // `agentBusy` comes from Kiro's session record, read by the caller.
     agentBusy: Boolean(options.agentBusy),
-    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions, Boolean(options.agentBusy), options.chatQuestions ?? []),
+    // Why the engine let the last turn end, in its own words.
+    lastStop,
+    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions, Boolean(options.agentBusy), options.chatQuestions ?? [], lastStop),
     // An event name this build has no meaning for. Not an error: the vocabulary
     // differs between projects, and reporting it is how the next project tells
     // us what we have not met yet.
@@ -388,12 +392,79 @@ function readOpenQuestions(intentDir) {
   return out;
 }
 
+// Why the engine let the agent's last turn end.
+//
+// The engine's continue-workflow hook runs when the agent stops, and when it allows the
+// stop it appends one line to `.aidlc-hooks-health/continue-workflow.drops`:
+//
+//   <iso>\t<reason>; allowing the stop (<kind> carve-out)
+//
+// Five kinds across every sample (164 lines): pending-question (a questions file has an
+// unanswered question), pending-decision (a logged decision is unanswered), human-wait
+// (the stage is awaiting approval or being revised), conversational (the human's last
+// prompt was answered with no engine call), and the plain reason without a carve-out.
+// The first three say, in the engine's own words, that the person is being waited on.
+//
+// Read live: the agent told the person "type /aidlc --stage code-generation" and ended
+// its turn; the ledger showed only HUMAN_TURN, no questions file had an open answer, and
+// the row read "nothing right now". The hook had written "conversational carve-out" for
+// that very stop. A conversational stop is not itself a wait -- the agent may have just
+// said "done" -- but the three human-wait kinds are, and they are the engine's word for
+// the state this page exists to show.
+//
+// Only the LAST line counts, and only when nothing in the ledger is newer than it: a
+// reason the engine gave for a stop an hour ago, with stages run since, describes the
+// past. On the samples the last line agreed with the ledger-based judgement in four of
+// five; the fifth was exactly that stale case.
+const HUMAN_WAIT_CARVE_OUTS = new Map([
+  ['pending-question', 'The engine says a question in this stage is unanswered.'],
+  ['pending-decision', 'The engine says a logged decision in this stage is unanswered.'],
+  ['human-wait', 'The engine says this stage is awaiting your approval or being revised.']
+]);
+function readLastStopReason(intentDir, ledgerLatest) {
+  let text;
+  try {
+    text = fs.readFileSync(path.join(intentDir, '.aidlc-hooks-health', 'continue-workflow.drops'), 'utf8');
+  } catch {
+    return undefined;
+  }
+  const lines = text.split('\n').filter((l) => l.trim());
+  if (lines.length === 0) return undefined;
+  const last = lines[lines.length - 1];
+  const tab = last.indexOf('\t');
+  if (tab < 0) return undefined;
+  const at = Date.parse(last.slice(0, tab));
+  const reason = last.slice(tab + 1).trim();
+  if (!Number.isFinite(at)) return undefined;
+  // Superseded by later engine activity: the stop it explains is over.
+  if (Number.isFinite(ledgerLatest) && ledgerLatest > at + 1000) return { at, reason, stale: true };
+  const kind = /\(([a-z-]+) carve-out\)\s*$/.exec(reason)?.[1];
+  const stage = /\bstage ([a-z0-9-]+)\b/.exec(reason)?.[1];
+  return { at, reason, kind, stage, humanWait: HUMAN_WAIT_CARVE_OUTS.has(kind), stale: false };
+}
+
 // One list for the page. A guard refusal with a human remedy, a parked plan, and an
 // inferred gate wait can all name the same stage; the stated ones win and the inferred
 // one is kept only when nothing stated covers that stage.
-function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions = [], agentBusy = false, chatQuestions = []) {
+function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions = [], agentBusy = false, chatQuestions = [], lastStop = undefined) {
   const out = [];
   const covered = new Set();
+  // The engine's own word for why the agent stopped, when that word is "waiting on the
+  // person" and nothing has happened since. Listed first because it is the one source
+  // that is both the engine's and about the present moment. Not listed while the agent
+  // is busy: a new turn supersedes the reason the last one ended.
+  if (lastStop && lastStop.humanWait && !lastStop.stale && !agentBusy) {
+    out.push({
+      kind: 'engine-stop',
+      stated: true,
+      stage: lastStop.stage,
+      code: `${lastStop.kind} carve-out`,
+      message: HUMAN_WAIT_CARVE_OUTS.get(lastStop.kind),
+      detail: lastStop.reason,
+      updatedAt: new Date(lastStop.at).toISOString()
+    });
+    if (lastStop.stage) covered.add(lastStop.stage);
+  }
   // What Kiro recorded the agent asking in the chat, unanswered. The most direct form of
   // "waiting on you" there is: the question is on screen and the agent has stopped. It
   // names no stage (the chat does not know stages), so it never covers one, and it is
@@ -414,6 +485,7 @@ function mergeWaiting(approvalWaits, guardRefusals, planApproval, openQuestions 
   // appeared with one open [Answer]: while the agent's turn was still running. It
   // becomes the person's turn when the agent's turn ends. Until then it is not listed.
   for (const q of agentBusy ? [] : openQuestions) {
+    if (q.stage && covered.has(q.stage)) continue;
     out.push({
       kind: 'questions',
       stated: true,
@@ -485,6 +557,7 @@ function byTimestamp(events) {
 
 module.exports = {
   readOpenQuestions,
+  readLastStopReason,
   readGuardRefusals,
   readPlanApprovalRequests,
   mergeWaiting,

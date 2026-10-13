@@ -635,6 +635,7 @@ test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', 
   assert.equal(w.description, '2 items · intent-capture');
   assert.equal(new WaitingItem({ count: 0, stages: [] }).description, 'nothing right now');
   assert.equal(new WaitingItem({ count: 0, stages: [], agentBusy: true }).description, 'agent is working', 'a third state: the next question is on its way');
+  assert.equal(new WaitingItem({ count: 0, stages: [], endedInChat: true }).description, 'see the agent\u2019s last message', 'a fourth: the agent stopped with a message and no workflow step');
   assert.equal(new EngineRecordsItem().label, 'v2 Engine Log');
 
   // The gate itself, read from the source: the two rows are spread in under `isV2`.
@@ -662,6 +663,13 @@ test('the Waiting row is coloured through the decoration provider: warning colou
   const dim = provider.provideFileDecoration(idle.resourceUri);
   assert.equal(dim.badge, undefined, 'no badge when nothing waits');
   assert.ok(dim.color, 'dimmed, not undecorated: "nothing right now" is a state, not a failure to update');
+
+  // The agent stopped with a message: coloured so the eye goes there, no count because
+  // there is nothing to do but read.
+  const chat = provider.provideFileDecoration(new WaitingItem({ count: 0, stages: [], endedInChat: true }).resourceUri);
+  assert.equal(chat.badge, '\u2026');
+  assert.ok(chat.color);
+  assert.notEqual(chat.tooltip, dim.tooltip);
 
   // Different counts are different URIs, so VS Code asks for the decoration again on
   // its own; no change event has to be fired.

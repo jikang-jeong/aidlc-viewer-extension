@@ -115,10 +115,16 @@ test('the Waiting row summary carries the count and the stages, and says nothing
   withKiroHome(
     () => {},
     ({ project }) => {
-      assert.deepEqual(page.waitingSummary(V2_WAITING(project)), { count: 2, stages: ['intent-capture', 'requirements-analysis'], agentBusy: false });
+      assert.deepEqual(page.waitingSummary(V2_WAITING(project)), { count: 2, stages: ['intent-capture', 'requirements-analysis'], agentBusy: false, endedInChat: false });
       assert.equal(page.waitingSummary({ generation: 'v1' }), undefined);
-      assert.deepEqual(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [] } } } }), { count: 0, stages: [], agentBusy: false });
-      assert.deepEqual(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [], agentBusy: true } } } }), { count: 0, stages: [], agentBusy: true });
+      assert.deepEqual(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [] } } } }), { count: 0, stages: [], agentBusy: false, endedInChat: false });
+      assert.deepEqual(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [], agentBusy: true } } } }), { count: 0, stages: [], agentBusy: true, endedInChat: false });
+      // The agent's last turn ended with a message and no engine call, nothing since.
+      const conv = { generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [], lastStop: { kind: 'conversational', stale: false } } } } };
+      assert.equal(page.waitingSummary(conv).endedInChat, true);
+      assert.match(page.renderWaitingPage({ webview, root: project, project: conv }), /Read its last message in the chat/);
+      // A stale conversational stop (engine activity since) is not that.
+      assert.equal(page.waitingSummary({ generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [], lastStop: { kind: 'conversational', stale: true } } } } }).endedInChat, false);
       // And the page says why nothing is listed when the agent is mid-turn.
       const html = page.renderWaitingPage({ webview, root: project, project: { generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [], agentBusy: true } } } } });
       assert.match(html, /The agent is working on this project right now/);
@@ -390,4 +396,13 @@ test('a chat question on the Waiting page shows the question, the options, and s
   assert.match(html, /Answer in Kiro\u2019s chat\./);
   assert.match(html, /<code>Looks correct<\/code> <code>Request changes<\/code>/);
   assert.deepEqual(page.waitingSummary(project).stages, ['in the chat']);
+});
+
+
+test('an engine-stop wait on the Waiting page quotes the hook\u2019s own line', () => {
+  const project = { generation: 'v2', v2: { active: { diagnosis: { waitingOnYou: [{ kind: 'engine-stop', stated: true, stage: 'requirements-analysis', code: 'human-wait carve-out', message: 'The engine says this stage is awaiting your approval or being revised.', detail: 'current stage requirements-analysis is awaiting approval or being revised; allowing the stop (human-wait carve-out)' }] } } } };
+  const html = page.renderWaitingPage({ webview, root: '/p/x', project });
+  assert.match(html, /The engine stopped for you · requirements-analysis/);
+  assert.match(html, /engine says/);
+  assert.match(html, /allowing the stop \(human-wait carve-out\)/);
 });

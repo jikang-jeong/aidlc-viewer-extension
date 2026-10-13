@@ -1377,13 +1377,20 @@ class StageDecorationProvider {
       // the badge, so the row reads differently from everything around it. Without: the
       // label dimmed, so "nothing right now" is visibly the quiet state and not a
       // row that failed to update.
-      const n = Number(uri.path.replace(/^\//, '')) || 0;
+      const [, count, state] = uri.path.split('/');
+      const n = Number(count) || 0;
       if (n > 0) {
         return {
           color: new vscode.ThemeColor('editorWarning.foreground'),
           badge: n > 99 ? '99' : String(n),
           tooltip: `${n} item(s) waiting on your decision`
         };
+      }
+      // The agent stopped with a message and no workflow step: not a recorded wait, but
+      // the person should look at the chat. Coloured, with no count, so it reads as
+      // "something to see" rather than "something to do".
+      if (state === 'chat') {
+        return { color: new vscode.ThemeColor('charts.blue'), badge: '\u2026', tooltip: 'The agent ended its turn with a message. See the chat.' };
       }
       return { color: new vscode.ThemeColor('descriptionForeground') };
     }
@@ -1442,7 +1449,8 @@ class WaitingItem extends vscode.TreeItem {
     super(PAGE_TITLE.waiting, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'waiting';
     const n = summary ? summary.count : 0;
-    this.resourceUri = vscode.Uri.from({ scheme: WAITING_SCHEME, path: `/${n}` });
+    const state = summary && summary.agentBusy ? 'busy' : summary && summary.endedInChat ? 'chat' : 'idle';
+    this.resourceUri = vscode.Uri.from({ scheme: WAITING_SCHEME, path: `/${n}/${state}` });
     this.iconPath = new vscode.ThemeIcon(
       n > 0 ? 'bell-dot' : 'bell',
       new vscode.ThemeColor(n > 0 ? 'editorWarning.foreground' : 'descriptionForeground')
@@ -1451,12 +1459,19 @@ class WaitingItem extends vscode.TreeItem {
     // Three states, not two: something waits; nothing waits and the agent is working
     // (so the next question is on its way); nothing waits and nothing is happening.
     const busy = Boolean(summary && summary.agentBusy);
+    const endedInChat = Boolean(summary && summary.endedInChat);
+    // Four states. Something waits; the agent is working; the agent stopped with a
+    // message and no workflow step (read the chat); nothing is happening.
     this.description = n > 0
       ? `${n} item${n === 1 ? '' : 's'}${summary.stages.length ? ` · ${summary.stages.join(', ')}` : ''}`
-      : busy ? 'agent is working' : 'nothing right now';
+      : busy ? 'agent is working'
+        : endedInChat ? 'see the agent\u2019s last message'
+          : 'nothing right now';
     this.tooltip = n > 0
       ? `${n} item(s) are waiting on your decision. Open the page to see what the engine asked for.`
-      : busy ? 'The agent has a turn open on this project. Nothing is waiting on you until it finishes.' : 'Nothing is waiting on your decision.';
+      : busy ? 'The agent has a turn open on this project. Nothing is waiting on you until it finishes.'
+        : endedInChat ? 'The agent ended its last turn with a message and no workflow step. It may be telling you what to type next.'
+          : 'Nothing is waiting on your decision.';
   }
 }
 
@@ -3621,8 +3636,9 @@ function getHelpHtml() {
 
 <div class="stage-card supervision">
   <h3>🔔 Waiting for you — v2 only</h3>
-  <p>A row that <strong>changes colour</strong>: when something is waiting, its label turns to the warning colour with the count as a badge and the bell gets a dot; while the agent is working on your last answer it reads <em>agent is working</em>; when nothing is happening it dims to <em>nothing right now</em>. So you know without opening anything. A stage waiting on you is stopped, not slow, and the chat said so once and scrolled away. The page lists each item in the engine's own words:</p>
+  <p>A row that <strong>changes colour</strong>: when something is waiting, its label turns to the warning colour with the count as a badge and the bell gets a dot; while the agent is working on your last answer it reads <em>agent is working</em>; when the agent ended its turn with a message and no workflow step it reads <em>see the agent\u2019s last message</em> in blue, because that message may be telling you what to type; when nothing is happening it dims to <em>nothing right now</em>. So you know without opening anything. A stage waiting on you is stopped, not slow, and the chat said so once and scrolled away. The page lists each item in the engine's own words:</p>
   <ul>
+    <li><strong>The engine stopped for you</strong>: when the agent ends a turn, the engine\u2019s hook writes why it allowed the stop, and three of its reasons mean you: an unanswered question, an unanswered decision, a stage awaiting your approval. Shown in the engine\u2019s words.</li>
     <li><strong>A question in the chat</strong>: the agent asked you something and stopped. Kiro records the question itself, so the row lights up with it and goes quiet when you answer. Tool approvals are not shown: they take seconds on the button beside the chat.</li>
     <li><strong>Questions to answer</strong>: a questions file the engine wrote with empty <code>[Answer]:</code> lines, with the file and how many. Open it from the tree, fill them in, and tell the agent to continue.</li>
     <li><strong>Refusals</strong> the engine marked as needing you, with the remedies it listed as yours.</li>
@@ -3718,8 +3734,9 @@ function getHelpHtml() {
 
 <div class="stage-card supervision">
   <h3>🔔 Waiting for you(당신을 기다림) — v2 전용</h3>
-  <p><strong>색이 바뀌는 행</strong>입니다. 기다리는 것이 있으면 라벨이 경고색으로 바뀌고 개수 배지가 붙고 벨에 점이 생기며, 에이전트가 방금 답한 것을 처리하는 동안은 <em>agent is working</em>, 아무 일도 없으면 <em>nothing right now</em>로 흐려집니다. 열지 않아도 알 수 있습니다. 당신을 기다리는 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 말 그대로 보여줍니다.</p>
+  <p><strong>색이 바뀌는 행</strong>입니다. 기다리는 것이 있으면 라벨이 경고색으로 바뀌고 개수 배지가 붙고 벨에 점이 생기며, 에이전트가 방금 답한 것을 처리하는 동안은 <em>agent is working</em>, 에이전트가 워크플로우 단계 없이 메시지만 남기고 턴을 끝냈으면 파란색으로 <em>see the agent\u2019s last message</em>(그 메시지가 다음에 입력할 것을 알려주고 있을 수 있습니다), 아무 일도 없으면 <em>nothing right now</em>로 흐려집니다. 열지 않아도 알 수 있습니다. 당신을 기다리는 단계는 느린 것이 아니라 멈춘 것이고, 채팅은 그 말을 한 번 하고 흘러갔습니다. 페이지는 각 항목을 엔진의 말 그대로 보여줍니다.</p>
   <ul>
+    <li><strong>엔진이 당신 때문에 멈춤</strong>: 에이전트가 턴을 끝낼 때 엔진의 훅이 왜 멈추게 두었는지 적습니다. 그 사유 중 셋이 당신을 뜻합니다. 미응답 질문, 미응답 결정, 승인 대기 중인 단계. 엔진의 말 그대로 보여줍니다.</li>
     <li><strong>채팅의 질문</strong>: 에이전트가 무언가 물어보고 멈춘 것. Kiro가 질문 자체를 기록하므로 행이 그 질문과 함께 켜지고, 답하면 조용해집니다. 도구 실행 승인은 보여주지 않습니다. 채팅 옆 버튼으로 몇 초 안에 끝나는 일이기 때문입니다.</li>
     <li><strong>답할 질문</strong>: 엔진이 쓴 질문 파일에 빈 <code>[Answer]:</code>가 남아 있는 것. 파일 이름과 개수가 함께 나옵니다. 트리에서 열어 채우고 에이전트에게 계속하라고 하면 됩니다.</li>
     <li><strong>거부</strong>: 엔진이 당신이 필요하다고 표시한 것과, 당신 몫으로 적은 조치.</li>

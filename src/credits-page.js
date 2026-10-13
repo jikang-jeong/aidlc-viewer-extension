@@ -406,9 +406,12 @@ function waitingSection(project) {
   if (!intent) return `<section><h2>Waiting for you</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
   const waits = intent.diagnosis?.waitingOnYou ?? [];
   if (waits.length === 0) {
+    const stop = intent.diagnosis?.lastStop;
     const why = intent.diagnosis?.agentBusy
       ? 'The agent is working on this project right now (a turn is open in Kiro), so the next question has not been asked yet.'
-      : 'The engine recorded no unanswered question, no refusal that needs you, no parked plan, and no gate left open.';
+      : stop && stop.kind === 'conversational' && !stop.stale
+        ? 'The agent\u2019s last turn ended with a message and no workflow step, and nothing has happened since. Read its last message in the chat: it may be telling you what to type next.'
+        : 'The engine recorded no unanswered question, no refusal that needs you, no parked plan, and no gate left open.';
     return `<section><h2>Waiting for you</h2><p class="quiet">Nothing is waiting on your decision. ${why}</p></section>`;
   }
   const items = waits
@@ -424,12 +427,16 @@ function waitingSection(project) {
             ? `Questions to answer · ${escapeHtml(w.stage ?? 'unknown stage')}`
             : w.kind === 'chat'
               ? `The agent is asking you in the chat${w.session ? ` · ${escapeHtml(w.session)}` : ''}`
-              : `${escapeHtml(w.stage ?? 'unknown stage')}${w.code ? ` · ${escapeHtml(w.code)}` : ''}`;
+              : w.kind === 'engine-stop'
+                ? `The engine stopped for you${w.stage ? ` · ${escapeHtml(w.stage)}` : ''}`
+                : `${escapeHtml(w.stage ?? 'unknown stage')}${w.code ? ` · ${escapeHtml(w.code)}` : ''}`;
       const how = w.kind === 'questions'
         ? `<div class="sub">Open the file from the tree and fill in each empty <code>[Answer]:</code>, then tell the agent to continue.</div>`
         : w.kind === 'chat'
           ? `<div class="sub">Answer in Kiro\u2019s chat.${w.options && w.options.length ? ` Options the agent offered: ${w.options.map((o) => `<code>${escapeHtml(o)}</code>`).join(' ')}` : ''}</div>`
-          : '';
+          : w.kind === 'engine-stop'
+            ? `<div class="sub">The engine\u2019s hook wrote, when the agent stopped: <code>${escapeHtml(w.detail ?? '')}</code></div>`
+            : '';
       return `<li class="wait">
         <div class="wait-head">${head} ${who}${typeof w.count === 'number' && w.count > 1 ? ` <span class="sub">×${w.count}</span>` : ''}</div>
         ${w.message ? `<div class="wait-msg">${escapeHtml(w.message)}</div>` : ''}
@@ -570,7 +577,16 @@ function waitingSummary(project) {
   const waits = intent.diagnosis?.waitingOnYou ?? [];
   const stages = [...new Set(waits.map((w) => w.stage).filter(Boolean))];
   if (waits.some((w) => w.kind === 'chat')) stages.unshift('in the chat');
-  return { count: waits.length, stages, agentBusy: Boolean(intent.diagnosis?.agentBusy) };
+  const lastStop = intent.diagnosis?.lastStop;
+  return {
+    count: waits.length,
+    stages,
+    agentBusy: Boolean(intent.diagnosis?.agentBusy),
+    // The agent's last turn ended with a message and no engine call, and nothing has
+    // happened since. Not a wait the engine recorded -- but the agent said something and
+    // stopped, and the person should read it.
+    endedInChat: Boolean(lastStop && lastStop.kind === 'conversational' && !lastStop.stale)
+  };
 }
 
 function shell({ webview, root, project, nonce: fixedNonce, title }, sections) {

@@ -152,6 +152,21 @@ changed on purpose: its Build and Test is `pending` in the runtime graph with ar
 written and nothing after, which is a wait by the rule. Pins: v2-robustness, four tests
 under "2.11.0 ledgers put the stage in a Context path".
 
+**The engine writes why it let the agent stop, and three of its reasons mean "waiting on
+you".** `.aidlc-hooks-health/continue-workflow.drops` gets one line per allowed stop:
+`<iso>\t<reason>; allowing the stop (<kind> carve-out)`. Five kinds across 164 lines in the
+samples: `pending-question`, `pending-decision`, `human-wait` (the person), `conversational`
+(the agent answered in prose with no engine call), and a plain reason. Found while asking why
+the row read "nothing right now" under an agent message saying "type /aidlc --stage
+code-generation": the hook had written `conversational carve-out` for that very stop. Only the
+last line counts, and only when the ledger has nothing newer (the stop it explains would be
+over; one sample was exactly that). A human-wait kind is a stated wait on its stage and covers
+inferred gates and questions files there; on the samples it agreed with the ledger judgement
+wherever both spoke. A conversational stop is not a wait, but the row says "see the agent's
+last message" in blue, because that message is often the instruction. Pins: waiting-on-you
+"the last human-wait stop reason", "a conversational stop", "a stop reason older than the
+ledger"; v1-isolation decoration test.
+
 **The most common wait leaves no file: the agent asked in the chat.** Kiro records it:
 `pending_interaction` (`interactionType`, `toolCallId`, `question`, `options`) when the agent
 asks, `interaction_resolved` with the same `toolCallId` when the person answers. 342 on this
