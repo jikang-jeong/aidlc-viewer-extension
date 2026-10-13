@@ -44,7 +44,7 @@ Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit
 
 ### What Kiro spent, and what is waiting on you
 
-The **Credits** row at the top of the tree opens a page. Every number on it is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
+The **Tokens (Credits)** row at the top of the tree opens a page. Every number on it is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
 
 - **Total credits on this project**, and beside it the credits spent on turns Kiro marked **aborted or failed**: work that was paid for and produced nothing. That second number is the one to act on.
 - **By stage.** A turn is placed in a stage when its time falls inside that stage's window, from the engine's audit ledger on v2 and from the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.
@@ -81,7 +81,7 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
   the source on one side showed everything twice and left room for neither. What you
   type is exactly what is saved — the view never rewrites your Markdown from the
   rendering, which is the one way a viewer could silently alter a file.
-- **Credits.** A new row at the top of the tree opens a page with what Kiro spent on this
+- **Tokens (Credits).** A new row at the top of the tree opens a page with what Kiro spent on this
   project: total credits, the credits spent on aborted or failed turns, a breakdown by
   stage and by session, context-window usage per session, and token counts where Kiro CLI
   recorded them. Every number is Kiro's own record. Nothing is estimated and no money is

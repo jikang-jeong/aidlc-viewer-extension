@@ -55,7 +55,7 @@ test('v1 shows Credits only -- no Waiting, no engine records -- so its page matc
       const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
       const s = sections(html);
       assert.deepEqual(s.filter((x) => /Waiting|Engine records|stuck|Checks/.test(x)), []);
-      assert.ok(s.includes('Credits'));
+      assert.ok(s.includes('Tokens (Credits)'));
     }
   ));
 

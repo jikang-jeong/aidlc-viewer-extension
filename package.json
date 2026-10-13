@@ -84,7 +84,7 @@
       },
       {
         "command": "markdownWatchViewer.showCredits",
-        "title": "AI-DLC: Credits",
+        "title": "AI-DLC: Tokens (Credits)",
         "icon": "$(graph)"
       }
     ],

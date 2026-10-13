@@ -263,15 +263,15 @@ ${detailRows}`;
 
 function creditsHeadline(model) {
   if (!model.ok) {
-    return `<section><h2>Credits</h2><p class="quiet">Kiro's session store was not found at <code>${escapeHtml(model.storePath)}</code>. Kiro writes credit usage there per prompt turn; until it exists there is nothing to show.</p></section>`;
+    return `<section><h2>Tokens (Credits)</h2><p class="quiet">Kiro's session store was not found at <code>${escapeHtml(model.storePath)}</code>. Kiro writes credit usage there per prompt turn; until it exists there is nothing to show.</p></section>`;
   }
   const a = model.attribution;
   if (a.totalTurns === 0) {
-    return `<section><h2>Credits</h2><p class="quiet">No Kiro session has been opened on this folder yet. Sessions opened on a parent folder are not counted, because nothing in Kiro's record says which project their turns were about.</p></section>`;
+    return `<section><h2>Tokens (Credits)</h2><p class="quiet">No Kiro session has been opened on this folder yet. Sessions opened on a parent folder are not counted, because nothing in Kiro's record says which project their turns were about.</p></section>`;
   }
   const wastedPct = a.total > 0 ? Math.round((a.wasted / a.total) * 100) : 0;
   return `<section>
-  <h2>Credits</h2>
+  <h2>Tokens (Credits)</h2>
   <div class="tiles">
     <div class="tile"><div class="big">${fmtCredits(a.total)}</div><div class="label">credits on this project</div><div class="sub">${a.totalTurns} prompt turn${a.totalTurns === 1 ? '' : 's'} across ${model.sessions.length} session${model.sessions.length === 1 ? '' : 's'}</div></div>
     <div class="tile ${a.wasted > 0 ? 'warn' : ''}"><div class="big">${fmtCredits(a.wasted)}</div><div class="label">spent on turns that were aborted or failed</div><div class="sub">${a.wastedTurns} turn${a.wastedTurns === 1 ? '' : 's'}${a.total > 0 ? `, ${wastedPct}% of the total` : ''}</div></div>
@@ -403,7 +403,7 @@ function renderCreditsPage({ webview, root, project }) {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${n}'; script-src 'nonce-${n}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Credits</title>
+<title>Tokens (Credits)</title>
 <style nonce="${n}">
   :root { --purple: var(--vscode-charts-purple, #a371f7); --warn: var(--vscode-editorWarning-foreground, #cca700); }
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px 28px 40px; max-width: 980px; margin: 0 auto; line-height: 1.5; }
