@@ -55,7 +55,7 @@ test('v1 shows Credits only -- no Waiting, no engine records -- so its page matc
       const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
       const s = sections(html);
       assert.deepEqual(s.filter((x) => /Waiting|Engine records|stuck|Checks/.test(x)), []);
-      assert.ok(s.includes('Tokens (Credits)'));
+      assert.ok(s.includes('Credits (Tokens)'));
     }
   ));
 
@@ -159,3 +159,48 @@ test('a session title is escaped, because it is text a person typed into Kiro', 
       assert.match(html, /&lt;img src=x/);
     }
   ));
+
+test('the history lists every turn newest first, with its stage attribution and status', () =>
+  withKiroHome(
+    ({ home, project }) => ideSession(home, project, [{ at: T, credits: 10 }, { at: T + 60000, credits: 40, status: 'aborted' }, { at: T + 120000, credits: 5 }]),
+    ({ project }) => {
+      const m = page.collectCreditsModel(project, { generation: 'v1' });
+      assert.equal(m.history.length, 3);
+      assert.equal(m.history[0].credits, 5, 'newest first');
+      assert.equal(m.history[1].status, 'aborted');
+      assert.deepEqual(m.history[0].stages, [], 'no windows on a bare project');
+      const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
+      assert.match(html, /<details class="history">/);
+      assert.match(html, /3 turns, newest first/);
+      // The aborted turn is marked so it can be found in a long list.
+      assert.match(html, /<tr class="wasted">/);
+      // History is below the rollups and above the engine's records.
+      const order = sections(html);
+      assert.ok(order.indexOf('History') > order.indexOf('By session'));
+    }
+  ));
+
+test('the history is capped and says so, so a long-lived project does not render thousands of rows', () =>
+  withKiroHome(
+    ({ home, project }) => {
+      const turns = [];
+      for (let i = 0; i < page.HISTORY_LIMIT + 25; i += 1) turns.push({ at: T + i * 1000, credits: 1 });
+      ideSession(home, project, turns);
+    },
+    ({ project }) => {
+      const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
+      const rows = (html.match(/<details class="history">[\s\S]*?<\/details>/)[0].match(/<tr class=/g) || []).length;
+      assert.equal(rows, page.HISTORY_LIMIT);
+      assert.match(html, new RegExp(`most recent ${page.HISTORY_LIMIT} of ${page.HISTORY_LIMIT + 25}`));
+    }
+  ));
+
+test('token detail appears only where Kiro recorded non-zero tokens, as in/out with the four counts on hover', () => {
+  // fmtTokens is the display rule; the recording rule (zeros are "not recorded") is
+  // pinned in kiro-usage.test.js.
+  assert.equal(page.fmtTokens(950), '950');
+  assert.equal(page.fmtTokens(1500), '1.5k');
+  assert.equal(page.fmtTokens(45000), '45k');
+  assert.equal(page.fmtTokens(2_300_000), '2.3M');
+  assert.equal(page.fmtTokens(undefined), '—');
+});

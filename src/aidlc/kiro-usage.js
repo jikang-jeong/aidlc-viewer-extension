@@ -192,15 +192,19 @@ function readCliSession(file, projectRoot, gaps) {
       for (const entry of node.metering_usage) {
         if (entry && typeof entry.value === 'number') credits = (credits ?? 0) + entry.value;
       }
-      const tokens =
-        typeof node.input_token_count === 'number' || typeof node.output_token_count === 'number'
-          ? {
-              input: node.input_token_count,
-              output: node.output_token_count,
-              cacheRead: node.cache_read_input_token_count,
-              cacheWrite: node.cache_write_input_token_count
-            }
-          : undefined;
+      // The CLI writes the four token fields on every turn, but on a real machine all
+      // 930 of them were zero: the field exists and the value is not filled in. A turn
+      // that consumed credits and reports zero tokens did not have zero tokens, so zeros
+      // across the board are treated as "not recorded", the same as the IDE's absence.
+      // Showing "0 in · 0 out" would be a confident wrong number.
+      const rawTokens = {
+        input: node.input_token_count,
+        output: node.output_token_count,
+        cacheRead: node.cache_read_input_token_count,
+        cacheWrite: node.cache_write_input_token_count
+      };
+      const anyRecorded = Object.values(rawTokens).some((v) => typeof v === 'number' && v > 0);
+      const tokens = anyRecorded ? rawTokens : undefined;
       const status = typeof node.end_reason === 'string' ? node.end_reason : undefined;
       turns.push({
         source: 'cli',

@@ -349,3 +349,19 @@ test('nothing in the reader returns conversation text', () => {
     assert.deepEqual(hits, [], `reader must not touch ${forbidden}`);
   }
 });
+
+test('all-zero token fields read as "not recorded", because that is what they are', () =>
+  withStore(
+    ({ sessions, project }) => {
+      // On a real machine every one of 930 CLI turns had the four token fields present
+      // and all zero, while consuming credits. The field exists; the value is not filled.
+      cliSession(sessions, { id: 'z', cwd: project, turns: [{ at: min(1), credits: 0.5, input: 0, output: 0 }] });
+    },
+    ({ project }) => {
+      const u = usage.readKiroUsage(project);
+      assert.equal(u.turns[0].tokens, undefined, 'zeros across the board are not a recording');
+      assert.equal(u.turns[0].credits, 0.5, 'the credits are still real');
+      const [s] = usage.summariseSessions(u.sessions);
+      assert.equal(s.tokens, undefined);
+    }
+  ));

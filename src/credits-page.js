@@ -47,6 +47,14 @@ function fmtCredits(n) {
   return n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
 }
 
+function fmtTokens(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${Math.round(n / 1000)}k`;
+  if (n >= 1_000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
 function fmtDuration(ms) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return '—';
   const s = Math.round(ms / 1000);
@@ -91,6 +99,30 @@ function collectCreditsModel(root, project) {
     byStage.set(w.label, slot);
   }
 
+  // Every turn, newest first, with the stage(s) its time fell in. The tables above are
+  // rollups; this is the record they were rolled up from, so a number in a table can be
+  // traced to the turns that made it.
+  const sessionTitle = new Map(sessions.map((s) => [s.id, s.title || s.id]));
+  const history = [...usage.turns]
+    .sort((a, b) => b.at - a.at)
+    .map((t) => {
+      const stages = windows
+        .filter((w) => Number.isFinite(w.startedAt) && t.at >= w.startedAt && t.at <= (w.completedAt ?? Date.now()))
+        .map((w) => w.label);
+      return {
+        at: t.at,
+        credits: t.credits,
+        status: t.status,
+        elapsedMs: t.elapsedMs,
+        model: t.model,
+        source: t.source,
+        session: sessionTitle.get(t.sessionId) ?? t.sessionId,
+        tokens: t.tokens,
+        contextPercent: t.contextPercent,
+        stages: [...new Set(stages)]
+      };
+    });
+
   return {
     ok: usage.ok,
     reason: usage.reason,
@@ -101,7 +133,8 @@ function collectCreditsModel(root, project) {
     byStage: [...byStage.values()].filter((s) => s.turns > 0).sort((a, b) => b.credits - a.credits),
     windowSource,
     gaps: usage.gaps,
-    hasTokens: sessions.some((s) => s.tokens)
+    hasTokens: sessions.some((s) => s.tokens),
+    history
   };
 }
 
@@ -263,20 +296,20 @@ ${detailRows}`;
 
 function creditsHeadline(model) {
   if (!model.ok) {
-    return `<section><h2>Tokens (Credits)</h2><p class="quiet">Kiro's session store was not found at <code>${escapeHtml(model.storePath)}</code>. Kiro writes credit usage there per prompt turn; until it exists there is nothing to show.</p></section>`;
+    return `<section><h2>Credits (Tokens)</h2><p class="quiet">Kiro's session store was not found at <code>${escapeHtml(model.storePath)}</code>. Kiro writes credit usage there per prompt turn; until it exists there is nothing to show.</p></section>`;
   }
   const a = model.attribution;
   if (a.totalTurns === 0) {
-    return `<section><h2>Tokens (Credits)</h2><p class="quiet">No Kiro session has been opened on this folder yet. Sessions opened on a parent folder are not counted, because nothing in Kiro's record says which project their turns were about.</p></section>`;
+    return `<section><h2>Credits (Tokens)</h2><p class="quiet">No Kiro session has been opened on this folder yet. Sessions opened on a parent folder are not counted, because nothing in Kiro's record says which project their turns were about.</p></section>`;
   }
   const wastedPct = a.total > 0 ? Math.round((a.wasted / a.total) * 100) : 0;
   return `<section>
-  <h2>Tokens (Credits)</h2>
+  <h2>Credits (Tokens)</h2>
   <div class="tiles">
     <div class="tile"><div class="big">${fmtCredits(a.total)}</div><div class="label">credits on this project</div><div class="sub">${a.totalTurns} prompt turn${a.totalTurns === 1 ? '' : 's'} across ${model.sessions.length} session${model.sessions.length === 1 ? '' : 's'}</div></div>
     <div class="tile ${a.wasted > 0 ? 'warn' : ''}"><div class="big">${fmtCredits(a.wasted)}</div><div class="label">spent on turns that were aborted or failed</div><div class="sub">${a.wastedTurns} turn${a.wastedTurns === 1 ? '' : 's'}${a.total > 0 ? `, ${wastedPct}% of the total` : ''}</div></div>
   </div>
-  <p class="quiet">Credits are what Kiro recorded for each turn. The price of a credit depends on your plan, so no amount in money is shown. ${model.hasTokens ? 'Token counts appear where Kiro CLI recorded them.' : 'Kiro IDE records credits but not token counts, so none are shown.'}</p>
+  <p class="quiet">Credits are what Kiro recorded for each turn. The price of a credit depends on your plan, so no amount in money is shown. ${model.hasTokens ? 'Token counts appear where Kiro recorded them.' : 'Kiro recorded credits but no token counts for these sessions, so none are shown.'}</p>
 </section>`;
 }
 
@@ -312,7 +345,12 @@ function creditsBySession(model) {
   if (!model.ok || model.sessions.length === 0) return '';
   const rows = model.sessions
     .map((s) => {
-      const tokens = s.tokens ? `${(s.tokens.input + s.tokens.output).toLocaleString()} tok` : '';
+      // Where Kiro CLI recorded tokens, the four counts are shown in full on hover and
+      // as in/out in the cell. Cache reads are the part of the input the model did not
+      // have to re-read; a high share means context is being reused well.
+      const tokens = s.tokens
+        ? `<span title="input ${s.tokens.input.toLocaleString()} · output ${s.tokens.output.toLocaleString()} · cache read ${s.tokens.cacheRead.toLocaleString()} · cache write ${s.tokens.cacheWrite.toLocaleString()}">${fmtTokens(s.tokens.input)} in · ${fmtTokens(s.tokens.output)} out</span>`
+        : '';
       const ctx = typeof s.lastContextPercent === 'number' ? `${Math.round(s.lastContextPercent)}%` : '—';
       const wasted = s.wasted > 0 ? `<span class="warn-text">${fmtCredits(s.wasted)} lost</span>` : '';
       return `<tr>
@@ -370,6 +408,38 @@ function engineRecordsSection(project, root) {
   return `<details class="records"><summary><h2>Engine records</h2><span class="sub">refusals, sensor findings, the agent\u2019s record beside the engine\u2019s check</span></summary>${parts.join('\n')}</details>`;
 }
 
+// The turns themselves, newest first and folded. The rollups above answer "how much";
+// this answers "when, and on what" -- and lets a person check that a figure in a table
+// is made of turns they recognise. Capped so a long-lived project does not render
+// thousands of rows; the cap is said on the page.
+const HISTORY_LIMIT = 200;
+function historySection(model) {
+  if (!model.ok || !model.history || model.history.length === 0) return '';
+  const rows = model.history
+    .slice(0, HISTORY_LIMIT)
+    .map((t) => {
+      const wasted = t.status === 'aborted' || t.status === 'failed';
+      const tokens = t.tokens ? `${fmtTokens(t.tokens.input)} in · ${fmtTokens(t.tokens.output)} out` : '';
+      const ctx = typeof t.contextPercent === 'number' ? `${Math.round(t.contextPercent)}%` : '';
+      return `<tr class="${wasted ? 'wasted' : ''}">
+        <td class="when">${fmtWhen(t.at)}</td>
+        <td class="num">${fmtCredits(t.credits)}</td>
+        <td>${escapeHtml(t.status ?? '')}</td>
+        <td>${t.stages.length ? escapeHtml(t.stages.join(', ')) : '<span class="sub">outside any stage</span>'}</td>
+        <td><div>${escapeHtml(t.session)}</div><div class="sub">${escapeHtml(t.model ?? '')}</div></td>
+        <td class="num">${fmtDuration(t.elapsedMs)}</td>
+        <td class="num">${ctx}</td>
+        <td class="num">${tokens}</td>
+      </tr>`;
+    })
+    .join('');
+  const capped = model.history.length > HISTORY_LIMIT ? ` Showing the most recent ${HISTORY_LIMIT} of ${model.history.length}.` : '';
+  return `<details class="history"><summary><h2>History</h2><span class="sub">${model.history.length} turn${model.history.length === 1 ? '' : 's'}, newest first</span></summary>
+  <table><thead><tr><th>When</th><th class="num">Credits</th><th>Status</th><th>Stage</th><th>Session</th><th class="num">Time</th><th class="num">Context</th><th class="num">Tokens</th></tr></thead><tbody>${rows}</tbody></table>
+  <p class="quiet">Each row is one prompt turn as Kiro recorded it. The stage column is the same time-based attribution the By stage table uses.${capped}</p>
+</details>`;
+}
+
 function gapsSection(model) {
   const gaps = [];
   if (model.gaps?.unknownStatuses?.length) gaps.push(`turn status not recognised: ${model.gaps.unknownStatuses.join(', ')}`);
@@ -391,6 +461,7 @@ function renderCreditsPage({ webview, root, project }) {
     creditsHeadline(model),
     creditsByStage(model),
     creditsBySession(model),
+    historySection(model),
     engineRecordsSection(project, root),
     gapsSection(model)
   ]
@@ -403,7 +474,7 @@ function renderCreditsPage({ webview, root, project }) {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${n}'; script-src 'nonce-${n}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tokens (Credits)</title>
+<title>Credits (Tokens)</title>
 <style nonce="${n}">
   :root { --purple: var(--vscode-charts-purple, #a371f7); --warn: var(--vscode-editorWarning-foreground, #cca700); }
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px 28px 40px; max-width: 980px; margin: 0 auto; line-height: 1.5; }
@@ -432,7 +503,10 @@ function renderCreditsPage({ webview, root, project }) {
   .wait-head { font-weight: 600; }
   .wait-msg { margin: 4px 0; }
   .remedies { margin: 6px 0 0 16px; padding: 0; font-size: 13px; }
-  details.records { margin-top: 26px; }
+  details.records, details.history { margin-top: 26px; }
+  details.history summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; }
+  details.history summary h2 { margin: 0; display: inline; }
+  tr.wasted td { color: var(--warn); }
   details.records summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; }
   details.records summary h2 { margin: 0; display: inline; }
   .gaps { margin-top: 30px; }
@@ -444,4 +518,4 @@ ${body}
 </html>`;
 }
 
-module.exports = { collectCreditsModel, renderCreditsPage, fmtCredits, fmtDuration };
+module.exports = { collectCreditsModel, renderCreditsPage, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };

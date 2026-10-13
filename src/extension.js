@@ -171,7 +171,7 @@ class WatchController {
     }
     this.creditsPanel = vscode.window.createWebviewPanel(
       'markdownWatchViewer.credits',
-      'AI-DLC Tokens (Credits)',
+      'AI-DLC Credits (Tokens)',
       vscode.ViewColumn.One,
       // No scripts: the page is a report, and a report that cannot run code cannot leak.
       { enableScripts: false, retainContextWhenHidden: true }
@@ -1164,10 +1164,10 @@ class InfoItem extends vscode.TreeItem {
 
 class CreditsItem extends vscode.TreeItem {
   constructor(rootUri) {
-    super('Tokens (Credits)', vscode.TreeItemCollapsibleState.None);
+    super('Credits (Tokens)', vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'credits';
     this.iconPath = new vscode.ThemeIcon('graph', new vscode.ThemeColor('charts.purple'));
-    this.command = { command: 'markdownWatchViewer.showCredits', title: 'Open the Tokens (Credits) page' };
+    this.command = { command: 'markdownWatchViewer.showCredits', title: 'Open the Credits (Tokens) page' };
     let waiting = 0;
     try {
       const project = rootUri ? readProject(rootUri.fsPath, {}) : undefined;
@@ -3308,7 +3308,7 @@ function getHelpHtml() {
 
 <div class="stage-card supervision">
   <h3>🟣 Credits — both generations</h3>
-  <p>The <strong>Tokens (Credits)</strong> row at the top of the tree opens a page with what Kiro spent on this project. Every number is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.</p>
+  <p>The <strong>Credits (Tokens)</strong> row at the top of the tree opens a page with what Kiro spent on this project. Every number is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.</p>
   <ul>
     <li><strong>Total credits</strong>, and beside it the credits spent on turns Kiro marked <strong>aborted or failed</strong> — work that was paid for and produced nothing. That second number is the one to act on.</li>
     <li><strong>By stage.</strong> A turn is placed in a stage when its time falls inside that stage's window: the engine's audit ledger on v2, the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.</li>
@@ -3385,7 +3385,7 @@ function getHelpHtml() {
 
 <div class="stage-card supervision">
   <h3>🟣 크레딧(Credits) — 두 세대 공통</h3>
-  <p>트리 맨 위의 <strong>Tokens (Credits)</strong> 행을 누르면 Kiro가 이 프로젝트에 쓴 크레딧 페이지가 열립니다. 모든 숫자는 Kiro가 기록한 그대로입니다. 추정하지 않고, 금액으로 환산하지 않습니다. 크레딧 가격은 요금제마다 다르기 때문입니다.</p>
+  <p>트리 맨 위의 <strong>Credits (Tokens)</strong> 행을 누르면 Kiro가 이 프로젝트에 쓴 크레딧 페이지가 열립니다. 모든 숫자는 Kiro가 기록한 그대로입니다. 추정하지 않고, 금액으로 환산하지 않습니다. 크레딧 가격은 요금제마다 다르기 때문입니다.</p>
   <ul>
     <li><strong>총 크레딧</strong>과 그 옆에 Kiro가 <strong>중단 또는 실패</strong>로 표시한 턴에 쓴 크레딧. 비용은 들었는데 결과가 없는 작업이고, 행동으로 이어질 수 있는 숫자는 이쪽입니다.</li>
     <li><strong>단계별.</strong> 턴의 시각이 단계의 구간 안에 들면 그 단계에 귀속됩니다. 구간은 v2에서는 엔진의 감사 원장, v1에서는 산출물의 수정 시각에서 옵니다. 어느 구간에도 들지 않는 턴은 그렇다고 표시되어 합계가 항상 맞습니다.</li>

@@ -44,11 +44,12 @@ Each `.md` file opens rendered, with Mermaid diagrams drawn inline. Press **Edit
 
 ### What Kiro spent, and what is waiting on you
 
-The **Tokens (Credits)** row at the top of the tree opens a page. Every number on it is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
+The **Credits (Tokens)** row at the top of the tree opens a page. Every number on it is one Kiro recorded; nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
 
 - **Total credits on this project**, and beside it the credits spent on turns Kiro marked **aborted or failed**: work that was paid for and produced nothing. That second number is the one to act on.
 - **By stage.** A turn is placed in a stage when its time falls inside that stage's window, from the engine's audit ledger on v2 and from the artifacts' modification times on v1. A turn outside every window is shown as such, so the total always adds up.
-- **By session**: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro CLI recorded them. Kiro IDE records credits only, and the page says so rather than showing a zero.
+- **By session**: credits, turns, time, how full the context window was after the last turn, and token counts where Kiro recorded them. Kiro IDE records credits only, and the page says so rather than showing a zero.
+- **History**: every prompt turn, newest first, with its credits, status, stage and session, so any figure in the tables above can be traced to the turns that made it.
 
 **On AI-DLC v2 the page also leads with what is waiting on you.** A stage at its approval gate is not slow, it is stopped, and the chat said so once and scrolled away. Each item carries the engine's own message and the remedies it marked as yours, labelled as either the engine's word or this extension's inference from the ledger. The engine's other records — refusals, what its checks flagged, the agent's claim beside the engine's check of it — are folded below.
 
@@ -82,7 +83,7 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
   the source on one side showed everything twice and left room for neither. What you
   type is exactly what is saved — the view never rewrites your Markdown from the
   rendering, which is the one way a viewer could silently alter a file.
-- **Tokens (Credits).** A new row at the top of the tree opens a page with what Kiro spent on this
+- **Credits (Tokens).** A new row at the top of the tree opens a page with what Kiro spent on this
   project: total credits, the credits spent on aborted or failed turns, a breakdown by
   stage and by session, context-window usage per session, and token counts where Kiro CLI
   recorded them. Every number is Kiro's own record. Nothing is estimated and no money is
