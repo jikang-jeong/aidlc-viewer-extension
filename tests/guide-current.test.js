@@ -44,7 +44,7 @@ const html = helpHtml();
 // Each entry: what the guide must say, in EN and KO. A missing one names the feature.
 const MUST_SAY = {
   'the three pages are named as the code names them': [PAGE_TITLE.credits, PAGE_TITLE.waiting, PAGE_TITLE.records],
-  'the setup prompt carries the harness as buttons': ['v2 · Kiro IDE', 'v2 · Kiro CLI'],
+  'setup asks the generation first, then the harness in the same place': ['a second prompt in the same place', '같은 자리에 두 번째 알림'],
   'a project that has not run says Not started': ['Not started'],
   'the viewer has View and Edit, with double-click': ['✎ Edit', '🔍 View'],
   'HTML comments are shown dimmed': ['Things agents must never do'],

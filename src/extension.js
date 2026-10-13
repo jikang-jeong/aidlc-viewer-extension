@@ -32,6 +32,17 @@ function newlyInstalled(before, after) {
   return undefined;
 }
 
+// The harness a project already recorded, so the second setup toast is not asked of
+// someone who answered it before. Any failure to read reads as "none recorded".
+function recordedHarness(root) {
+  try {
+    const state = readInstallState(root);
+    return state && state.ok && state.receipt ? state.receipt.harness : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function startHint(generation) {
   if (generation === 'v2' || generation === 'both') return START_HINT.v2;
   if (generation === 'v1') return START_HINT.v1;
@@ -41,6 +52,7 @@ const V2_CONTEXT_KEY = 'aidlcViewer.v2Detected';
 const { readProject } = require('./aidlc/index');
 const { checkpointIndexForPath } = require('./aidlc/journey-v2');
 const { detectGeneration } = require('./aidlc/detect');
+const { readInstallState } = require('./aidlc/install-state');
 const installCommands = require('./install-commands');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
@@ -344,30 +356,44 @@ class WatchController {
       if (!(await aidlcSetupNeeded(folderUri, this.context.extensionUri))) {
         return; // already set up, or bundle missing — stay quiet here
       }
-      // The two generations are the buttons. The toast used to offer "Choose a version",
-      // which opened a list elsewhere on screen and then returned here -- one decision
-      // spread over three surfaces. v1 is first, as it is in the full list, for the same
-      // reason: it is the answer most people opening this are looking for.
+      // Two toasts, two buttons each, in the same place.
       //
-      // v2's harness is on the toast too. Picking "v2" used to open the harness list in
-      // the centre of the screen, which was the same decision moved rather than removed.
-      // Three buttons, one place. A project that already recorded a harness keeps it
-      // regardless of which v2 button is pressed.
+      // One toast with v1 / v2 · Kiro IDE / v2 · Kiro CLI put three same-looking buttons in
+      // a row, and the generation -- the decision that matters -- was not told apart from
+      // the harness. Toast buttons cannot be coloured, so the separation is in the
+      // sequence: first which generation, then, for v2 only, which harness, as a second
+      // toast where the first one was. The earlier objection to a two-step flow was the
+      // harness list opening in the centre of the screen; a toast in the same corner is
+      // not that. A project that already recorded a harness skips the second question.
       const v1 = 'AI-DLC v1';
-      const v2ide = 'v2 · Kiro IDE';
-      const v2cli = 'v2 · Kiro CLI';
+      const v2 = 'AI-DLC v2';
       const choice = await vscode.window.showInformationMessage(
         'Set up the AI-DLC workflow for this folder?',
         v1,
-        v2ide,
-        v2cli,
+        v2,
         'Not now'
       );
       if (choice === v1) {
         await this.runSetup(folderUri, 'v1');
-      } else if (choice === v2ide) {
+        return;
+      }
+      if (choice !== v2) return;
+      const recorded = recordedHarness(folderUri.fsPath);
+      if (recorded) {
+        await this.runSetup(folderUri, `v2:${recorded}`);
+        return;
+      }
+      const ide = 'Kiro IDE';
+      const cli = 'Kiro CLI';
+      const harness = await vscode.window.showInformationMessage(
+        'AI-DLC v2: which Kiro will run it?',
+        ide,
+        cli,
+        'Not now'
+      );
+      if (harness === ide) {
         await this.runSetup(folderUri, 'v2:kiro-ide');
-      } else if (choice === v2cli) {
+      } else if (harness === cli) {
         await this.runSetup(folderUri, 'v2:kiro-cli');
       }
     } catch (err) {
@@ -3502,7 +3528,7 @@ function getHelpHtml() {
 <h2>Getting Started</h2>
 <ol>
   <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root.</li>
-  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want — <strong>v1</strong>, <strong>v2 · Kiro IDE</strong> or <strong>v2 · Kiro CLI</strong>, as three buttons on one prompt. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
+  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want, <strong>v1</strong> or <strong>v2</strong>; for v2 a second prompt in the same place asks <strong>Kiro IDE</strong> or <strong>Kiro CLI</strong>, unless the project already recorded one. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
   <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Right after setup a page opens in the editor with this command large and, on v2, a button that opens Kiro\u2019s chat with <code>/aidlc</code> already typed. Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with the same command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
 </ol>
 
@@ -3598,7 +3624,7 @@ function getHelpHtml() {
 <h2>시작하기</h2>
 <ol>
   <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트를 선택합니다.</li>
-  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>, <strong>v2 · Kiro IDE</strong>, <strong>v2 · Kiro CLI</strong> 세 버튼이 한 알림에 함께 있습니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
+  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>인지 <strong>v2</strong>인지 먼저, v2라면 같은 자리에 두 번째 알림으로 <strong>Kiro IDE</strong>인지 <strong>Kiro CLI</strong>인지 묻습니다. 이미 기록된 프로젝트는 두 번째를 건너뜁니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
   <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 설치 직후 에디터에 이 명령을 크게 보여주는 페이지가 열리고, v2에서는 <code>/aidlc</code>가 입력된 상태로 Kiro 채팅을 여는 버튼이 함께 있습니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 같은 명령을 보여줍니다.</li>
 </ol>
 

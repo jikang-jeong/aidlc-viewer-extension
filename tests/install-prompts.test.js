@@ -563,3 +563,28 @@ test('a project that already recorded a harness keeps it, whichever v2 button wa
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('the setup toast asks the generation with two buttons, then the harness with two more in the same place', () => {
+  // Three buttons in a row (v1 / v2 · Kiro IDE / v2 · Kiro CLI) did not tell the
+  // generation apart from the harness, and toast buttons cannot be coloured. So the
+  // separation is in the sequence. Read from the source, because the toast is a VS Code
+  // call this suite cannot drive: the first call offers v1 and v2 only, the second offers
+  // Kiro IDE and Kiro CLI, and a recorded harness skips the second.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
+  const start = src.indexOf('async offerAidlcSetup(folderUri)');
+  const body = src.slice(start, src.indexOf('async runSetup(', start));
+  const toasts = [...body.matchAll(/showInformationMessage\(\s*'([^']+)',([\s\S]*?)\);/g)].map((m) => ({
+    message: m[1],
+    buttons: m[2].split(',').map((b) => b.trim().replace(/[')]/g, '')).filter(Boolean)
+  }));
+  assert.equal(toasts.length, 2, 'two toasts, not one with three buttons');
+  assert.deepEqual(toasts[0].buttons, ['v1', 'v2', 'Not now']);
+  assert.deepEqual(toasts[1].buttons, ['ide', 'cli', 'Not now']);
+  assert.match(body, /const v1 = 'AI-DLC v1'/);
+  assert.match(body, /const v2 = 'AI-DLC v2'/);
+  assert.match(body, /const ide = 'Kiro IDE'/);
+  assert.match(body, /const cli = 'Kiro CLI'/);
+  // The recorded harness is consulted between the two, and short-circuits the second.
+  const between = body.slice(body.indexOf('choice !== v2'), body.indexOf("'AI-DLC v2: which Kiro will run it?'"));
+  assert.match(between, /recordedHarness\(folderUri\.fsPath\)[\s\S]*runSetup\(folderUri, `v2:\$\{recorded\}`\)/);
+});

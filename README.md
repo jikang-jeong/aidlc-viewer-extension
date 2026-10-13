@@ -105,10 +105,12 @@ Two more commands are in the Command Palette for v2 projects. **AI-DLC v2: Check
   that reads what the engine wrote: unanswered questions files, refusals that need you,
   parked plans. **v2 Engine Log** is a row and a page with the engine's own account of
   the run. Both appear only on v2.
-- **Setup asks once, where it asks.** The "Set up the AI-DLC workflow for this folder?"
-  prompt now carries **v1**, **v2 · Kiro IDE** and **v2 · Kiro CLI** as its own buttons
-  instead of a "Choose a version" step that opened a list elsewhere and came back, and a
-  second list for the harness after that. A project that already recorded a harness keeps it.
+- **Setup asks where it asks.** The "Set up the AI-DLC workflow for this folder?" prompt
+  carries **v1** and **v2** as its own buttons, and for v2 a second prompt in the same
+  place asks **Kiro IDE** or **Kiro CLI**. It used to be a "Choose a version" step that
+  opened a list elsewhere on screen and came back; and for a day it was three buttons in a
+  row, where the generation was not told apart from the harness. A project that already
+  recorded a harness is not asked again.
 - **Setup ends on what to do next.** When setup finishes, a page opens in the editor with
   the one thing to type, large: `/aidlc` on v2, `"Using AI-DLC, build …"` on v1, and, on v2,
   a button that opens Kiro's chat with `/aidlc` already typed. The completion toast used to

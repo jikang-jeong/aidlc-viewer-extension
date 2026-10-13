@@ -236,6 +236,14 @@ test that re-implements the logic it is testing proves only that it agrees with 
 the pin now also reads the `getChildren` source and requires no filter between the phase
 groups and the rows. Pin: v1-isolation "every phase is listed".
 
+**Toast buttons cannot be coloured, so the generation and the harness are separate
+toasts.** Three buttons in a row (v1 / v2 · Kiro IDE / v2 · Kiro CLI) did not tell the
+decision that matters (generation) apart from the one that follows it (harness). The first
+toast offers v1 and v2; for v2 a second toast in the same place offers Kiro IDE and Kiro
+CLI, skipped when the project already recorded one. The earlier objection to a two-step
+flow was a QuickPick opening in the centre of the screen, not the second step itself. Pin:
+install-prompts "the setup toast asks the generation with two buttons".
+
 **Setup's installers return nothing, so "did setup happen" is read from the folder.**
 `runSetup` compares `detectGeneration` before and after; a generation present after that was
 not present before is what was just set up, and only then does the start page open. A re-run
