@@ -19,6 +19,8 @@
 //
 // Pure module: never import `vscode`.
 
+const fs = require('fs');
+const path = require('path');
 const auditReader = require('./audit');
 
 // A refusal, with enough around it to be understood.
@@ -194,12 +196,121 @@ const SENSOR_NOISE = new Set(['SENSOR_FIRED', 'SENSOR_PASSED', 'SENSOR_FAILED'])
 
 
 // `runtime` is the caller's already-read runtime graph. Passed in rather than read
+// ---------------------------------------------------------------------------
+// What the engine wrote down about needing a person (2.11.0 and later)
+// ---------------------------------------------------------------------------
+
+// Two records the engine keeps on disk when it stops for a human, read here as
+// structure rather than inferred from ledger text.
+//
+// Why this exists beside describeApprovalWaits: that function reconstructs "waiting"
+// from the ORDER of ledger events, which was the only evidence the 2.6-era engine left.
+// Since 2.8 the engine also writes the refusal itself -- the code, the stage, the
+// blocked action, and a list of remedies each flagged `requiresHuman` -- and since 2.11
+// it writes a Plan Approval review request when a plan is parked for a decision. Those
+// files say what the person needs to do; the ledger only says that something stopped.
+//
+// Both are read as the engine wrote them. The `kind:ask` payload the engine prints to
+// stdout at the same moment is NOT read here, because it is not written anywhere a
+// later reader can find it.
+
+// `<intent>/.aidlc-engine/guard-refusals/<hash>.json`. One file per distinct refusal;
+// `count` is how many times it recurred. The file is removed when the refusal clears,
+// so its presence is the live state.
+function readGuardRefusals(intentDir) {
+  const dir = path.join(intentDir, '.aidlc-engine', 'guard-refusals');
+  let names;
+  try {
+    names = fs.readdirSync(dir).filter((name) => name.endsWith('.json'));
+  } catch {
+    return [];
+  }
+  const refusals = [];
+  for (const name of names) {
+    let record;
+    try {
+      record = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+    } catch {
+      refusals.push({ file: name, unreadable: true });
+      continue;
+    }
+    const refusal = record && typeof record === 'object' ? record.refusal ?? {} : {};
+    const remedies = Array.isArray(refusal.remedies) ? refusal.remedies : [];
+    refusals.push({
+      file: name,
+      code: typeof refusal.code === 'string' ? refusal.code : undefined,
+      codes: Array.isArray(record?.codes) ? record.codes.filter((c) => typeof c === 'string') : [],
+      stage: typeof refusal.stage === 'string' ? refusal.stage : undefined,
+      blockedAction: typeof refusal.blockedAction === 'string' ? refusal.blockedAction : undefined,
+      userMessage: typeof refusal.userMessage === 'string' ? refusal.userMessage : undefined,
+      count: typeof record?.count === 'number' ? record.count : undefined,
+      updatedAt: typeof record?.updatedAt === 'string' ? record.updatedAt : undefined,
+      // The engine's own verdict on who can clear this. A refusal with no human
+      // remedy is the agent's to resolve; one with a human remedy is waiting on you.
+      requiresHuman: remedies.some((r) => r && r.requiresHuman === true),
+      remedies: remedies
+        .filter((r) => r && typeof r === 'object')
+        .map((r) => ({
+          op: typeof r.op === 'string' ? r.op : undefined,
+          label: typeof r.label === 'string' ? r.label : undefined,
+          action: typeof r.action === 'string' ? r.action : undefined,
+          requiresHuman: r.requiresHuman === true
+        }))
+    });
+  }
+  return refusals;
+}
+
+// `aidlc/.aidlc-sessions/plan-approval/review-request-<id>.json`, one per plan the
+// engine has parked for a decision. The directory is project-wide, so each request
+// names its intent and the caller filters.
+function readPlanApprovalRequests(projectRoot) {
+  const dir = path.join(projectRoot, 'aidlc', '.aidlc-sessions', 'plan-approval');
+  let names;
+  try {
+    names = fs.readdirSync(dir).filter((name) => /^review-request-[0-9a-f]+\.json$/.test(name));
+  } catch {
+    return [];
+  }
+  const requests = [];
+  for (const name of names) {
+    let record;
+    try {
+      record = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+    } catch {
+      requests.push({ file: name, unreadable: true });
+      continue;
+    }
+    if (!record || typeof record !== 'object') continue;
+    const target = typeof record.targetId === 'string' ? record.targetId : '';
+    requests.push({
+      file: name,
+      intentId: typeof record.intentId === 'string' ? record.intentId : undefined,
+      targetId: target || undefined,
+      // `unit:<name>` is a per-unit plan; `next:` is the engine's own beat and not a
+      // decision for a person, per the engine's pendingBuiltPlanReviews.
+      unit: target.startsWith('unit:') ? target.slice('unit:'.length) : undefined,
+      isEngineBeat: target.startsWith('next:'),
+      feedback: typeof record.feedback === 'string' ? record.feedback : undefined
+    });
+  }
+  return requests;
+}
+
+// Orchestrates the per-intent diagnosis. The audit summary is passed in rather than read
 // here so this stays a transform over data the caller gathered, and so the completion
 // authority is the same object the journey was built from.
 function diagnose(intentDir, options = {}) {
   const summary = auditReader.summarise(intentDir);
   const refusals = describeRefusals(summary, options);
   const approvalWaits = describeApprovalWaits(summary, options.runtime);
+  const guardRefusals = readGuardRefusals(intentDir);
+  const intentId = path.basename(intentDir);
+  const planApproval = options.projectRoot
+    ? readPlanApprovalRequests(options.projectRoot).filter(
+        (r) => !r.unreadable && !r.isEngineBeat && (r.intentId === undefined || r.intentId === intentId)
+      )
+    : [];
   return {
     eventTotal: summary.total,
     refusals,
@@ -209,17 +320,62 @@ function diagnose(intentDir, options = {}) {
     undecided: refusals.filter((entry) => entry.settled === undefined),
     sensorFailures: sensorFailuresByStage(summary),
     sensorFailureTotal: summary.sensorFailures.length,
-    // Stages parked at a gate. `waitingOnYou` is the subset nothing resolved.
-    // Stages parked at a gate with nothing having moved them since. Already the
-    // unresolved set, so there is no separate total: a finished run has none.
+    // Stages parked at a gate with nothing having moved them since, inferred from the
+    // ledger. Kept as the fallback for engines that write nothing more.
     approvalWaits,
-    waitingOnYou: approvalWaits,
+    // What the engine itself wrote about needing a person. `stated` is true on every
+    // entry here, as opposed to the inferred `approvalWaits`.
+    guardRefusals,
+    planApproval,
+    // Everything waiting on a person, from every source, deduplicated by stage. Stated
+    // entries first because they carry the engine's own words and remedies.
+    waitingOnYou: mergeWaiting(approvalWaits, guardRefusals, planApproval),
     // An event name this build has no meaning for. Not an error: the vocabulary
     // differs between projects, and reporting it is how the next project tells
     // us what we have not met yet.
     unknownEvents: summary.unknownEvents,
     summary
   };
+}
+
+// One list for the page. A guard refusal with a human remedy, a parked plan, and an
+// inferred gate wait can all name the same stage; the stated ones win and the inferred
+// one is kept only when nothing stated covers that stage.
+function mergeWaiting(approvalWaits, guardRefusals, planApproval) {
+  const out = [];
+  const covered = new Set();
+  for (const r of guardRefusals) {
+    if (r.unreadable || !r.requiresHuman) continue;
+    out.push({
+      kind: 'guard-refusal',
+      stated: true,
+      stage: r.stage,
+      code: r.code,
+      message: r.userMessage,
+      remedies: r.remedies.filter((m) => m.requiresHuman),
+      count: r.count,
+      updatedAt: r.updatedAt
+    });
+    if (r.stage) covered.add(r.stage);
+  }
+  for (const p of planApproval) {
+    out.push({
+      kind: 'plan-approval',
+      stated: true,
+      stage: 'code-generation',
+      unit: p.unit,
+      message: p.unit
+        ? `A code-generation plan for unit "${p.unit}" is waiting for your approval.`
+        : 'A code-generation plan is waiting for your approval.',
+      feedback: p.feedback
+    });
+    covered.add('code-generation');
+  }
+  for (const w of approvalWaits ?? []) {
+    if (w.stage && covered.has(w.stage)) continue;
+    out.push({ kind: 'gate', stated: w.stated === true, ...w });
+  }
+  return out;
 }
 
 // Stable ordering for display. Timestamps are second-precision, so ties are
@@ -239,6 +395,9 @@ function byTimestamp(events) {
 }
 
 module.exports = {
+  readGuardRefusals,
+  readPlanApprovalRequests,
+  mergeWaiting,
   describeRefusals,
   describeApprovalWaits,
   sensorFailuresByStage,
