@@ -97,25 +97,28 @@ test('grouping copes with a phase list it has never seen', () => {
   assert.deepEqual(grouped.map((g) => g.nodes.length), [2, 1, 1]);
 });
 
-test('grouping drops a phase the scope skipped in full, and never drops a v1 phase', () => {
-  // A "0/0, 7 skipped" row asks the reader what is missing when the answer is
-  // that the project was never going to run that phase. v1 has no scope
-  // mechanism, so this filter cannot remove anything from a v1 tree.
+test('every phase is listed, and one the scope skipped in full reads "not in scope"', () => {
+  // Phases the scope skipped in full used to be filtered out of the tree. A v2
+  // project then showed three of its five phases while the strip above showed all
+  // five, reported as "only three phases appear". The row stays, dimmed, and says
+  // why it is empty. v1 has no scope mechanism, so its rows are unchanged.
+  const { StageProgressChild } = loadExtensionInternals();
   const withSkippedPhase = [
     { id: 'a', phase: 'ideation', status: 'done' },
-    { id: 'b', phase: 'operation', status: 'skipped' },
-    { id: 'c', phase: 'operation', status: 'skipped' }
+    { id: 'b', phase: 'operation', status: 'skipped', outOfScope: true },
+    { id: 'c', phase: 'operation', status: 'skipped', outOfScope: true }
   ];
-  const kept = groupByPhaseInCheckpointOrder(withSkippedPhase)
-    .filter((g) => g.nodes.some((cp) => cp.status !== 'skipped'))
-    .map((g) => g.phase);
-  assert.deepEqual(kept, ['ideation']);
+  const groups = groupByPhaseInCheckpointOrder(withSkippedPhase);
+  assert.deepEqual(groups.map((g) => g.phase), ['ideation', 'operation'], 'nothing is dropped');
+  const operation = new StageProgressChild('operation', groups[1].nodes);
+  assert.equal(operation.description, 'not in scope');
 
   const v1 = buildJourney({ artifacts: [], rulesInstalled: false });
-  const v1Kept = groupByPhaseInCheckpointOrder(v1.checkpoints)
-    .filter((g) => g.nodes.some((cp) => cp.status !== 'skipped'))
-    .map((g) => g.phase);
-  assert.deepEqual(v1Kept, LEGACY_ORDER);
+  assert.deepEqual(groupByPhaseInCheckpointOrder(v1.checkpoints).map((g) => g.phase), LEGACY_ORDER);
+  for (const g of groupByPhaseInCheckpointOrder(v1.checkpoints)) {
+    const row = new StageProgressChild(g.phase, g.nodes);
+    assert.match(row.description, /^\d+\/\d+/, `v1 ${g.phase} keeps its count`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -363,7 +366,7 @@ function loadExtensionInternals() {
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
     loaded._compile(
       `${fs.readFileSync(file, 'utf8')}
-module.exports = { ProgressItem, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
+module.exports = { ProgressItem, StageProgressChild, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
       file
     );
     return loaded.exports;

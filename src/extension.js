@@ -1313,15 +1313,16 @@ class StageProgressChild extends vscode.TreeItem {
     const planned = checkpoints.filter(
       (cp) => cp.status !== 'skipped' && !(cp.placeholder && cp.status !== 'done')
     ).length;
-    const parts = [`${done}/${planned}`];
-    if (skipped) {
+    const allOutOfScope = checkpoints.length > 0 && outOfScope === checkpoints.length;
+    const parts = allOutOfScope ? ['not in scope'] : [`${done}/${planned}`];
+    if (skipped && !allOutOfScope) {
       parts.push(`${skipped} ${outOfScope === skipped ? 'not in scope' : 'skipped'}`);
     }
     if (checkpoints.some((cp) => cp.placeholder && cp.status !== 'done')) {
       parts.push('placeholder');
     }
     this.description = parts.join(' · ');
-    this.iconPath = new vscode.ThemeIcon('circle-small-filled', getStageColor(phase));
+    this.iconPath = new vscode.ThemeIcon(allOutOfScope ? 'circle-small' : 'circle-small-filled', getStageColor(phase));
     this.contextValue = 'stageProgress';
   }
 }

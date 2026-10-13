@@ -248,9 +248,13 @@ test('the rollups carry bars drawn in CSS, relative to the largest row, with the
     ({ project }) => {
       const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
       // Headline: one split bar, 60/40, with a legend.
-      assert.match(html, /<div class="split" title="40% of credits bought nothing"><span class="split-ok" style="width:60%"><\/span><span class="split-wasted" style="width:40%">/);
+      // Widths are classes: the CSP allows no inline style, and style="width:60%" rendered
+      // as an empty track. Reported from a screenshot.
+      assert.match(html, /<div class="split" title="40% of credits bought nothing"><span class="split-ok w60"><\/span><span class="split-wasted w40">/);
+      assert.doesNotMatch(html, /style="width/, 'no inline style survives the CSP');
+      assert.match(html, /\.w60\{width:60%\}/, 'the width class is defined in the nonce\u2019d stylesheet');
       // By session: the only session is the max, so its bar is full, with 40% marked wasted.
-      assert.match(html, /<div class="bar" title="40\.0 of 100 on aborted or failed turns"><span class="bar-fill" style="width:100%"><\/span><span class="bar-wasted" style="width:40%">/);
+      assert.match(html, /<div class="bar" title="40\.0 of 100 on aborted or failed turns"><span class="bar-fill w100"><\/span><span class="bar-wasted w40">/);
       // No script was added to draw any of it.
       assert.doesNotMatch(html, /<script/);
     }

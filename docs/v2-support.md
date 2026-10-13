@@ -187,6 +187,17 @@ every `<details>` and resets scroll. A fresh CSP nonce per render made every ren
 differ, and History closed itself every ten seconds. The panel fixes one nonce for its
 lifetime. Pin: credits-page "rendering twice with the same nonce is byte-identical".
 
+**The Credits page's CSP allows no inline style.** `style-src` is the nonce'd block only,
+so `style="width:60%"` is dropped and a bar renders as an empty track. Seen in a
+screenshot. Widths are classes (`.w0` … `.w100`) defined in the stylesheet; nothing on the
+page may carry a `style=` attribute. Pin: credits-page "the rollups carry bars", which
+asserts no `style="width` survives.
+
+**Every phase is listed in the tree, including one the scope skipped in full.** Filtering
+those out left a v2 project showing three of five phases while the strip above showed all
+five. The row reads "not in scope", dimmed. v1 has no scope mechanism, so its rows are
+unchanged. Pin: v1-isolation "every phase is listed".
+
 **`summary { display:flex }` drops the browser's disclosure marker.** Draw ▸/▾ with
 `::before`.
 

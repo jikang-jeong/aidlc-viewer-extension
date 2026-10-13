@@ -56,7 +56,10 @@ function bar(value, max, { wasted = 0, label } = {}) {
   const pct = Math.max(0, Math.min(100, Math.round((value / max) * 100)));
   const wastedPct = Math.max(0, Math.min(pct, Math.round((wasted / max) * 100)));
   const title = label ? ` title="${escapeHtml(label)}"` : '';
-  return `<div class="bar"${title}><span class="bar-fill" style="width:${pct}%"></span>${wastedPct > 0 ? `<span class="bar-wasted" style="width:${wastedPct}%"></span>` : ''}</div>`;
+  // Widths are classes, not inline styles: the page's CSP allows only the nonce'd
+  // <style> block, so style="width:60%" is dropped and the bar renders as an empty
+  // track. Seen in a screenshot. One class per whole percent, defined once in the CSS.
+  return `<div class="bar"${title}><span class="bar-fill w${pct}"></span>${wastedPct > 0 ? `<span class="bar-wasted w${wastedPct}"></span>` : ''}</div>`;
 }
 
 function fmtTokens(n) {
@@ -321,7 +324,7 @@ function creditsHeadline(model) {
     <div class="tile"><div class="big">${fmtCredits(a.total)}</div><div class="label">credits on this project</div><div class="sub">${a.totalTurns} prompt turn${a.totalTurns === 1 ? '' : 's'} across ${model.sessions.length} session${model.sessions.length === 1 ? '' : 's'}</div></div>
     <div class="tile ${a.wasted > 0 ? 'warn' : ''}"><div class="big">${fmtCredits(a.wasted)}</div><div class="label">spent on turns that were aborted or failed</div><div class="sub">${a.wastedTurns} turn${a.wastedTurns === 1 ? '' : 's'}${a.total > 0 ? `, ${wastedPct}% of the total` : ''}</div></div>
   </div>
-  ${a.total > 0 ? `<div class="split" title="${wastedPct}% of credits bought nothing"><span class="split-ok" style="width:${100 - wastedPct}%"></span><span class="split-wasted" style="width:${wastedPct}%"></span></div><div class="split-legend"><span><i class="sw ok"></i>completed</span><span><i class="sw wasted"></i>aborted or failed</span></div>` : ''}
+  ${a.total > 0 ? `<div class="split" title="${wastedPct}% of credits bought nothing"><span class="split-ok w${100 - wastedPct}"></span><span class="split-wasted w${wastedPct}"></span></div><div class="split-legend"><span><i class="sw ok"></i>completed</span><span><i class="sw wasted"></i>aborted or failed</span></div>` : ''}
   <p class="quiet">Credits are what Kiro recorded for each turn. The price of a credit depends on your plan, so no amount in money is shown. ${model.hasTokens ? 'Token counts appear where Kiro recorded them.' : 'Kiro recorded credits but no token counts for these sessions, so none are shown.'}</p>
 </section>`;
 }
@@ -523,11 +526,13 @@ function renderCreditsPage({ webview, root, project, nonce: fixedNonce }) {
   .wait-msg { margin: 4px 0; }
   .remedies { margin: 6px 0 0 16px; padding: 0; font-size: 13px; }
   .viz { width: 26%; min-width: 110px; }
+  .w0{width:0%} .w1{width:1%} .w2{width:2%} .w3{width:3%} .w4{width:4%} .w5{width:5%} .w6{width:6%} .w7{width:7%} .w8{width:8%} .w9{width:9%} .w10{width:10%} .w11{width:11%} .w12{width:12%} .w13{width:13%} .w14{width:14%} .w15{width:15%} .w16{width:16%} .w17{width:17%} .w18{width:18%} .w19{width:19%} .w20{width:20%} .w21{width:21%} .w22{width:22%} .w23{width:23%} .w24{width:24%} .w25{width:25%} .w26{width:26%} .w27{width:27%} .w28{width:28%} .w29{width:29%} .w30{width:30%} .w31{width:31%} .w32{width:32%} .w33{width:33%} .w34{width:34%} .w35{width:35%} .w36{width:36%} .w37{width:37%} .w38{width:38%} .w39{width:39%} .w40{width:40%} .w41{width:41%} .w42{width:42%} .w43{width:43%} .w44{width:44%} .w45{width:45%} .w46{width:46%} .w47{width:47%} .w48{width:48%} .w49{width:49%} .w50{width:50%} .w51{width:51%} .w52{width:52%} .w53{width:53%} .w54{width:54%} .w55{width:55%} .w56{width:56%} .w57{width:57%} .w58{width:58%} .w59{width:59%} .w60{width:60%} .w61{width:61%} .w62{width:62%} .w63{width:63%} .w64{width:64%} .w65{width:65%} .w66{width:66%} .w67{width:67%} .w68{width:68%} .w69{width:69%} .w70{width:70%} .w71{width:71%} .w72{width:72%} .w73{width:73%} .w74{width:74%} .w75{width:75%} .w76{width:76%} .w77{width:77%} .w78{width:78%} .w79{width:79%} .w80{width:80%} .w81{width:81%} .w82{width:82%} .w83{width:83%} .w84{width:84%} .w85{width:85%} .w86{width:86%} .w87{width:87%} .w88{width:88%} .w89{width:89%} .w90{width:90%} .w91{width:91%} .w92{width:92%} .w93{width:93%} .w94{width:94%} .w95{width:95%} .w96{width:96%} .w97{width:97%} .w98{width:98%} .w99{width:99%} .w100{width:100%}
   .bar { position: relative; height: 8px; background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent); border-radius: 4px; overflow: hidden; }
   .bar-fill, .bar-wasted { position: absolute; left: 0; top: 0; bottom: 0; }
   .bar-fill { background: var(--purple); opacity: 0.8; }
   .bar-wasted { background: var(--warn); }
   .split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 14px 0 6px; background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent); }
+  .split > span { flex: none; }
   .split-ok { background: var(--purple); opacity: 0.8; }
   .split-wasted { background: var(--warn); }
   .split-legend { display: flex; gap: 18px; color: var(--muted); font-size: 12px; }
