@@ -66,6 +66,10 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 ## What's New
 
+### 0.1.1
+
+- Minor bug fixes.
+
 ### 0.0.26
 
 - **The viewer is one pane.** It opens rendered; press **Edit**, double-click the text you
