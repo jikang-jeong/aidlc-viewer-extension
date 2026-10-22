@@ -339,7 +339,13 @@ a second screenshot showed grey code on a light grey chip. Kiro Light defines
 ANSI palette (`ansiRed` 6.5:1 light / 6.8:1 dark) and `textLink.foreground` (5.9 / 5.8).
 Inline code is `terminal-ansiRed` on a 10% tint of itself; headings use the ANSI palette.
 Read the theme's JSON and compute the ratio before choosing a token; a token's name says
-nothing about its contrast. No light/dark branch exists to get wrong. Pin: viewer-single-pane "the viewer
+nothing about its contrast. No light/dark branch exists to get wrong.
+
+Known and deliberately left: `**strong**` text uses `terminal-ansiYellow`, which Kiro Light
+defines at 2.7:1 (11.6:1 on Kiro Dark). No yellow-family token is legible on both
+backgrounds, so the choice is between losing the dark theme's accent and adding a
+light/dark branch; the user looked at it and chose neither, since bold weight carries the
+emphasis on its own. Do not reopen without a token that measures above 4.5:1 on both. Pin: viewer-single-pane "the viewer
 stylesheet hard-codes no colour", which fails on a single hex outside a var() fallback.
 
 **Stage directories sort in workflow order.** The tree sorted directories alphabetically,
