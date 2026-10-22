@@ -2359,19 +2359,31 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
            hard-coded values were read on a light theme: red headings and red code on
            a grey chip that was nearly the text colour. A theme variable is right on
            both backgrounds by construction, and there is no light/dark branch here
-           to get wrong. */
-        --md-h1: var(--vscode-charts-red, #e06c75);
+           to get wrong.
+
+           Which tokens: the terminal ANSI palette and textLink. Kiro's own themes do
+           not define charts.* (those fall back to VS Code's dark-leaning defaults),
+           but they do define the ANSI colours for both backgrounds at legible
+           contrast, and that is what a document's accent colours need. */
+        --md-h1: var(--vscode-terminal-ansiRed, #e06c75);
         --md-h2: var(--vscode-textLink-foreground, #61afef);
-        --md-h3: var(--vscode-charts-purple, #c678dd);
-        --md-h4: var(--vscode-charts-orange, #d19a66);
-        --md-h5: var(--vscode-charts-green, #98c379);
-        --md-strong: var(--vscode-charts-yellow, #e5c07b);
-        --md-em: var(--vscode-symbolIcon-interfaceForeground, #56b6c2);
+        --md-h3: var(--vscode-terminal-ansiMagenta, #c678dd);
+        --md-h4: var(--vscode-terminal-ansiYellow, #d19a66);
+        --md-h5: var(--vscode-terminal-ansiGreen, #98c379);
+        --md-strong: var(--vscode-terminal-ansiYellow, #e5c07b);
+        --md-em: var(--vscode-editorInfo-foreground, #56b6c2);
         --md-link: var(--vscode-textLink-foreground, #61afef);
-        --md-code-fg: var(--vscode-textPreformat-foreground, #e06c75);
-        --md-code-bg: var(--vscode-textPreformat-background, var(--vscode-textCodeBlock-background, color-mix(in srgb, var(--panel) 60%, var(--text) 10%)));
+        /* Inline code is NOT textPreformat-foreground. Kiro Light defines that as a
+           mid grey on a 10%-grey chip, 2.8:1 against its page -- grey on light grey,
+           reported from a screenshot right after the first theme pass. The terminal
+           palette is the one set of named colours every theme defines for legibility
+           on its own background (ansiRed: 6.5:1 on Kiro Light, 6.8:1 on Kiro Dark), so
+           the chip takes its text colour from there and its background as a tint of
+           that colour, which is readable by construction. */
+        --md-code-fg: var(--vscode-terminal-ansiRed, #e06c75);
+        --md-code-bg: color-mix(in srgb, var(--md-code-fg) 10%, var(--bg));
         --md-pre-bg: var(--vscode-textCodeBlock-background, color-mix(in srgb, var(--panel) 85%, var(--text) 6%));
-        --md-quote: var(--vscode-textBlockQuote-border, #c678dd);
+        --md-quote: var(--vscode-textBlockQuote-border, var(--md-h3));
         --md-quote-bg: var(--vscode-textBlockQuote-background, color-mix(in srgb, var(--md-quote) 8%, transparent));
       }
 

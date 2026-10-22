@@ -409,7 +409,11 @@ test('the viewer stylesheet hard-codes no colour: every one is a theme variable 
     .filter(({ l }) => /#[0-9a-fA-F]{3,8}\b/.test(l.replace(/var\(--[a-zA-Z0-9-]+,\s*#[0-9a-fA-F]{3,8}\)/g, '')));
   assert.deepEqual(offenders, [], 'hex colours outside a var() fallback');
   // The tokens it leans on are VS Code's text-rendering tokens, which every theme sets.
-  for (const token of ['--vscode-textPreformat-foreground', '--vscode-textLink-foreground', '--vscode-textBlockQuote-border']) {
+  for (const token of ['--vscode-terminal-ansiRed', '--vscode-textLink-foreground', '--vscode-textBlockQuote-border']) {
     assert.ok(css.includes(token), `${token} is used`);
   }
+  // Not textPreformat-foreground for inline code: Kiro Light defines it at 2.8:1
+  // against its own page, grey on light grey. The ANSI palette is defined for
+  // legibility on both backgrounds.
+  assert.ok(!css.includes('--vscode-textPreformat-foreground'), 'inline code does not take the low-contrast preformat token');
 });

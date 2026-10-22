@@ -330,10 +330,16 @@ where code is blocked). The test checks each URL online and skips offline. The d
 used One Dark's hex values for headings, code, emphasis and quotes, and mixed `#000` into
 the code chip. On a dark theme that read fine, which is why it shipped; on a light theme a
 screenshot showed red code on a grey chip nearly the text colour. Every colour is now a
-`var(--vscode-…, #fallback)`: `textPreformat-foreground/background` for code,
-`textLink-foreground` for links and h2, `textBlockQuote-*` for quotes, `charts-*` for the
-other headings, with the old hex as the fallback so a theme that defines none renders as
-before. No light/dark branch exists to get wrong. Pin: viewer-single-pane "the viewer
+`var(--vscode-…, #fallback)` with the old hex as the fallback. Which token matters: the
+first pass used `textPreformat-foreground` for inline code and `charts-*` for headings, and
+a second screenshot showed grey code on a light grey chip. Kiro Light defines
+`textPreformat.foreground` at 2.8:1 against its own page, and defines no `charts.*` at all
+(those fall back to VS Code's dark-leaning defaults). Measured against both Kiro themes'
+`editor.background`, the tokens every theme defines at legible contrast are the terminal
+ANSI palette (`ansiRed` 6.5:1 light / 6.8:1 dark) and `textLink.foreground` (5.9 / 5.8).
+Inline code is `terminal-ansiRed` on a 10% tint of itself; headings use the ANSI palette.
+Read the theme's JSON and compute the ratio before choosing a token; a token's name says
+nothing about its contrast. No light/dark branch exists to get wrong. Pin: viewer-single-pane "the viewer
 stylesheet hard-codes no colour", which fails on a single hex outside a var() fallback.
 
 **Stage directories sort in workflow order.** The tree sorted directories alphabetically,
