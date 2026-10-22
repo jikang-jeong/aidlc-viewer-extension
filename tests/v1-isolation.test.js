@@ -373,7 +373,7 @@ function loadExtensionInternals() {
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
     loaded._compile(
       `${fs.readFileSync(file, 'utf8')}
-module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, EngineRecordsItem, StageDecorationProvider, newlyInstalled, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
+module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, EngineRecordsItem, StageDecorationProvider, MarkdownTreeDataProvider, sortItems, newlyInstalled, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
       file
     );
     return loaded.exports;
@@ -693,4 +693,49 @@ test('the start page opens only for a generation setup just added, never on a re
   assert.equal(newlyInstalled('v2', 'v2'), undefined);
   assert.equal(newlyInstalled('both', 'both'), undefined);
   assert.equal(newlyInstalled('none', 'none'), undefined, 'setup cancelled');
+});
+
+test('stage directories sort in workflow order, phases first by their first stage; unnamed directories and files after', async () => {
+  // Asked for from a screenshot: under Inception the tree listed contract-design before
+  // requirements-analysis, which is backwards. The order comes from the journey the tree
+  // already has, through the real stageDirectoryOrder() on the provider, not a copy.
+  const { MarkdownTreeDataProvider, sortItems } = loadExtensionInternals();
+  const mk = (name, base) => ({ type: 'directory', label: name, resourceUri: { fsPath: `${base}${name}` } });
+
+  // v2: a journey built from a real sample's compiled graph.
+  const { readProject } = require('../src/aidlc/index');
+  const v2Journey = readProject(path.join(__dirname, '..', '..', '..', 'aidlc', 'v2-probe3'), {}).v2?.active?.journey;
+  if (v2Journey) {
+    const tp = Object.create(MarkdownTreeDataProvider.prototype);
+    tp.rootUri = { fsPath: '/p' };
+    tp.getStageSummary = async () => ({ journey: v2Journey });
+    const order = await tp.stageDirectoryOrder();
+    const dirs = ['contract-design', 'delivery-planning', 'domain-design', 'practices-discovery', 'requirements-analysis', 'units-generation', 'u1-ordering-skeleton'].map((n) => mk(n, '/p/inception/'));
+    assert.deepEqual(
+      dirs.sort((a, b) => sortItems(a, b, order)).map((d) => d.label),
+      ['practices-discovery', 'requirements-analysis', 'domain-design', 'units-generation', 'contract-design', 'delivery-planning', 'u1-ordering-skeleton'],
+      'workflow order, then the unit folder'
+    );
+    const phases = ['operation', 'construction', 'inception', 'ideation', 'initialization'].map((n) => mk(n, '/p/'));
+    assert.deepEqual(phases.sort((a, b) => sortItems(a, b, order)).map((d) => d.label), ['initialization', 'ideation', 'inception', 'construction', 'operation']);
+  }
+
+  // v1: the directory names come from CHECKPOINTS, since the v1 journey carries only ids.
+  const tp1 = Object.create(MarkdownTreeDataProvider.prototype);
+  tp1.rootUri = { fsPath: '/p' };
+  tp1.getStageSummary = async () => ({ journey: buildJourney({ artifacts: [], rulesInstalled: true }) });
+  const order1 = await tp1.stageDirectoryOrder();
+  const v1dirs = ['user-stories', 'plans', 'requirements', 'application-design', 'reverse-engineering', 'notes'].map((n) => mk(n, '/p/aidlc-docs/inception/'));
+  assert.deepEqual(
+    v1dirs.sort((a, b) => sortItems(a, b, order1)).map((d) => d.label),
+    ['reverse-engineering', 'requirements', 'user-stories', 'plans', 'application-design', 'notes'],
+    'v1 stages in v1 order; an unnamed directory last'
+  );
+  // The v1 phase directories keep their order whether or not a journey is available.
+  const v1phases = ['operations', 'construction', 'inception'].map((n) => mk(n, '/p/aidlc-docs/'));
+  assert.deepEqual(v1phases.sort((a, b) => sortItems(a, b, order1)).map((d) => d.label), ['inception', 'construction', 'operations']);
+  assert.deepEqual([...v1phases].sort((a, b) => sortItems(a, b, new Map())).map((d) => d.label), ['inception', 'construction', 'operations'], 'and with no journey at all (the pre-0.1.0 behaviour)');
+  // A file still sorts after every directory.
+  const mixed = [{ type: 'file', label: 'a.md', resourceUri: { fsPath: '/p/a.md' } }, mk('zzz', '/p/')];
+  assert.deepEqual(mixed.sort((a, b) => sortItems(a, b, order1)).map((d) => d.label), ['zzz', 'a.md']);
 });

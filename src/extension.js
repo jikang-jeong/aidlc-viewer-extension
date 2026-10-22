@@ -1158,9 +1158,47 @@ class MarkdownTreeDataProvider {
         })
     );
 
-    const items = rawItems.filter(Boolean).sort(sortItems);
+    // Directories named for a stage sort in workflow order, not alphabetically. The
+    // order is the journey's: v2's compiled stage graph for a v2 project, the v1
+    // checkpoint list otherwise. Asked for from a screenshot where Inception listed
+    // contract-design before requirements-analysis, which is backwards.
+    const order = await this.stageDirectoryOrder();
+    const items = rawItems.filter(Boolean).sort((a, b) => sortItems(a, b, order));
 
     return items;
+  }
+
+  // Map from a stage's directory name to its position in the workflow, built from the
+  // journey the tree already has. Phase directories are in it too (first appearance),
+  // so phases and stages sort by one rule. Empty when nothing has run or the summary
+  // is unavailable, in which case the alphabetical fallback stands.
+  async stageDirectoryOrder() {
+    if (!this.rootUri) return new Map();
+    let summary;
+    try {
+      summary = await this.getStageSummary(this.rootUri);
+    } catch {
+      return new Map();
+    }
+    const journey = summary && summary.journey;
+    if (!journey || !Array.isArray(journey.checkpoints)) return new Map();
+    const order = new Map();
+    // v1's journey carries only the checkpoint id; its directory names live in the
+    // CHECKPOINTS definition (`dir`, last segment, or `unitDir`). v2's directory under
+    // the phase is named for the slug, which is the id.
+    const v1Dirs = new Map(
+      CHECKPOINTS.map((cp) => [cp.id, Array.isArray(cp.dir) && cp.dir.length ? cp.dir[cp.dir.length - 1] : cp.unitDir])
+    );
+    journey.checkpoints.forEach((cp, i) => {
+      const phase = typeof cp.phase === 'string' ? cp.phase.toLowerCase() : undefined;
+      if (phase && !order.has(phase)) order.set(phase, i);
+      for (const n of [cp.id, v1Dirs.get(cp.id)]) {
+        if (typeof n !== 'string') continue;
+        const key = n.toLowerCase();
+        if (!order.has(key)) order.set(key, i);
+      }
+    });
+    return order;
   }
 
   async getStageSummary(rootUri) {
@@ -1631,9 +1669,9 @@ function createFileItem(resourceUri, fileType, metadata, visualState) {
   return undefined;
 }
 
-function sortItems(left, right) {
-  const leftRank = getItemSortRank(left);
-  const rightRank = getItemSortRank(right);
+function sortItems(left, right, stageOrder = new Map()) {
+  const leftRank = getItemSortRank(left, stageOrder);
+  const rightRank = getItemSortRank(right, stageOrder);
   if (leftRank !== rightRank) {
     return leftRank - rightRank;
   }
@@ -2094,7 +2132,7 @@ function capitalize(value) {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }
 
-function getItemSortRank(item) {
+function getItemSortRank(item, stageOrder = new Map()) {
   if (item.contextValue === 'stageSummary') {
     return -2;
   }
@@ -2103,14 +2141,21 @@ function getItemSortRank(item) {
   }
 
   if (item.type === 'directory') {
-    const stageOrder = getStageDirectoryOrder(item.resourceUri);
-    if (stageOrder !== undefined) {
-      return stageOrder;
+    // A directory named for a phase or a stage takes that position in the workflow,
+    // packed below the fixed rows and above everything unnamed. The v1 phase names
+    // keep their old fixed slots as the fallback when no journey is available.
+    const name = item.resourceUri ? path.basename(item.resourceUri.fsPath).toLowerCase() : '';
+    if (stageOrder.has(name)) {
+      return stageOrder.get(name);
     }
-    return 10;
+    const legacy = getStageDirectoryOrder(item.resourceUri);
+    if (legacy !== undefined) {
+      return legacy;
+    }
+    return 1000;
   }
 
-  return 20;
+  return 2000;
 }
 
 function getStageDirectoryOrder(resourceUri) {
@@ -2308,12 +2353,32 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         --muted: var(--vscode-descriptionForeground);
         --accent: var(--vscode-button-background);
         --accent-text: var(--vscode-button-foreground);
+        /* The rendered Markdown's palette. Every colour comes from a token the theme
+           defines for its own light or dark background, with the former hard-coded
+           One Dark value as the fallback for a theme that defines none. The
+           hard-coded values were read on a light theme: red headings and red code on
+           a grey chip that was nearly the text colour. A theme variable is right on
+           both backgrounds by construction, and there is no light/dark branch here
+           to get wrong. */
+        --md-h1: var(--vscode-charts-red, #e06c75);
+        --md-h2: var(--vscode-textLink-foreground, #61afef);
+        --md-h3: var(--vscode-charts-purple, #c678dd);
+        --md-h4: var(--vscode-charts-orange, #d19a66);
+        --md-h5: var(--vscode-charts-green, #98c379);
+        --md-strong: var(--vscode-charts-yellow, #e5c07b);
+        --md-em: var(--vscode-symbolIcon-interfaceForeground, #56b6c2);
+        --md-link: var(--vscode-textLink-foreground, #61afef);
+        --md-code-fg: var(--vscode-textPreformat-foreground, #e06c75);
+        --md-code-bg: var(--vscode-textPreformat-background, var(--vscode-textCodeBlock-background, color-mix(in srgb, var(--panel) 60%, var(--text) 10%)));
+        --md-pre-bg: var(--vscode-textCodeBlock-background, color-mix(in srgb, var(--panel) 85%, var(--text) 6%));
+        --md-quote: var(--vscode-textBlockQuote-border, #c678dd);
+        --md-quote-bg: var(--vscode-textBlockQuote-background, color-mix(in srgb, var(--md-quote) 8%, transparent));
       }
 
       body {
         margin: 0;
         color: var(--text);
-        background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 92%, #8fb8ff 8%), var(--bg));
+        background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 92%, var(--md-link) 8%), var(--bg));
         font-family: var(--vscode-font-family);
         /* Column layout so the journey strip can sit above the split panes and
            the panes take the remaining height. */
@@ -2336,7 +2401,7 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       .pane.single {
         flex: 1 1 auto;
         min-width: 0;
-        background: color-mix(in srgb, var(--bg) 96%, #fff 4%);
+        background: color-mix(in srgb, var(--bg) 96%, var(--text) 4%);
       }
       .mode { display: inline-flex; gap: 2px; margin: 0 10px; }
       .mode-btn {
@@ -2629,32 +2694,32 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
 
       .preview h1 {
         font-size: 2em;
-        color: #e06c75;
-        border-bottom: 3px solid color-mix(in srgb, #e06c75 45%, transparent);
+        color: var(--md-h1);
+        border-bottom: 3px solid color-mix(in srgb, var(--md-h1) 45%, transparent);
         padding-bottom: 0.3em;
         margin-top: 0.2em;
       }
       .preview h2 {
         font-size: 1.55em;
-        color: #61afef;
-        border-bottom: 2px solid color-mix(in srgb, #61afef 35%, transparent);
+        color: var(--md-h2);
+        border-bottom: 2px solid color-mix(in srgb, var(--md-h2) 35%, transparent);
         padding-bottom: 0.25em;
       }
       .preview h3 {
         font-size: 1.28em;
-        color: #c678dd;
+        color: var(--md-h3);
       }
       .preview h3::before {
         content: '▸ ';
-        color: color-mix(in srgb, #c678dd 70%, transparent);
+        color: color-mix(in srgb, var(--md-h3) 70%, transparent);
       }
       .preview h4 {
         font-size: 1.1em;
-        color: #d19a66;
+        color: var(--md-h4);
       }
       .preview h5 {
         font-size: 1em;
-        color: #98c379;
+        color: var(--md-h5);
         text-transform: uppercase;
         letter-spacing: 0.04em;
       }
@@ -2670,18 +2735,18 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       }
 
       .preview strong {
-        color: #e5c07b;
+        color: var(--md-strong);
         font-weight: 700;
       }
       .preview em {
-        color: #56b6c2;
+        color: var(--md-em);
         font-style: italic;
       }
 
       .preview a {
-        color: #61afef;
+        color: var(--md-link);
         text-decoration: none;
-        border-bottom: 1px dashed color-mix(in srgb, #61afef 50%, transparent);
+        border-bottom: 1px dashed color-mix(in srgb, var(--md-link) 50%, transparent);
       }
       .preview a:hover {
         border-bottom-style: solid;
@@ -2695,16 +2760,16 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         margin: 0.28em 0;
       }
       .preview ul > li::marker {
-        color: #98c379;
+        color: var(--md-h5);
       }
       .preview ol > li::marker {
-        color: #d19a66;
+        color: var(--md-h4);
         font-weight: 600;
       }
 
       .preview hr {
         border: 0;
-        border-top: 2px dashed color-mix(in srgb, var(--border) 80%, #888 20%);
+        border-top: 2px dashed color-mix(in srgb, var(--border) 80%, var(--text) 20%);
         margin: 2em 0;
       }
 
@@ -2712,8 +2777,8 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         overflow: auto;
         padding: 14px 16px;
         border-radius: 8px;
-        background: color-mix(in srgb, var(--panel) 78%, #000 22%);
-        border-left: 3px solid #98c379;
+        background: var(--md-pre-bg);
+        border-left: 3px solid var(--md-h5);
         font-size: 0.92em;
         line-height: 1.55;
         margin: 1em 0;
@@ -2726,8 +2791,8 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
 
       .preview code {
         font-family: var(--vscode-editor-font-family, "SF Mono", Menlo, Consolas, monospace);
-        background: color-mix(in srgb, var(--panel) 60%, #000 40%);
-        color: #e06c75;
+        background: var(--md-code-bg);
+        color: var(--md-code-fg);
         padding: 2px 6px;
         border-radius: 4px;
         font-size: 0.88em;
@@ -2737,8 +2802,8 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       .preview blockquote {
         margin: 1em 0;
         padding: 8px 14px;
-        border-left: 4px solid #c678dd;
-        background: color-mix(in srgb, #c678dd 8%, transparent);
+        border-left: 4px solid var(--md-quote);
+        background: var(--md-quote-bg);
         color: color-mix(in srgb, var(--text) 88%, var(--muted) 12%);
         border-radius: 0 6px 6px 0;
       }
@@ -2757,8 +2822,8 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         text-align: left;
       }
       .preview table th {
-        background: color-mix(in srgb, #61afef 15%, transparent);
-        color: #61afef;
+        background: color-mix(in srgb, var(--md-h2) 15%, transparent);
+        color: var(--md-h2);
         font-weight: 600;
       }
       .preview table tr:nth-child(even) td {
@@ -2784,13 +2849,13 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         height: auto;
       }
       .mermaid-error {
-        border-left-color: #e06c75 !important;
-        color: #e06c75;
+        border-left-color: var(--vscode-errorForeground, #e06c75) !important;
+        color: var(--vscode-errorForeground, #e06c75);
       }
 
       /* Task list checkboxes */
       .preview input[type="checkbox"] {
-        accent-color: #98c379;
+        accent-color: var(--md-h5);
         margin-right: 6px;
       }
 

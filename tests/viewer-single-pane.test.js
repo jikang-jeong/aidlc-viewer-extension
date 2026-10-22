@@ -388,3 +388,28 @@ test('a document that mentions </script> still loads the viewer', () => {
   assert.ok(dom.elements.get('editor').value.includes('</script> in prose'), 'the source survived intact');
   assert.match(dom.elements.get('preview').innerHTML, /&lt;\/script&gt; in prose/);
 });
+
+// ---------------------------------------------------------------------------
+// The viewer's colours are the theme's
+// ---------------------------------------------------------------------------
+
+test('the viewer stylesheet hard-codes no colour: every one is a theme variable with a fallback', () => {
+  // Reported from a light theme: red headings and red code on a grey chip, nearly the
+  // text colour. The palette was One Dark's, fixed, and read fine only on a dark
+  // background. Every colour now comes from a token the theme defines for its own
+  // background. A hex value is allowed only as the fallback inside var(..., #fallback),
+  // so a theme that defines no such token still renders as before.
+  const html = renderHtml('# T');
+  const css = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  const offenders = css
+    .split('\n')
+    .map((l, i) => ({ i: i + 1, l: l.trim() }))
+    .filter(({ l }) => /#[0-9a-fA-F]{3,8}\b/.test(l))
+    // Strip every var(--x, #fallback) and see whether a hex survives outside one.
+    .filter(({ l }) => /#[0-9a-fA-F]{3,8}\b/.test(l.replace(/var\(--[a-zA-Z0-9-]+,\s*#[0-9a-fA-F]{3,8}\)/g, '')));
+  assert.deepEqual(offenders, [], 'hex colours outside a var() fallback');
+  // The tokens it leans on are VS Code's text-rendering tokens, which every theme sets.
+  for (const token of ['--vscode-textPreformat-foreground', '--vscode-textLink-foreground', '--vscode-textBlockQuote-border']) {
+    assert.ok(css.includes(token), `${token} is used`);
+  }
+});

@@ -326,6 +326,24 @@ to `raw/main/...`, and the five files are pushed to `main` (the user can push me
 where code is blocked). The test checks each URL online and skips offline. The demo gif and
 `.kiro/` are excluded from the vsix. Pin: tests/readme-images.test.js.
 
+**The viewer's colours are the theme's, never a fixed palette.** The rendered Markdown
+used One Dark's hex values for headings, code, emphasis and quotes, and mixed `#000` into
+the code chip. On a dark theme that read fine, which is why it shipped; on a light theme a
+screenshot showed red code on a grey chip nearly the text colour. Every colour is now a
+`var(--vscode-…, #fallback)`: `textPreformat-foreground/background` for code,
+`textLink-foreground` for links and h2, `textBlockQuote-*` for quotes, `charts-*` for the
+other headings, with the old hex as the fallback so a theme that defines none renders as
+before. No light/dark branch exists to get wrong. Pin: viewer-single-pane "the viewer
+stylesheet hard-codes no colour", which fails on a single hex outside a var() fallback.
+
+**Stage directories sort in workflow order.** The tree sorted directories alphabetically,
+so under Inception `contract-design` came before `requirements-analysis`. The order is the
+journey's (`MarkdownTreeDataProvider.stageDirectoryOrder()`): v2 slugs are the directory
+names; v1 directory names come from `CHECKPOINTS.dir/unitDir` because the v1 journey
+carries only ids. Phases take their first stage's index, unnamed directories (units) sort
+after every stage, files after every directory. Pin: v1-isolation "stage directories sort
+in workflow order", which runs the real method against a real v2 sample and the v1 list.
+
 **The built-in guide is pinned to the build it ships with.** Prose does not fail a test
 when the behaviour it describes changes, and the guide fell behind the same day twice.
 `tests/guide-current.test.js` renders `getHelpHtml` and requires the sentences a user
