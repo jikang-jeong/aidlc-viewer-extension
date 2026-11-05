@@ -127,6 +127,7 @@ function activate(context) {
     // other icon was the v2 one. Every other entry point routes through the same
     // question, so no path can pick a generation the user was not asked about.
     vscode.commands.registerCommand('markdownWatchViewer.setupRules', () => controller.setupRules()),
+    vscode.commands.registerCommand('markdownWatchViewer.offerSetup', () => controller.offerSetupForWatched()),
     // Answers "I installed it and /aidlc is not there". Three separate causes are
     // indistinguishable from the chat, and each has a different fix.
     vscode.commands.registerCommand('markdownWatchViewer.checkV2', () =>
@@ -637,6 +638,19 @@ class WatchController {
   //
   // The folder check happens here rather than inside the chooser, because there is
   // nothing to ask about until a folder is being watched.
+  // The welcome panel's Set up button. Same two-step toasts in the corner as watching
+  // a folder shows, not the toolbar's QuickPick: a person who has just opened a folder
+  // and sees the panel is in the same place as one who just picked the folder, and the
+  // question should look the same from both.
+  async offerSetupForWatched() {
+    const folder = this.context.workspaceState.get(STATE_KEY);
+    if (!folder) {
+      await this.promptForFolder('Open an AI-DLC project folder first, then set it up.');
+      return;
+    }
+    await this.offerAidlcSetup(vscode.Uri.file(folder));
+  }
+
   async setupRules() {
     const folder = this.context.workspaceState.get(STATE_KEY);
     if (!folder) {

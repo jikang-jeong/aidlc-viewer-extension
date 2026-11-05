@@ -349,7 +349,14 @@ test('a watched folder with no AI-DLC shows an empty tree, so the set-up welcome
   const noFolder = panels.find((v) => v.when === '!aidlcViewer.setupNeeded');
   const setup = panels.find((v) => v.when === 'aidlcViewer.setupNeeded');
   assert.ok(noFolder && setup, 'two panels, gated on the same key, one each way');
-  assert.match(setup.contents, /\(command:markdownWatchViewer\.setupRules\)/, 'Set up button');
+  assert.match(setup.contents, /\(command:markdownWatchViewer\.offerSetup\)/, 'Set up button goes through the corner toasts');
+  assert.doesNotMatch(setup.contents, /setupRules/, 'not the toolbar QuickPick');
+  // The command the button invokes reaches offerAidlcSetup, the two-step toast flow.
+  const src = fs.readFileSync(EXTENSION, 'utf8');
+  assert.match(src, /registerCommand\('markdownWatchViewer\.offerSetup', \(\) => controller\.offerSetupForWatched\(\)\)/);
+  const fnStart = src.indexOf('async offerSetupForWatched()');
+  const fn = src.slice(fnStart, src.indexOf('\n  }\n', fnStart));
+  assert.match(fn, /this\.offerAidlcSetup\(vscode\.Uri\.file\(folder\)\)/);
   assert.match(setup.contents, /\(command:markdownWatchViewer\.showHelp\)/, 'Guide button, as on the no-folder panel');
   assert.match(noFolder.contents, /\(command:markdownWatchViewer\.selectFolder\)/);
   // Every command a panel button invokes is a registered command.

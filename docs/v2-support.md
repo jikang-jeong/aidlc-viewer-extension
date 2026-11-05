@@ -416,7 +416,11 @@ one thing that is now automatic, and it knew only v1. A folder watched this way 
 AI-DLC in it shows an empty tree and a second viewsWelcome panel (gated on the
 `aidlcViewer.setupNeeded` context key, set in `refreshSupervision` from the same read as
 the tree) whose buttons are Set up and Guide, the shape of the no-folder panel; a "Not
-started" row with a hint was tried first and asked to be this. Pin: workspace-folder.test.js,
+started" row with a hint was tried first and asked to be this. Its Set up button is
+`markdownWatchViewer.offerSetup`, which goes through the same two-step corner toasts as
+watching a folder does, not the toolbar's QuickPick: the first build used `setupRules`
+and the centre-screen list came back, the one place those toasts were meant to retire.
+Pin: workspace-folder.test.js,
 which runs the real `restoreWatcher` and `selectFolder` against a `vscode` stub with 0, 1
 and several workspace folders; all fail on the code before this change.
 

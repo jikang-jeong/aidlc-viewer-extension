@@ -98,6 +98,10 @@
       {
         "command": "markdownWatchViewer.openChatToStart",
         "title": "AI-DLC: Open chat to start"
+      },
+      {
+        "command": "markdownWatchViewer.offerSetup",
+        "title": "AI-DLC: Set up (from the welcome panel)"
       }
     ],
     "viewsContainers": {
@@ -133,7 +137,7 @@
       {
         "view": "markdownWatchViewer.tree",
         "when": "aidlcViewer.setupNeeded",
-        "contents": "This folder has no AI-DLC yet.\n\n[Set up AI-DLC](command:markdownWatchViewer.setupRules)\n\nOne prompt asks which generation: v1 is the rule files your agent reads, v2 is an engine installed on this machine that drives the workflow.\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)"
+        "contents": "This folder has no AI-DLC yet.\n\n[Set up AI-DLC](command:markdownWatchViewer.offerSetup)\n\nOne prompt asks which generation: v1 is the rule files your agent reads, v2 is an engine installed on this machine that drives the workflow.\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)"
       }
     ],
     "menus": {
@@ -189,6 +193,10 @@
         },
         {
           "command": "markdownWatchViewer.openChatToStart",
+          "when": "false"
+        },
+        {
+          "command": "markdownWatchViewer.offerSetup",
           "when": "false"
         }
       ]
