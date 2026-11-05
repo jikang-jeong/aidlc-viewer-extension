@@ -269,34 +269,22 @@ test('Open Workspace with several folders open: a QuickPick among them, never a 
   assert.deepStrictEqual(record.offered, [b], 'an explicit pick still offers setup');
 });
 
-test('Open Workspace with one folder open: dialog starts at the root; the root offers setup, a sub-folder gets the one-line warning instead', async () => {
+test('Open Workspace with one folder open: no dialog; the open folder is watched and setup is offered', async () => {
   const root = emptyProject();
-  const sub = path.join(root, 'docs');
-  fs.mkdirSync(sub);
+  const other = emptyProject();
+  const { WatchController, calls } = loadController({ workspaceFolders: [root] });
+  // A window that had stored some other folder is brought back in line with what is open.
+  const { controller, context, record } = controllerUnderTest(WatchController, {
+    workspaceState: memoryState({ 'markdownWatchViewer.watchedFolder': other })
+  });
 
-  {
-    const { WatchController, calls } = loadController({
-      workspaceFolders: [root],
-      onOpenDialog: () => [{ fsPath: root }]
-    });
-    const { controller, record } = controllerUnderTest(WatchController);
-    await controller.selectFolder();
-    assert.strictEqual(calls.openDialog[0].defaultUri.fsPath, root, 'the common answer is one click');
-    assert.deepStrictEqual(record.offered, [root]);
-    assert.deepStrictEqual(calls.toasts, []);
-  }
-  {
-    const { WatchController, calls } = loadController({
-      workspaceFolders: [root],
-      onOpenDialog: () => [{ fsPath: sub }]
-    });
-    const { controller, record } = controllerUnderTest(WatchController);
-    await controller.selectFolder();
-    assert.deepStrictEqual(record.watched.map((w) => w.path), [sub], 'v1 projects may keep aidlc-docs below the root, so the pick is honoured');
-    assert.deepStrictEqual(record.offered, [], 'setup is not offered where the engine would not run');
-    assert.strictEqual(calls.toasts.length, 1);
-    assert.match(calls.toasts[0], /workspace root/);
-  }
+  await controller.selectFolder();
+
+  assert.strictEqual(calls.openDialog.length, 0, 'the open folder is the answer; nothing to ask');
+  assert.strictEqual(calls.quickPick.length, 0);
+  assert.deepStrictEqual(record.watched.map((w) => w.path), [root]);
+  assert.strictEqual(context.workspaceState.get('markdownWatchViewer.watchedFolder'), root);
+  assert.deepStrictEqual(record.offered, [root], 'an explicit press asks the setup question');
 });
 
 test('the welcome guide opens on an automatically watched folder, as it did on an unwatched one', () => {

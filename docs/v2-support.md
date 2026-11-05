@@ -407,12 +407,14 @@ Now: one open folder is watched on activation without asking; several are watche
 exactly one carries AI-DLC, otherwise the toolbar asks among them (QuickPick, not a disk
 dialog); none makes the toolbar button open the folder in Kiro, with the setup offer that
 pick would have made carried across the reload in `globalState` and keyed to the picked
-path. The dialog with one folder open still exists for v1 projects whose `aidlc-docs` is
-below the root, and says once that v2 will not run there. The `aidlc-docs` auto-detect
-prompt is gone: it asked for the one thing that is now automatic, and it knew only v1.
-Pin: workspace-folder.test.js, which runs the real `restoreWatcher` and `selectFolder`
-against a `vscode` stub with 0, 1 and several workspace folders; all twelve fail on the
-code before this change.
+path. With one folder open the button shows no dialog: it watches that folder (bringing
+a window that stored another one back in line) and asks the setup question. A dialog was
+kept there at first for sub-folders, and the first press of the button in Kiro asked why
+it did not just take the open folder; v1 has no sub-folder case either, its rules being in
+the root's `.kiro/steering`. The `aidlc-docs` auto-detect prompt is gone: it asked for the
+one thing that is now automatic, and it knew only v1. Pin: workspace-folder.test.js,
+which runs the real `restoreWatcher` and `selectFolder` against a `vscode` stub with 0, 1
+and several workspace folders; all fail on the code before this change.
 
 **Any AI-DLC in the folder means no setup, decided when acting, not when asking.** The
 extension sets up projects that have no AI-DLC and never writes into one that does; v1

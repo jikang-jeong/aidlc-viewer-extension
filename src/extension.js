@@ -416,31 +416,15 @@ class WatchController {
       return;
     }
 
-    // One folder open. It is already watched; the dialog stays for the person who
-    // wants a sub-folder, and starts at the root so the common answer is one click.
+    // One folder open: that is the answer, so no dialog. The button watches it (which
+    // also brings a window that stored some other folder back in line with what is
+    // open) and asks the setup question an explicit pick asks. A dialog was kept here
+    // at first for sub-folders, and the first person to press the button asked why it
+    // did not just take the open folder. v1 needs no sub-folder either: its rules are
+    // in the root's `.kiro/steering` and `aidlc-docs` is the root's sibling.
     const root = folders[0];
-    const selection = await vscode.window.showOpenDialog({
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      defaultUri: root,
-      openLabel: 'Watch this folder'
-    });
-    if (!selection || !selection[0]) {
-      return;
-    }
-    const folderUri = selection[0];
-    await this.setWatchedFolder(folderUri, { showMessage: true });
-    if (!samePath(folderUri.fsPath, root.fsPath)) {
-      // Said once, where the choice is made. Setup is not offered for a folder the
-      // engine would not run in; the toolbar still can, for whoever means it.
-      vscode.window.showInformationMessage(
-        `Kiro runs AI-DLC from the workspace root (${path.basename(root.fsPath)}), ` +
-          `not from ${path.basename(folderUri.fsPath)}. Watching it anyway.`
-      );
-      return;
-    }
-    await this.offerAidlcSetup(folderUri);
+    await this.setWatchedFolder(root, { showMessage: true });
+    await this.offerAidlcSetup(root);
   }
 
   // Offered once, when a folder is picked explicitly. The prompt exists because
@@ -3730,7 +3714,7 @@ function getHelpHtml() {
 
 <h2>Getting Started</h2>
 <ol>
-  <li>Open your project folder in Kiro. The VIEWER panel follows the workspace folder; <strong>Open Workspace</strong> (folder icon) is only needed to open one, or to choose among several.</li>
+  <li>Open your project folder in Kiro. The VIEWER panel follows the workspace folder; <strong>Open Workspace</strong> (folder icon) watches it again if needed, opens one when none is open, or chooses among several.</li>
   <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want, <strong>v1</strong> or <strong>v2</strong>; for v2 a second prompt in the same place asks <strong>Kiro IDE</strong> or <strong>Kiro CLI</strong>, unless the project already recorded one. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
   <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Right after setup a page opens in the editor with this command large and a button that opens Kiro\u2019s chat with it already typed. Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with the same command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
 </ol>
@@ -3828,7 +3812,7 @@ function getHelpHtml() {
 
 <h2>시작하기</h2>
 <ol>
-  <li>Kiro에서 프로젝트 폴더를 엽니다. VIEWER 패널은 워크스페이스 폴더를 그대로 따라갑니다. <strong>Open Workspace</strong>(폴더 아이콘)는 폴더를 아직 열지 않았거나 여러 개가 열려 있을 때만 필요합니다.</li>
+  <li>Kiro에서 프로젝트 폴더를 엽니다. VIEWER 패널은 워크스페이스 폴더를 그대로 따라갑니다. <strong>Open Workspace</strong>(폴더 아이콘)는 그 폴더를 다시 맞추거나, 폴더를 아직 열지 않았을 때 열거나, 여러 개 중 하나를 고를 때 씁니다.</li>
   <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>인지 <strong>v2</strong>인지 먼저, v2라면 같은 자리에 두 번째 알림으로 <strong>Kiro IDE</strong>인지 <strong>Kiro CLI</strong>인지 묻습니다. 이미 기록된 프로젝트는 두 번째를 건너뜁니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
   <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 설치 직후 에디터에 이 명령을 크게 보여주는 페이지가 열리고, 그 명령이 입력된 상태로 Kiro 채팅을 여는 버튼이 함께 있습니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 같은 명령을 보여줍니다.</li>
 </ol>
