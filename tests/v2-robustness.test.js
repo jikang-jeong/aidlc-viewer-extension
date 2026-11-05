@@ -988,3 +988,148 @@ test('a Stage field still outranks the Context path when a row carries both', ()
   ]);
   assert.equal(diagnose(dir, { knownStages: KNOWN }).waitingOnYou[0].stage, 'build-and-test');
 });
+
+// ---------------------------------------------------------------------------
+// The audit ledger is the position's second source
+// ---------------------------------------------------------------------------
+//
+// The runtime graph decides a stage's status when it has a record of the stage. When it
+// has none -- the file missing, hooks that did not run, a record written to a worktree --
+// the ledger's STAGE_* events decide, and the checkpoint says so (`source: 'ledger'`).
+// Observed on a real project copy (v2-probe3 with runtime-graph.json removed): eleven
+// stages completed in the ledger and the map read "Not started".
+
+const LEDGER_GRAPH = [
+  { slug: 'a', name: 'A', phase: 'p1', execution: 'ALWAYS' },
+  { slug: 'b', name: 'B', phase: 'p1', execution: 'CONDITIONAL' },
+  { slug: 'c', name: 'C', phase: 'p2', execution: 'ALWAYS' },
+  { slug: 'd', name: 'D', phase: 'p2', execution: 'ALWAYS', for_each: 'unit-of-work' }
+];
+const LEDGER_GRID = { s: { stages: { a: 'EXECUTE', b: 'EXECUTE', c: 'EXECUTE', d: 'EXECUTE' } } };
+
+function ledgerProject(extra) {
+  return makeProject({
+    stageGraph: LEDGER_GRAPH,
+    scopeGrid: LEDGER_GRID,
+    manifest: [{ dirName: '260101-x', scope: 's' }],
+    intentDir: '260101-x',
+    ...extra
+  });
+}
+function statuses(root) {
+  const j = buildV2(root).intents[0].journey;
+  return Object.fromEntries(j.checkpoints.map((cp) => [cp.id, cp.status + (cp.source ? '@' + cp.source : '')]));
+}
+
+test('ledger fallback: no runtime graph, stages completed in the ledger -- the map shows them, from the ledger', () => {
+  const root = ledgerProject({
+    auditShard: shard([
+      { Event: 'STAGE_STARTED', Stage: 'a', Timestamp: '2026-01-01T00:00:01Z' },
+      { Event: 'STAGE_COMPLETED', Stage: 'a', Timestamp: '2026-01-01T00:00:02Z' },
+      { Event: 'STAGE_STARTED', Stage: 'b', Timestamp: '2026-01-01T00:00:03Z' }
+    ])
+  });
+  assert.deepEqual(statuses(root), { a: 'done@ledger', b: 'active@ledger', c: 'pending', d: 'pending' });
+  const j = buildV2(root).intents[0].journey;
+  assert.equal(j.checkpoints[j.currentIndex].id, 'b', 'position is the furthest stage with evidence');
+  // The scope still comes from somewhere: the manifest stands in for the missing runtime graph.
+  const model = buildV2(root);
+  assert.equal(model.intents[0].scope, 's');
+  assert.deepEqual(model.gaps.intentsWithoutRuntime, ['260101-x'], 'and the gap is still reported');
+});
+
+test('ledger fallback: a runtime graph behind the ledger -- records decide where they exist, the ledger where they do not', () => {
+  const root = ledgerProject({
+    runtimeGraph: { scope: 's', stages: [{ stage_slug: 'a', outcome: 'approved' }] },
+    auditShard: shard([
+      { Event: 'STAGE_STARTED', Stage: 'a', Timestamp: '2026-01-01T00:00:01Z' },
+      { Event: 'STAGE_COMPLETED', Stage: 'a', Timestamp: '2026-01-01T00:00:02Z' },
+      { Event: 'STAGE_STARTED', Stage: 'b', Timestamp: '2026-01-01T00:00:03Z' },
+      { Event: 'STAGE_COMPLETED', Stage: 'b', Timestamp: '2026-01-01T00:00:04Z' },
+      { Event: 'STAGE_STARTED', Stage: 'c', Timestamp: '2026-01-01T00:00:05Z' }
+    ])
+  });
+  assert.deepEqual(statuses(root), { a: 'done', b: 'done@ledger', c: 'active@ledger', d: 'pending' });
+});
+
+test('ledger fallback: the runtime graph outranks the ledger wherever it has a record', () => {
+  // A record that says pending while the ledger says completed: the record is the
+  // engine's current state, the ledger is history. The record wins.
+  const root = ledgerProject({
+    runtimeGraph: { scope: 's', stages: [{ stage_slug: 'a', outcome: 'pending' }] },
+    auditShard: shard([
+      { Event: 'STAGE_STARTED', Stage: 'a', Timestamp: '2026-01-01T00:00:01Z' },
+      { Event: 'STAGE_COMPLETED', Stage: 'a', Timestamp: '2026-01-01T00:00:02Z' }
+    ])
+  });
+  assert.equal(statuses(root).a, 'active', 'no @ledger: the runtime record decided');
+});
+
+test('ledger fallback: STAGE_REVISING after STAGE_COMPLETED does not undo done, as the runtime graph does not', () => {
+  // On every real sample a revised stage kept outcome=approved. The ledger reading
+  // mirrors that rather than inventing a stricter rule.
+  const root = ledgerProject({
+    auditShard: shard([
+      { Event: 'STAGE_STARTED', Stage: 'a', Timestamp: '2026-01-01T00:00:01Z' },
+      { Event: 'STAGE_COMPLETED', Stage: 'a', Timestamp: '2026-01-01T00:00:02Z' },
+      { Event: 'STAGE_REVISING', Stage: 'a', Timestamp: '2026-01-01T00:00:03Z' }
+    ])
+  });
+  assert.equal(statuses(root).a, 'done@ledger');
+});
+
+test('ledger fallback: a per-unit STAGE_COMPLETED closes the unit, not the stage', () => {
+  // Without the runtime graph the unit total is unknown, so claiming the stage done
+  // from one unit would overstate. It stays active.
+  const root = ledgerProject({
+    auditShard: shard([
+      { Event: 'STAGE_STARTED', Stage: 'd', Unit: 'u1', Timestamp: '2026-01-01T00:00:01Z' },
+      { Event: 'STAGE_COMPLETED', Stage: 'd', Unit: 'u1', Timestamp: '2026-01-01T00:00:02Z' }
+    ])
+  });
+  assert.equal(statuses(root).d, 'active@ledger');
+});
+
+test('STAGE_SKIPPED in the ledger shows the stage as skipped, even over a pending runtime record', () => {
+  // v2-probe2, contract-design: the engine declined the conditional stage and wrote
+  // STAGE_SKIPPED; its runtime record stayed at pending, which read as "in progress".
+  const root = ledgerProject({
+    runtimeGraph: { scope: 's', stages: [{ stage_slug: 'a', outcome: 'approved' }, { stage_slug: 'b', outcome: 'pending' }] },
+    auditShard: shard([
+      { Event: 'STAGE_COMPLETED', Stage: 'a', Timestamp: '2026-01-01T00:00:01Z' },
+      { Event: 'STAGE_SKIPPED', Stage: 'b', Timestamp: '2026-01-01T00:00:02Z' },
+      { Event: 'STAGE_STARTED', Stage: 'c', Timestamp: '2026-01-01T00:00:03Z' }
+    ])
+  });
+  const s = statuses(root);
+  assert.equal(s.b, 'skipped@ledger');
+  const j = buildV2(root).intents[0].journey;
+  const b = j.checkpoints.find((cp) => cp.id === 'b');
+  assert.equal(b.outOfScope, undefined, 'skipped by the run, not declared out of scope: the renderers print "skipped"');
+  assert.equal(j.counts.skipped, 1);
+  assert.equal(j.plannedTotal, 3, 'a skipped stage is not work left to do');
+  assert.equal(j.checkpoints[j.currentIndex].id, 'c');
+});
+
+test('STAGE_SKIPPED does not override an approved runtime record', () => {
+  const root = ledgerProject({
+    runtimeGraph: { scope: 's', stages: [{ stage_slug: 'b', outcome: 'approved' }] },
+    auditShard: shard([{ Event: 'STAGE_SKIPPED', Stage: 'b', Timestamp: '2026-01-01T00:00:01Z' }])
+  });
+  assert.equal(statuses(root).b, 'done');
+});
+
+test('ledger fallback: a stage the scope excludes stays not in scope whatever the ledger says', () => {
+  const root = makeProject({
+    stageGraph: LEDGER_GRAPH,
+    scopeGrid: { s: { stages: { a: 'EXECUTE', b: 'SKIP', c: 'EXECUTE', d: 'EXECUTE' } } },
+    manifest: [{ dirName: '260101-x', scope: 's' }],
+    intentDir: '260101-x',
+    auditShard: shard([{ Event: 'STAGE_COMPLETED', Stage: 'b', Timestamp: '2026-01-01T00:00:01Z' }])
+  });
+  const j = buildV2(root).intents[0].journey;
+  const b = j.checkpoints.find((cp) => cp.id === 'b');
+  assert.equal(b.status, 'skipped');
+  assert.equal(b.outOfScope, true);
+  assert.equal(b.source, undefined);
+});

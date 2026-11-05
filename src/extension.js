@@ -2154,6 +2154,12 @@ function buildProgressTooltip(summary) {
   if (journey.unattributed.length) {
     lines.push('', `⚠ ${journey.unattributed.length} artifact(s) not mapped to a stage`);
   }
+  // Stages whose status came from the audit ledger because the runtime graph had no
+  // record of them. Said here so a position read from the second source says so.
+  const fromLedger = journey.checkpoints.filter((cp) => cp.source === 'ledger' && cp.status !== 'skipped').length;
+  if (fromLedger > 0) {
+    lines.push('', `${fromLedger} stage(s) read from the audit ledger; the runtime graph has no record of them`);
+  }
 
   const md = new vscode.MarkdownString(lines.join('\n'));
   md.isTrusted = false;

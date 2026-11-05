@@ -189,7 +189,41 @@ function summarise(intentDir, knownStages) {
   const awaitingApproval = [];
   const unitsCompleted = new Map();
   const unitsSeen = new Map();
+  // What the ledger says each stage last was, in ledger order. The runtime graph is
+  // the position's first source; this is its second, for a stage the runtime graph
+  // has no record of (file missing, hooks that did not run, a record written to a
+  // worktree). Observed on a real project with eleven stages completed in the ledger
+  // and no runtime-graph.json: the map read "Not started".
+  //
+  // The states mirror what the engine's own runtime graph was seen to do:
+  // - STAGE_COMPLETED without a unit is the stage done. A later STAGE_REVISING does
+  //   not undo it: on every sample the runtime graph kept `approved` through revising.
+  // - STAGE_COMPLETED with a unit closes that unit, not the stage. Without the runtime
+  //   graph the unit total is unknown, so the stage stays started rather than claimed.
+  // - STAGE_SKIPPED is the engine declining a conditional stage. The runtime graph
+  //   leaves such a record at `pending`, which read as "in progress" (v2-probe2,
+  //   contract-design); the ledger's word is the specific one, so it is kept here even
+  //   when a record exists, unless that record says approved.
+  const stageLedger = new Map();
+  const ledgerState = (stage) => {
+    if (!stageLedger.has(stage)) stageLedger.set(stage, { state: undefined });
+    return stageLedger.get(stage);
+  };
   for (const entry of events) {
+    if (entry.stage && entry.event === EVENT.STAGE_STARTED) {
+      const s = ledgerState(entry.stage);
+      if (s.state !== 'completed') s.state = 'started';
+    } else if (entry.stage && entry.event === EVENT.STAGE_COMPLETED) {
+      const s = ledgerState(entry.stage);
+      if (!entry.unit) s.state = 'completed';
+      else if (s.state !== 'completed') s.state = 'started';
+    } else if (entry.stage && entry.event === EVENT.STAGE_SKIPPED) {
+      const s = ledgerState(entry.stage);
+      if (s.state !== 'completed') s.state = 'skipped';
+    } else if (entry.stage && entry.event === EVENT.STAGE_AWAITING_APPROVAL) {
+      const s = ledgerState(entry.stage);
+      if (s.state === undefined) s.state = 'started';
+    }
     if (entry.event === EVENT.SENSOR_FAILED) {
       sensorFailures.push(entry);
       const key = entry.stage ?? '(unattributed)';
@@ -230,6 +264,7 @@ function summarise(intentDir, knownStages) {
     awaitingApproval,
     unitsCompleted,
     unitsSeen,
+    stageLedger,
     unknownEvents,
     events
   };

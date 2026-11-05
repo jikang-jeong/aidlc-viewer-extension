@@ -48,8 +48,10 @@ event count, or a path that exists.
 | v1, v2, both, or neither | path existence (`src/aidlc/detect.js`) |
 | stage list, order, phases, per-stage contract | `.kiro/tools/data/stage-graph.json` |
 | which stages this scope runs | `.kiro/tools/data/scope-grid.json` |
-| what actually ran | `runtime-graph.json`, `outcome` field |
+| what actually ran | `runtime-graph.json`, `outcome` field; for a stage it has no record of, the audit ledger's `STAGE_*` events (checkpoint `source: 'ledger'`) |
+| which scope ran | `runtime-graph.json` `scope`; without it, the intent manifest's |
 | units of work and their dependencies | `runtime-graph.json`, `bolt_dag` |
+| a conditional stage the engine declined | audit ledger `STAGE_SKIPPED` (its runtime record stays `pending`) |
 | sensor failures, engine refusals, per-unit progress | audit ledger events |
 | the agent's own coverage claim | `traceability.json` |
 
@@ -395,6 +397,32 @@ two-space; `sed -n` output shows two more) and on escapes. Prefer the `strReplac
 after a `read` of the exact line. Commit messages go in a temp file and `git commit -F`;
 the agent's shell policy blocks command text matching `kiro…crew … token` and paths under
 `~/Library/Application Support` and `~/.aws`.
+
+**The audit ledger is the position's second source; the runtime graph is the first.**
+The map's position came from `runtime-graph.json` alone, with the ledger read only for
+units. Copying a real project (v2-probe3, eleven stages completed) and removing that one
+file made the map read "Not started"; truncating it to three records put the position at
+state-init. Both are what a project looks like when the hooks that write the file did not
+run (an untrusted workspace, a watched folder that was not the root, the harness switch
+that deleted the hooks) or when 2.11.x writes the record into a unit's worktree
+(`worktreeRuntimeGraphPath`, not yet seen on a real run). Now `audit.summarise` folds the
+`STAGE_*` events into a last-state per stage and `buildFromStages` consults it for a stage
+the runtime graph has no record of; the checkpoint carries `source: 'ledger'` and the
+Progress tooltip says how many were read that way. The rules mirror the engine's own
+runtime graph as observed, not a stricter idea of it: `STAGE_COMPLETED` without a unit is
+done and a later `STAGE_REVISING` does not undo it (every sample kept `approved` through
+revising); a per-unit `STAGE_COMPLETED` leaves the stage active, since without the runtime
+graph the unit total is unknown; a runtime record outranks the ledger wherever one exists.
+The scope falls back the same way, from the runtime graph's `scope` to the manifest's, so
+the denominator survives the missing file too. On the four samples the ledger and the
+runtime graph name identical stage sets, so no baseline moved for the fallback itself.
+Found alongside: `STAGE_SKIPPED` in the ledger (a conditional stage the engine declined)
+leaves the runtime record at `pending`, which showed as "in progress" (v2-probe2,
+contract-design, counted as one of two active stages). The ledger's word wins over a
+pending record, never over an approved one; the stage is plain "skipped", not "not in
+scope". The v2-probe2 baseline changed on purpose for that one stage. Pins:
+v2-robustness "ledger fallback: …" (five) and "STAGE_SKIPPED …" (two), all built from
+the fixture writer with a ledger shard and a runtime graph that disagree.
 
 **The Usage page's By stage table is in the order the run reached the stages.** It was
 sorted by credits, largest first, so on a real project functional-design sat above

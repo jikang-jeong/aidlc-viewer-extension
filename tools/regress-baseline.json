@@ -158,12 +158,12 @@
     "active": {
       "scope": "mvp",
       "at": "CI Pipeline",
-      "plannedTotal": 23,
+      "plannedTotal": 22,
       "counts": {
         "done": 20,
-        "active": 2,
+        "active": 1,
         "pending": 1,
-        "skipped": 10
+        "skipped": 11
       },
       "units": [
         "map-app"
@@ -172,7 +172,8 @@
         "done": 20,
         "not in scope": 10,
         "if needed": 1,
-        "in progress": 2
+        "skipped": 1,
+        "in progress": 1
       },
       "byStage": {
         "workspace-scaffold": "done",
@@ -192,7 +193,7 @@
         "refined-mockups": "done",
         "domain-design": "done",
         "units-generation": "done",
-        "contract-design": "in progress",
+        "contract-design": "skipped",
         "delivery-planning": "done",
         "functional-design": "done",
         "nfr-requirements": "done",

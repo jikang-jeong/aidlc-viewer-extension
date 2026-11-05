@@ -27,12 +27,17 @@ const V2_STATUS = STATUS;
 // `unitsCompleted` and `unitsSeen` map a stage slug to unit-name sets taken from
 // the audit ledger. They are passed in rather than read here so this function
 // stays a pure transform over data the caller already gathered.
-function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen = new Map()) {
+function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen = new Map(), stageLedger = new Map()) {
   const unitNames = runtime && runtime.units ? runtime.units.units.map((u) => u.name) : [];
   const checkpoints = [];
   for (const stage of stages) {
     const record = runtime ? runtime.byStage.get(stage.slug) : undefined;
+    const ledger = stageLedger.get(stage.slug);
     let status;
+    // Which record decided the status, for the tooltip. Undefined when the runtime
+    // graph decided, 'ledger' when the audit ledger did. Both are the engine's own
+    // records; this says which one, so a position read from the second can say so.
+    let source;
     if (!stage.inScope) {
       // The scope declared this stage would not run. That is not work left to do,
       // which is why it leaves the denominator below.
@@ -47,9 +52,25 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
       status = V2_STATUS.SKIPPED;
     } else if (record && record.done) {
       status = V2_STATUS.DONE;
+    } else if (ledger && ledger.state === 'skipped') {
+      // The engine declined this conditional stage and said so in the ledger. Its
+      // runtime record, when there is one, sits at `pending`, which used to show here
+      // as "in progress" (v2-probe2, contract-design). The ledger's word is the
+      // specific one. Not outOfScope: the scope allowed it and the run passed it,
+      // which is what the renderers' plain "skipped" means.
+      status = V2_STATUS.SKIPPED;
+      source = 'ledger';
     } else if (record) {
       // Present in the runtime graph but not approved: it has been entered.
       status = V2_STATUS.ACTIVE;
+    } else if (ledger && ledger.state === 'completed') {
+      // No runtime record, but the ledger closed the stage. See audit.summarise for
+      // why a per-unit completion does not reach here.
+      status = V2_STATUS.DONE;
+      source = 'ledger';
+    } else if (ledger && ledger.state === 'started') {
+      status = V2_STATUS.ACTIVE;
+      source = 'ledger';
     } else {
       status = V2_STATUS.PENDING;
     }
@@ -80,6 +101,7 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
       // accidentally relabel v1.
       outOfScope: stage.inScope ? undefined : true,
       status,
+      source,
       outcome: record ? record.outcome : undefined,
       agent: record ? record.agent : stage.leadAgent,
       mode: stage.mode,
@@ -190,8 +212,12 @@ function buildV2(root, options = {}) {
       const runtime = runtimeReader.readRuntime(intent.dir);
       // The denominator comes from the scope this intent records, not from a
       // default: the workflow creates scopes at runtime and the grid is updated
-      // in place, so the project's own file is the only source.
-      const scopeName = runtime ? runtime.scope : undefined;
+      // in place, so the project's own file is the only source. The runtime graph
+      // names the scope that actually ran; without it (the file missing, see the
+      // ledger fallback in buildFromStages) the intent manifest's scope stands in,
+      // so a project whose runtime graph is gone still shows its scope's stages
+      // as not in scope rather than 21 of them as pending.
+      const scopeName = runtime ? runtime.scope : intent.scope;
       const stages = graphReader.stagesForScope(stageGraph, scopeGrid, scopeName);
       // Every stage slug this intent's scope knows, so the ledger reader can recognise
       // a stage inside a Context path whatever position it sits at. The runtime graph
@@ -200,7 +226,7 @@ function buildV2(root, options = {}) {
       // Per-unit progress lives only in the ledger, so the audit has to be read
       // before the journey can be honest about a stage that repeats.
       const audit = auditReader.summarise(intent.dir, stageSlugs);
-      const journey = buildFromStages(stages, runtime, audit.unitsCompleted, audit.unitsSeen);
+      const journey = buildFromStages(stages, runtime, audit.unitsCompleted, audit.unitsSeen, audit.stageLedger);
       const disk = runtimeReader.phaseDirsOnDisk(intent.dir, phases);
       intents.push({
         id: intent.id,
