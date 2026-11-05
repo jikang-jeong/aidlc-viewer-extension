@@ -396,6 +396,15 @@ after a `read` of the exact line. Commit messages go in a temp file and `git com
 the agent's shell policy blocks command text matching `kiro…crew … token` and paths under
 `~/Library/Application Support` and `~/.aws`.
 
+**The Usage page's By stage table is in the order the run reached the stages.** It was
+sorted by credits, largest first, so on a real project functional-design sat above
+intent-capture and the reader had to re-find the workflow in a list that had shuffled
+it. The order is each stage's first window start in the engine's ledger (v1: its
+artifacts' earliest modification time), which is the run's own sequence and needs no
+stage graph; a stage revisited keeps its first position. Pin: credits-page "By stage
+lists stages in the order the run reached them, not by credits", which builds three v1
+stages with credits arranged against the order and reads the rendered table.
+
 **The watched folder is the workspace folder; do not ask for it.** Kiro reads AI-DLC's
 agents and hooks from the workspace root and nowhere else, so a watched folder that was
 not the root was a project the viewer showed and the engine never ran in. Worse, a folder

@@ -355,6 +355,42 @@ test('a session that is half the project draws a half bar, so the bar means some
     }
   ));
 
+test('By stage lists stages in the order the run reached them, not by credits', () =>
+  withKiroHome(
+    ({ home, project }) => {
+      // Three v1 stages whose artifacts were written in this order, with the credits
+      // arranged the other way round so a sort by credits would reverse them.
+      const stages = [
+        ['inception', 'requirements', T - 3 * 3600_000, 10],
+        ['inception', 'application-design', T - 2 * 3600_000, 20],
+        ['construction', 'code-generation', T - 1 * 3600_000, 90]
+      ];
+      for (const [phase, stage, at] of stages) {
+        const dir = path.join(project, 'aidlc-docs', phase, stage);
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, 'out.md');
+        fs.writeFileSync(file, '# x');
+        fs.utimesSync(file, new Date(at), new Date(at));
+      }
+      // One file per stage makes each window a single instant, so each turn sits exactly on it.
+      ideSession(home, project, stages.map(([, , at, credits]) => ({ at, credits })));
+    },
+    ({ project }) => {
+      const m = page.collectCreditsModel(project, { generation: 'v1' });
+      assert.equal(m.windowSource, 'artifacts');
+      assert.deepEqual(
+        m.byStage.map((s) => s.stage),
+        ['requirements', 'application-design', 'code-generation'],
+        'workflow order, although code-generation has the most credits'
+      );
+      // And the rendered table keeps that order.
+      const html = page.renderCreditsPage({ webview, root: project, project: { generation: 'v1' } });
+      const table = /<h2>By stage<\/h2>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/.exec(html)[1];
+      const names = [...table.matchAll(/<tr[^>]*><td>([^<]+?)(?:<| )/g)].map((x) => x[1].trim());
+      assert.deepEqual(names.slice(0, 3), ['requirements', 'application-design', 'code-generation']);
+    }
+  ));
+
 // ---------------------------------------------------------------------------
 // The start page, opened once after setup
 // ---------------------------------------------------------------------------

@@ -109,10 +109,12 @@ function collectCreditsModel(root, project) {
   // stage name. The per-attempt windows are kept in the model for anyone who needs them.
   const byStage = new Map();
   for (const w of attribution.byWindow) {
-    const slot = byStage.get(w.label) ?? { stage: w.label, phase: w.phase, credits: 0, turns: 0, open: false };
+    const slot =
+      byStage.get(w.label) ?? { stage: w.label, phase: w.phase, credits: 0, turns: 0, open: false, firstStartedAt: Infinity };
     slot.credits += w.credits;
     slot.turns += w.turns;
     slot.open = slot.open || w.open === true;
+    if (Number.isFinite(w.startedAt) && w.startedAt < slot.firstStartedAt) slot.firstStartedAt = w.startedAt;
     byStage.set(w.label, slot);
   }
 
@@ -147,7 +149,14 @@ function collectCreditsModel(root, project) {
     generation: project?.generation,
     sessions,
     attribution,
-    byStage: [...byStage.values()].filter((s) => s.turns > 0).sort((a, b) => b.credits - a.credits),
+    // In the order the run reached them, from each stage's first window in the engine's
+    // ledger (v1: its artifacts' earliest time). The table used to be sorted by credits,
+    // largest first, which put functional-design above intent-capture and made the
+    // reader re-find the workflow in a list that had shuffled it; asked to match the
+    // order the stages are gone through. A stage never started sorts last.
+    byStage: [...byStage.values()]
+      .filter((s) => s.turns > 0)
+      .sort((a, b) => a.firstStartedAt - b.firstStartedAt),
     windowSource,
     gaps: usage.gaps,
     hasTokens: sessions.some((s) => s.tokens),
