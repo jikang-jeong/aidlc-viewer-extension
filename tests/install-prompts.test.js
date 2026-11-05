@@ -214,18 +214,18 @@ test('the question is asked, rather than left to be inferred', async () => {
   assert.equal(shown.options.ignoreFocusOut, true);
 });
 
-test('an install already present is said so, on its own row only', async () => {
-  const v1Present = await captureGenerationPrompt({ generation: 'v1' });
-  assert.match(v1Present.items[0].label, /already present/);
-  assert.doesNotMatch(v1Present.items[1].label, /already present|reinstall/);
-
-  const v2Present = await captureGenerationPrompt({ generation: 'v2' });
-  assert.match(v2Present.items[1].label, /reinstall/);
-  assert.doesNotMatch(v2Present.items[0].label, /already present|reinstall/);
-
-  const both = await captureGenerationPrompt({ generation: 'both' });
-  assert.match(both.items[0].label, /already present/);
-  assert.match(both.items[1].label, /reinstall/);
+test('the generation list never offers a reinstall: setup does not reach it on a project that has AI-DLC', async () => {
+  // The rows used to read "already present" and "reinstall" on such a project. Both are
+  // gone because the list is not shown there any more: runSetup refuses first (see
+  // "setup refuses a folder with any AI-DLC in it"). A row that said "reinstall" was a
+  // promise this extension cannot keep safely -- the engine's reinstall over a project
+  // configured by hand asked the harness again, and the other answer switched it.
+  for (const state of [{ generation: 'none' }, { generation: 'v1' }, { generation: 'v2' }, undefined]) {
+    const shown = await captureGenerationPrompt(state);
+    for (const row of shown.items) {
+      assert.doesNotMatch(row.label, /already present|reinstall/i, JSON.stringify(state));
+    }
+  }
 });
 
 test('dismissing the list installs nothing', async () => {
@@ -546,22 +546,16 @@ test("a 'v2:<unknown>' preselection is not trusted; it asks", async () => {
   }
 });
 
-test('a project that already recorded a harness keeps it, whichever v2 button was pressed', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pre6-'));
-  try {
-    fs.mkdirSync(path.join(root, '.git'));
-    const { RECEIPT_PATH } = require('../src/aidlc/install-state');
-    const receipt = path.join(root, ...RECEIPT_PATH);
-    fs.mkdirSync(path.dirname(receipt), { recursive: true });
-    fs.writeFileSync(receipt, JSON.stringify({ version: 1, harness: 'kiro-ide', files: [] }));
-    const harnesses = [];
-    const { api, shown } = loadWithStub({ root, onToast: () => Promise.resolve(undefined), modules: { ...ENGINE_READY, ...configuredWith(harnesses) } });
-    await api.setup({ fsPath: root }, async () => {}, 'v2:kiro-cli');
-    assert.equal(shown.quickPicks.length, 0);
-    assert.deepEqual(harnesses, ['kiro-ide'], 'the recorded harness outranks the button');
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+test('installV2 no longer reads a recorded harness: that guard was dead and is replaced by refusing the project', () => {
+  // The guard read the extension's own receipt. Since 0.0.25 the engine does the
+  // install and writes no such receipt, so every v2 project read "none recorded", the
+  // harness was asked again, and the wrong answer switched it (the `/aidlc` agent file
+  // deleted, the hooks replaced). No test exercised it against an engine-installed
+  // project. The replacement is in runSetup and does not depend on what was recorded.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'install-commands.js'), 'utf8');
+  assert.doesNotMatch(src, /receipt\.harness/);
+  assert.doesNotMatch(src, /Reinstalling AI-DLC/);
+  assert.match(src, /const harness = preselectedHarness \?\? \(await chooseHarness\(\)\)/);
 });
 
 test('the setup toast asks the generation with two buttons, then the harness with two more in the same place', () => {
@@ -569,7 +563,7 @@ test('the setup toast asks the generation with two buttons, then the harness wit
   // generation apart from the harness, and toast buttons cannot be coloured. So the
   // separation is in the sequence. Read from the source, because the toast is a VS Code
   // call this suite cannot drive: the first call offers v1 and v2 only, the second offers
-  // Kiro IDE and Kiro CLI, and a recorded harness skips the second.
+  // Kiro IDE and Kiro CLI.
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
   const start = src.indexOf('async offerAidlcSetup(folderUri)');
   const body = src.slice(start, src.indexOf('async runSetup(', start));
@@ -584,9 +578,9 @@ test('the setup toast asks the generation with two buttons, then the harness wit
   assert.match(body, /const v2 = 'AI-DLC v2'/);
   assert.match(body, /const ide = 'Kiro IDE'/);
   assert.match(body, /const cli = 'Kiro CLI'/);
-  // The recorded harness is consulted between the two, and short-circuits the second.
-  const between = body.slice(body.indexOf('choice !== v2'), body.indexOf("'AI-DLC v2: which Kiro will run it?'"));
-  assert.match(between, /recordedHarness\(folderUri\.fsPath\)[\s\S]*runSetup\(folderUri, `v2:\$\{recorded\}`\)/);
+  // Nothing between the two consults a recorded harness: a project that has one is
+  // not offered setup at all, so there is no second question to skip.
+  assert.doesNotMatch(body, /recordedHarness/);
 });
 
 test('only the toolbar command reaches runSetup without a preselection; every toast button goes through the two-step toasts', () => {
@@ -600,7 +594,10 @@ test('only the toolbar command reaches runSetup without a preselection; every to
   const calls = [...src.matchAll(/this\.runSetup\((.*)\);/g)].map((m) => m[1].trim());
   const bare = calls.filter((args) => !args.includes(','));
   assert.deepEqual(bare, ['vscode.Uri.file(folder)'], 'exactly one bare runSetup, inside setupRules()');
-  const setupRulesBody = src.slice(src.indexOf('async setupRules()'), src.indexOf('async offerWorkspaceAutoDetect()'));
+  const setupRulesStart = src.indexOf('async setupRules()');
+  const setupRulesEnd = src.indexOf('\n  }\n', setupRulesStart);
+  assert.ok(setupRulesStart > 0 && setupRulesEnd > setupRulesStart, 'setupRules() found');
+  const setupRulesBody = src.slice(setupRulesStart, setupRulesEnd);
   assert.match(setupRulesBody, /this\.runSetup\(vscode\.Uri\.file\(folder\)\)/);
   // setupRules is called from the registered toolbar command and nowhere else.
   const callers = [...src.matchAll(/\bthis\.setupRules\(\)|controller\.setupRules\(\)/g)].map((m) => m[0]);

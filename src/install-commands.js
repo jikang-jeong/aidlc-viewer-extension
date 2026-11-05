@@ -13,9 +13,9 @@
 //
 //   A harness is chosen once. Kiro IDE and Kiro CLI ship agent definitions that
 //   are mutually exclusive -- fourteen files differ, and upstream marks running
-//   both as supported-but-untested. So a project that already has a harness is
-//   not offered a different one; it is offered a reinstall of the same one, and
-//   changing requires removing first.
+//   both as supported-but-untested. So a project that already has AI-DLC, of either
+//   generation, is not set up again by this extension at all (the gate is in
+//   extension.js runSetup); changing the harness is `aidlc config` in a terminal.
 //
 //   bun is never installed for the user. It is checked, and if absent the official
 //   command for their platform is offered to copy. Installing a language runtime
@@ -102,9 +102,7 @@ async function handleEngineInstallFailure(text) {
 //
 // The answer is not remembered, because it is a property of the project rather
 // than of the user.
-async function chooseGeneration(state) {
-  const isV2 = state && (state.generation === 'v2' || state.generation === 'both');
-  const isV1 = state && (state.generation === 'v1' || state.generation === 'both');
+async function chooseGeneration() {
 
   // v1 is listed first, deliberately. Three thousand people are on it, so it is the
   // answer most people opening this list are looking for, and a list whose first row
@@ -132,7 +130,7 @@ async function chooseGeneration(state) {
     [
       {
         key: 'v1',
-        label: isV1 ? 'AI-DLC v1 — already present' : 'AI-DLC v1',
+        label: 'AI-DLC v1',
         description: 'you read and answer',
         detail:
           'Rule files your agent works from. Each step waits for you to read the ' +
@@ -141,7 +139,7 @@ async function chooseGeneration(state) {
       },
       {
         key: 'v2',
-        label: isV2 ? 'AI-DLC v2 — reinstall' : 'AI-DLC v2',
+        label: 'AI-DLC v2',
         description: 'you review and approve',
         detail:
           'An engine drives the workflow, enforces the gates and keeps an audit ' +
@@ -158,8 +156,7 @@ async function chooseGeneration(state) {
   return picked ? picked.key : undefined;
 }
 
-async function chooseHarness(existing) {
-  if (existing) return existing;
+async function chooseHarness() {
   const picked = await vscode.window.showQuickPick(
     Object.keys(HARNESSES).map((key) => ({
       label: HARNESS_LABELS[key],
@@ -172,7 +169,7 @@ async function chooseHarness(existing) {
     })),
     {
       title: 'AI-DLC v2: which harness?',
-      placeHolder: 'This is chosen once. Changing it later means removing and reinstalling.',
+      placeHolder: 'Chosen once. To change it later, run aidlc config in a terminal.',
       ignoreFocusOut: true
     }
   );
@@ -229,7 +226,7 @@ async function setup(folderUri, installV1, preselected) {
   // picking v2 opened the harness list in the centre of the screen -- the same one
   // decision spread over two surfaces that the generation buttons had just removed.
   const pre = parsePreselection(preselected);
-  const generation = pre ? pre.generation : await chooseGeneration(state);
+  const generation = pre ? pre.generation : await chooseGeneration();
   if (!generation) return;
   if (generation === 'v1') {
     // Unchanged from what it has always done, including its own confirmation.
@@ -250,12 +247,14 @@ function parsePreselection(value) {
 }
 
 async function installV2(root, state, preselectedHarness) {
-  // A harness already recorded is kept. Offering to switch would produce a
-  // project carrying two mutually exclusive sets of agent definitions. That also
-  // outranks a preselection: a project that already has Kiro IDE agents is not
-  // reinstalled for the CLI because a toast button said so.
-  const existing = state.receipt ? state.receipt.harness : undefined;
-  const harness = existing ?? preselectedHarness ?? (await chooseHarness(undefined));
+  // No recorded-harness guard here any more. There was one, reading the extension's
+  // own receipt, and it had been dead since 0.0.25 moved the install to the engine,
+  // which writes no such receipt: every v2 project answered "none recorded", the
+  // harness was asked again, and the other answer switched the project's harness
+  // (the `/aidlc` agent file deleted, hooks replaced). Nothing tested it. The guard
+  // that replaces it is in runSetup and is not about the harness: a project with any
+  // AI-DLC in it is not set up again, so there is no second answer to give.
+  const harness = preselectedHarness ?? (await chooseHarness());
   if (!harness) return;
 
   // The progress notification covers the work and nothing else.
@@ -272,7 +271,7 @@ async function installV2(root, state, preselectedHarness) {
   const outcome = await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: state.receipt ? 'Reinstalling AI-DLC v2' : 'Setting up AI-DLC v2',
+      title: 'Setting up AI-DLC v2',
       cancellable: false
     },
     async (progress) => {
@@ -339,9 +338,8 @@ async function installV2(root, state, preselectedHarness) {
   // What to say, said once, after the fact.
   //
   // The engine reports its own plan counts and its own outstanding actions, and both are
-  // carried through rather than summarised. `preserve` in particular is the number that
-  // matters on a reinstall: it is the engine saying how many of the project's files it
-  // left alone.
+  // carried through rather than summarised. `preserve` is the engine saying how many
+  // files already in the folder it left alone.
   const plan = configured.plan;
   const counts = plan
     ? `${plan.create} written` +

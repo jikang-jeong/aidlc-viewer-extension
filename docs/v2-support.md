@@ -414,6 +414,30 @@ Pin: workspace-folder.test.js, which runs the real `restoreWatcher` and `selectF
 against a `vscode` stub with 0, 1 and several workspace folders; all twelve fail on the
 code before this change.
 
+**Any AI-DLC in the folder means no setup, decided when acting, not when asking.** The
+extension sets up projects that have no AI-DLC and never writes into one that does; v1
+and v2 cannot share a project, and upgrading or changing harness is the engine's `aidlc
+config`, which the refusal names. Two defects produced this rule, both from a customer
+workshop where people installed the engine with the upstream `install.sh` and configured
+the project by hand. (1) The setup toast has buttons, so it stays until pressed; the
+order on screen was pick folder (toast appears, folder empty), run `aidlc config`, press
+the toast's v2. `aidlcSetupNeeded` had been evaluated once, when the folder was picked,
+and nothing re-read the folder before installing over it. (2) The "recorded harness is
+kept" guard in `installV2` read the extension's own receipt, which the engine-performed
+install (0.0.25 onward) never writes, so every v2 project read "none recorded", the
+harness was asked again, and the other answer switched it. Reproduced against the real
+engine on a Kiro IDE project with `--harness kiro-cli`: 18 files removed including
+`.kiro/agents/aidlc-aidlc.md`, the `/aidlc` entry agent, 18 added, 31 changed. No test
+had exercised the guard against an engine-installed project; the one test for it
+planted the extension's receipt by hand and so tested a path no shipped project took.
+Now `safeGeneration(target) !== 'none'` in `runSetup` refuses with the message, and the
+toast condition is the same expression; the receipt-harness guard, `recordedHarness`,
+the "reinstall" / "already present" QuickPick rows and the "Reinstalling" progress title
+are gone. Pins: setup-gate.test.js, which runs the real `offerAidlcSetup` with the toast
+promise held, configures the folder between showing and pressing, and asserts the
+installer module is never called; and install-prompts "installV2 no longer reads a
+recorded harness".
+
 ## Units of work
 
 `stage-graph.json` declares `for_each: "unit-of-work"` on five stages. The unit

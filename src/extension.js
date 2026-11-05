@@ -41,15 +41,23 @@ function samePath(a, b) {
   return norm(a) === norm(b);
 }
 
-// The harness a project already recorded, so the second setup toast is not asked of
-// someone who answered it before. Any failure to read reads as "none recorded".
-function recordedHarness(root) {
-  try {
-    const state = readInstallState(root);
-    return state && state.ok && state.receipt ? state.receipt.harness : undefined;
-  } catch {
-    return undefined;
+// What a person is told instead of a reinstall. Upgrading the engine's files in a
+// project and changing which Kiro runs it are the engine's own operations, and `aidlc
+// config` is idempotent, so the message hands over the command rather than doing it:
+// this extension sets up projects that have no AI-DLC, and never writes into one that
+// does. The v1 line says the one thing a v1 project cannot have, which is v2 beside it.
+function alreadySetUpMessage(folderUri, generation) {
+  const name = path.basename(folderUri.fsPath);
+  if (generation === 'v1') {
+    return (
+      `AI-DLC v1 is already set up in ${name}. ` +
+      'v1 and v2 do not share a project; to move to v2, start from a folder without v1\'s rule files.'
+    );
   }
+  return (
+    `AI-DLC v2 is already set up in ${name}. ` +
+    'To upgrade it, or to change between Kiro IDE and Kiro CLI, run aidlc config in a terminal.'
+  );
 }
 
 function startHint(generation) {
@@ -61,7 +69,6 @@ const V2_CONTEXT_KEY = 'aidlcViewer.v2Detected';
 const { readProject } = require('./aidlc/index');
 const { checkpointIndexForPath } = require('./aidlc/journey-v2');
 const { detectGeneration } = require('./aidlc/detect');
-const { readInstallState } = require('./aidlc/install-state');
 const installCommands = require('./install-commands');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
@@ -456,7 +463,7 @@ class WatchController {
       // sequence: first which generation, then, for v2 only, which harness, as a second
       // toast where the first one was. The earlier objection to a two-step flow was the
       // harness list opening in the centre of the screen; a toast in the same corner is
-      // not that. A project that already recorded a harness skips the second question.
+      // not that.
       const v1 = 'AI-DLC v1';
       const v2 = 'AI-DLC v2';
       const choice = await vscode.window.showInformationMessage(
@@ -470,11 +477,6 @@ class WatchController {
         return;
       }
       if (choice !== v2) return;
-      const recorded = recordedHarness(folderUri.fsPath);
-      if (recorded) {
-        await this.runSetup(folderUri, `v2:${recorded}`);
-        return;
-      }
       const ide = 'Kiro IDE';
       const cli = 'Kiro CLI';
       const harness = await vscode.window.showInformationMessage(
@@ -494,14 +496,26 @@ class WatchController {
   }
 
   // The one place setup is decided. Every entry point goes through here so no path
-  // can install a generation the user was never asked about.
+  // can install a generation the user was never asked about, or install over a
+  // project that already has one.
   async runSetup(folderUri, preselected) {
     const target = folderUri ?? this.treeDataProvider.rootUri;
+    // Read at the moment of acting, not when the question was asked. The setup toast
+    // has buttons, so it stays until pressed, and in a workshop the order was: pick
+    // the folder (toast appears, folder empty), run `aidlc config` in a terminal as the
+    // presenter said, then press the toast's v2. The install then ran over a configured
+    // project and asked Kiro IDE or CLI again, and the wrong answer switched the
+    // harness: the `/aidlc` agent file deleted, the hooks replaced. v1 and v2 cannot
+    // share a project either, and the v1 button on that same stale toast would have
+    // produced one that did.
+    const before = target ? safeGeneration(target.fsPath) : 'none';
+    if (before !== 'none') {
+      vscode.window.showInformationMessage(alreadySetUpMessage(target, before));
+      return;
+    }
     // The installers report through their own toasts and return nothing, so whether
     // setup happened is read from the folder: a generation present after that was not
-    // present before. A re-run over an installed project changes nothing and opens
-    // nothing, which is right -- that person has started before.
-    const before = target ? safeGeneration(target.fsPath) : 'none';
+    // present before.
     await installCommands.setup(target, () => this.installV1(target), preselected);
     this.refresh();
     this.refreshSupervision();
@@ -4052,22 +4066,13 @@ async function aidlcSetupNeeded(folderUri, extensionUri) {
   if (!(await pathExists(coreFile))) {
     return false; // no bundle — nothing to offer
   }
-  // A project already running v2 must not be offered v1. Its v1 targets are all
-  // absent, which is exactly what the loop below reads as "needs setup", so
-  // without this guard opening a v2 project prompted to install the previous
-  // generation into it.
-  const { generation } = detectGeneration(folderUri.fsPath);
-  if (generation === 'v2' || generation === 'both') {
-    return false;
-  }
-  const targets = getAidlcTargets(detectHostTargetKey());
-  for (const target of targets) {
-    const checkUri = vscode.Uri.joinPath(folderUri, target.check);
-    if (!(await pathExists(checkUri))) {
-      return true;
-    }
-  }
-  return false;
+  // Any AI-DLC in the folder, either generation, means no offer. The two cannot share a
+  // project, and a project that has one is not set up by this extension again: that is
+  // the engine's `aidlc config` (v2) or nothing (v1 is files). This used to check only
+  // for v2, then ask the v1 installer whether each of its targets existed, which offered
+  // setup to a v1 project with one rule file missing. runSetup applies the same test at
+  // the moment of acting, so a toast that outlived the folder's state cannot act on it.
+  return safeGeneration(folderUri.fsPath) === 'none';
 }
 
 // options.confirm: when true, ask before installing (toolbar-button path).
