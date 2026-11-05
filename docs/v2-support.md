@@ -396,6 +396,24 @@ after a `read` of the exact line. Commit messages go in a temp file and `git com
 the agent's shell policy blocks command text matching `kiro…crew … token` and paths under
 `~/Library/Application Support` and `~/.aws`.
 
+**The watched folder is the workspace folder; do not ask for it.** Kiro reads AI-DLC's
+agents and hooks from the workspace root and nowhere else, so a watched folder that was
+not the root was a project the viewer showed and the engine never ran in. Worse, a folder
+watched from a window with no folder open was stored against that window's
+`workspaceState`, which is a different workspace from the one Kiro creates when the
+project is opened, so the choice vanished on the reload the person had to do next. Seen
+in a customer workshop where the presenter had people pick the folder and then open it.
+Now: one open folder is watched on activation without asking; several are watched when
+exactly one carries AI-DLC, otherwise the toolbar asks among them (QuickPick, not a disk
+dialog); none makes the toolbar button open the folder in Kiro, with the setup offer that
+pick would have made carried across the reload in `globalState` and keyed to the picked
+path. The dialog with one folder open still exists for v1 projects whose `aidlc-docs` is
+below the root, and says once that v2 will not run there. The `aidlc-docs` auto-detect
+prompt is gone: it asked for the one thing that is now automatic, and it knew only v1.
+Pin: workspace-folder.test.js, which runs the real `restoreWatcher` and `selectFolder`
+against a `vscode` stub with 0, 1 and several workspace folders; all twelve fail on the
+code before this change.
+
 ## Units of work
 
 `stage-graph.json` declares `for_each: "unit-of-work"` on five stages. The unit

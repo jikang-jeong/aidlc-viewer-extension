@@ -127,7 +127,7 @@
     "viewsWelcome": [
       {
         "view": "markdownWatchViewer.tree",
-        "contents": "No AI-DLC folder is being watched yet.\n\n[Select AI-DLC Folder](command:markdownWatchViewer.selectFolder)\n\nAI-DLC generates artifacts under `inception/`, `construction/`, and `operations/`. Pick the root folder where these are (or will be) created.\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)"
+        "contents": "No project folder is open in Kiro. The viewer follows the workspace folder, which is where Kiro runs AI-DLC from.\n\n[Open an AI-DLC Project Folder](command:markdownWatchViewer.selectFolder)\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)"
       }
     ],
     "menus": {

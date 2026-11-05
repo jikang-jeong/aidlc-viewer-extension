@@ -59,7 +59,7 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 | | |
 | --- | --- |
-| 📂 Open Workspace | Choose the project folder to watch |
+| 📂 Open Workspace | Open a project folder in Kiro, or choose among several open ones. With one folder open, the viewer already follows it |
 | 🔄 Refresh | Re-scan the folder |
 | ☁️ Set up AI-DLC Rules | Asks which generation (and harness, for v2), then sets it up |
 | ❓ Guide | The built-in guide, in English and Korean |

@@ -31,6 +31,15 @@ function newlyInstalled(before, after) {
   if (has(after, 'v1') && !has(before, 'v1')) return 'v1';
   return undefined;
 }
+// Two filesystem paths naming the same folder. Trailing separators and case on
+// case-insensitive platforms (macOS, Windows) are not differences.
+function samePath(a, b) {
+  const norm = (p) => {
+    const r = path.resolve(String(p ?? ''));
+    return process.platform === 'linux' ? r : r.toLowerCase();
+  };
+  return norm(a) === norm(b);
+}
 
 // The harness a project already recorded, so the second setup toast is not asked of
 // someone who answered it before. Any failure to read reads as "none recorded".
@@ -62,7 +71,9 @@ const NEW_KEY = 'markdownWatchViewer.newFiles';
 // Tracks the last extension version we showed the "what's new" notice for.
 const SETUP_NOTICE_KEY = 'markdownWatchViewer.aidlcSetupNoticeVersion';
 // Set once we've offered to auto-watch a workspace containing aidlc-docs.
-const AUTODETECT_ASKED_KEY = 'markdownWatchViewer.autoDetectAsked';
+// A folder picked from a window with no folder open, carried across the reload that
+// opens it. globalState because the window that reads it is a different workspace.
+const PENDING_SETUP_OFFER_KEY = 'markdownWatchViewer.pendingSetupOffer';
 
 function activate(context) {
   const controller = new WatchController(context);
@@ -290,13 +301,33 @@ class WatchController {
   async restoreWatcher() {
     const storedFolder = this.context.workspaceState.get(STATE_KEY);
     if (!storedFolder) {
-      // No popup on startup — the tree's viewsWelcome shows the "Select AI-DLC
-      // Folder" call to action only when the user actually opens the view.
       this.treeDataProvider.setRootUri(undefined);
       this.refreshSupervision();
-      // Except: if the open workspace already contains AI-DLC artifacts
-      // (an aidlc-docs folder), offer to watch it — one prompt, once.
-      await this.offerWorkspaceAutoDetect();
+      // The watched folder is the workspace folder. Kiro reads AI-DLC's agents and
+      // hooks from the workspace root and nowhere else, so a watched folder that
+      // differed from it was a project the viewer showed and the engine never ran in.
+      // Asking people to pick that folder by hand was a step with one right answer,
+      // and in a window with no folder open the answer was wrong in a way they could
+      // not see: the choice was saved against that folder-less window and vanished
+      // when they opened the project, because that is a different workspace.
+      //
+      // So one workspace folder is watched without asking. Several are watched when
+      // exactly one of them carries AI-DLC; otherwise the toolbar asks which. None
+      // leaves the welcome view, whose button now opens the folder in Kiro.
+      const workspaceFolder = await this.workspaceFolderToWatch();
+      if (!workspaceFolder) {
+        return;
+      }
+      this.autoWatched = true;
+      await this.setWatchedFolder(workspaceFolder, { showMessage: false });
+      // A folder picked from a folder-less window reaches here after Kiro reloads
+      // with it open. The setup question that pick would have asked is asked now,
+      // once, so the two-step toast is not lost to the reload.
+      const pending = this.context.globalState.get(PENDING_SETUP_OFFER_KEY);
+      if (pending && samePath(pending, workspaceFolder.fsPath)) {
+        await this.context.globalState.update(PENDING_SETUP_OFFER_KEY, undefined);
+        await this.offerAidlcSetup(workspaceFolder);
+      }
       return;
     }
 
@@ -323,24 +354,85 @@ class WatchController {
     }
   }
 
+  // Which workspace folder to watch without asking, or undefined when that cannot be
+  // decided: no folder open, or several and AI-DLC in none or more than one of them.
+  async workspaceFolderToWatch() {
+    const folders = (vscode.workspace.workspaceFolders || []).map((ws) => ws.uri);
+    if (folders.length === 1) {
+      return folders[0];
+    }
+    if (folders.length === 0) {
+      return undefined;
+    }
+    const withAidlc = folders.filter((uri) => safeGeneration(uri.fsPath) !== 'none');
+    return withAidlc.length === 1 ? withAidlc[0] : undefined;
+  }
+
   async selectFolder() {
+    const folders = (vscode.workspace.workspaceFolders || []).map((ws) => ws.uri);
+
+    // No folder open: what this button used to do here was watch a folder from a
+    // window that had no project, and the choice did not survive opening one. Now it
+    // opens the folder in Kiro, which is the step that was missing, and the reload
+    // watches it (see restoreWatcher).
+    if (folders.length === 0) {
+      const selection = await vscode.window.showOpenDialog({
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false,
+        title: 'Open an AI-DLC project folder in Kiro',
+        openLabel: 'Open and watch'
+      });
+      if (!selection || !selection[0]) {
+        return;
+      }
+      await this.context.globalState.update(PENDING_SETUP_OFFER_KEY, selection[0].fsPath);
+      await vscode.commands.executeCommand('vscode.openFolder', selection[0]);
+      return;
+    }
+
+    // Several folders open: the choice is among them, not the whole disk.
+    if (folders.length > 1) {
+      const picked = await vscode.window.showQuickPick(
+        folders.map((uri) => ({
+          label: path.basename(uri.fsPath),
+          description: uri.fsPath,
+          uri
+        })),
+        { title: 'Which workspace folder is the AI-DLC project?', ignoreFocusOut: true }
+      );
+      if (!picked) {
+        return;
+      }
+      await this.setWatchedFolder(picked.uri, { showMessage: true });
+      await this.offerAidlcSetup(picked.uri);
+      return;
+    }
+
+    // One folder open. It is already watched; the dialog stays for the person who
+    // wants a sub-folder, and starts at the root so the common answer is one click.
+    const root = folders[0];
     const selection = await vscode.window.showOpenDialog({
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: false,
+      defaultUri: root,
       openLabel: 'Watch this folder'
     });
-
     if (!selection || !selection[0]) {
       return;
     }
-
     const folderUri = selection[0];
     await this.setWatchedFolder(folderUri, { showMessage: true });
-
-    // Offer to set up AI-DLC rules right after the user explicitly picks a
-    // folder via "Watch this folder". This runs only on an explicit pick,
-    // never on watcher restore (F5 / window reload).
+    if (!samePath(folderUri.fsPath, root.fsPath)) {
+      // Said once, where the choice is made. Setup is not offered for a folder the
+      // engine would not run in; the toolbar still can, for whoever means it.
+      vscode.window.showInformationMessage(
+        `Kiro runs AI-DLC from the workspace root (${path.basename(root.fsPath)}), ` +
+          `not from ${path.basename(folderUri.fsPath)}. Watching it anyway.`
+      );
+      return;
+    }
     await this.offerAidlcSetup(folderUri);
   }
 
@@ -551,55 +643,17 @@ class WatchController {
     await this.runSetup(vscode.Uri.file(folder));
   }
 
-  // When no folder is watched but the open workspace already contains an
-  // aidlc-docs folder, offer to start watching that workspace folder.
-  // Asked at most once per workspace (declining is remembered).
-  async offerWorkspaceAutoDetect() {
-    try {
-      if (this.context.workspaceState.get(AUTODETECT_ASKED_KEY)) {
-        return;
-      }
-      const wsFolders = vscode.workspace.workspaceFolders || [];
-      let detected;
-      for (const ws of wsFolders) {
-        const docsUri = vscode.Uri.joinPath(ws.uri, 'aidlc-docs');
-        try {
-          const stat = await vscode.workspace.fs.stat(docsUri);
-          if (stat.type === vscode.FileType.Directory) {
-            detected = ws.uri;
-            break;
-          }
-        } catch {
-          // no aidlc-docs here
-        }
-      }
-      if (!detected) {
-        return; // nothing found — stay quiet, don't mark as asked
-      }
-      await this.context.workspaceState.update(AUTODETECT_ASKED_KEY, true);
-      const watchLabel = 'Watch this workspace';
-      const choice = await vscode.window.showInformationMessage(
-        `AI-DLC artifacts detected (aidlc-docs) in ${path.basename(detected.fsPath)}. Watch this folder?`,
-        watchLabel,
-        'Not now'
-      );
-      if (choice === watchLabel) {
-        await this.setWatchedFolder(detected, { showMessage: true });
-      }
-    } catch {
-      // Non-critical convenience; never surface as an error.
-    }
-  }
-
-  // First entry into the viewer with nothing being watched yet: open the
+  // First entry into the viewer in a workspace the person has not set up: open the
   // Viewer Guide so new users see what the extension does and how to start.
-  // At most once per session; never again once a folder is being watched.
+  // At most once per session, and once per workspace: a folder watched automatically
+  // on this activation counts as "not set up yet", a folder stored by an earlier one
+  // does not.
   maybeShowWelcomeGuide() {
     if (this.welcomeGuideShown) {
       return;
     }
     this.welcomeGuideShown = true;
-    if (!this.context.workspaceState.get(STATE_KEY)) {
+    if (this.autoWatched || !this.context.workspaceState.get(STATE_KEY)) {
       this.showHelp();
     }
   }
@@ -1548,6 +1602,12 @@ class ProgressItem extends vscode.TreeItem {
     this.description = current && !onlySetup ? formatJourneyCounts(journey) : startHint(summary.generation);
     this.tooltip = buildProgressTooltip(summary);
     this.contextValue = 'progress';
+    // A watched folder with no AI-DLC in it is now the normal first state, since the
+    // workspace folder is watched without being picked. The hint beside this row names
+    // the toolbar button; the row itself is that button.
+    if (summary.generation === 'none') {
+      this.command = { command: 'markdownWatchViewer.setupRules', title: 'Set up AI-DLC' };
+    }
     this.iconPath = new vscode.ThemeIcon('pulse', getStageColor(summary.currentStage));
   }
 }
@@ -3656,7 +3716,7 @@ function getHelpHtml() {
 
 <h2>Getting Started</h2>
 <ol>
-  <li>Click <strong>Open Workspace</strong> (folder icon) in the VIEWER panel toolbar and select your AI-DLC project root.</li>
+  <li>Open your project folder in Kiro. The VIEWER panel follows the workspace folder; <strong>Open Workspace</strong> (folder icon) is only needed to open one, or to choose among several.</li>
   <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want, <strong>v1</strong> or <strong>v2</strong>; for v2 a second prompt in the same place asks <strong>Kiro IDE</strong> or <strong>Kiro CLI</strong>, unless the project already recorded one. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
   <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Right after setup a page opens in the editor with this command large and a button that opens Kiro\u2019s chat with it already typed. Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with the same command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
 </ol>
@@ -3732,7 +3792,7 @@ function getHelpHtml() {
 <h2>Toolbar Reference</h2>
 <table>
   <tr><th>Button</th><th>Action</th></tr>
-  <tr><td>📂 Open Workspace</td><td>Select the AI-DLC root folder to watch</td></tr>
+  <tr><td>📂 Open Workspace</td><td>Open a project folder in Kiro, or choose among several open ones</td></tr>
   <tr><td>🔄 Refresh</td><td>Re-scan the folder and rebuild the tree</td></tr>
   <tr><td>☁️ Set up AI-DLC</td><td>Asks which generation, then installs it. v1 from the bundled snapshot; v2 installs the engine on this machine, then configures the project</td></tr>
   <tr><td>❓ Help / Guide</td><td>Open this guide</td></tr>
@@ -3754,7 +3814,7 @@ function getHelpHtml() {
 
 <h2>시작하기</h2>
 <ol>
-  <li>VIEWER 패널 툴바에서 <strong>Open Workspace</strong>(폴더 아이콘)를 눌러 AI-DLC 프로젝트 루트를 선택합니다.</li>
+  <li>Kiro에서 프로젝트 폴더를 엽니다. VIEWER 패널은 워크스페이스 폴더를 그대로 따라갑니다. <strong>Open Workspace</strong>(폴더 아이콘)는 폴더를 아직 열지 않았거나 여러 개가 열려 있을 때만 필요합니다.</li>
   <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>인지 <strong>v2</strong>인지 먼저, v2라면 같은 자리에 두 번째 알림으로 <strong>Kiro IDE</strong>인지 <strong>Kiro CLI</strong>인지 묻습니다. 이미 기록된 프로젝트는 두 번째를 건너뜁니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
   <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 설치 직후 에디터에 이 명령을 크게 보여주는 페이지가 열리고, 그 명령이 입력된 상태로 Kiro 채팅을 여는 버튼이 함께 있습니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 같은 명령을 보여줍니다.</li>
 </ol>
@@ -3830,7 +3890,7 @@ function getHelpHtml() {
 <h2>툴바 안내</h2>
 <table>
   <tr><th>버튼</th><th>동작</th></tr>
-  <tr><td>📂 Open Workspace</td><td>감시할 AI-DLC 루트 폴더 선택</td></tr>
+  <tr><td>📂 Open Workspace</td><td>Kiro에서 프로젝트 폴더를 열거나, 여러 폴더 중 하나를 선택</td></tr>
   <tr><td>🔄 Refresh</td><td>폴더 재스캔 및 트리 갱신</td></tr>
   <tr><td>☁️ Set up AI-DLC</td><td>어느 세대인지 묻고 설치합니다. v1은 번들 스냅샷에서, v2는 엔진을 이 컴퓨터에 설치한 뒤 프로젝트를 설정</td></tr>
   <tr><td>❓ Help / Guide</td><td>이 가이드 열기</td></tr>
