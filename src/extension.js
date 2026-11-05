@@ -2160,6 +2160,12 @@ function buildProgressTooltip(summary) {
   if (fromLedger > 0) {
     lines.push('', `${fromLedger} stage(s) read from the audit ledger; the runtime graph has no record of them`);
   }
+  // Stages the intent's plan added to or removed from its scope, as the engine records
+  // in the state file. Said so a stage listed against the scope grid is not a surprise.
+  const overridden = journey.checkpoints.filter((cp) => cp.planOverride).length;
+  if (overridden > 0) {
+    lines.push('', `**Plan**: the state file records EXECUTE or SKIP for ${overridden} stage(s); those outrank the scope grid.`);
+  }
 
   const md = new vscode.MarkdownString(lines.join('\n'));
   md.isTrusted = false;

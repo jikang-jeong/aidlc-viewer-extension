@@ -32,7 +32,9 @@ const { readProject } = require('../src/aidlc/index');
 
 // Where the samples live. Overridable so this is not welded to one machine.
 const SAMPLE_ROOT = process.env.AIDLC_SAMPLES ?? path.join(os.homedir(), 'Develop', 'aidlc');
-const SAMPLES = ['v2-probe', 'v2-probe2', 'v2-probe3', 'v2-test'];
+// v2-brownfield-wordbook: a 2.11.3 brownfield run whose plan adds stages the scope grid
+// skips (practices-discovery, units-generation, delivery-planning) and drops two it runs.
+const SAMPLES = ['v2-probe', 'v2-probe2', 'v2-probe3', 'v2-test', 'v2-brownfield-wordbook'];
 const BASELINE = path.join(__dirname, 'regress-baseline.json');
 
 // What is recorded, and deliberately what is not.

@@ -1133,3 +1133,74 @@ test('ledger fallback: a stage the scope excludes stays not in scope whatever th
   assert.equal(b.outOfScope, true);
   assert.equal(b.source, undefined);
 });
+
+// ---------------------------------------------------------------------------
+// The intent's plan outranks the scope grid
+// ---------------------------------------------------------------------------
+//
+// The engine records per-intent plan changes as a suffix on each state-file checklist
+// line (`- [ ] practices-discovery — EXECUTE`) and its own effectivePlanAction reads
+// that before the scope grid. A brownfield run on 2.11.3 (refactor scope, plan adding
+// three stages the scope skips and dropping two it runs) showed the added, running
+// stage as "not in scope" and the position one stage behind on a completed stage.
+
+function planProject(stateLines, extra = {}) {
+  const root = ledgerProject({
+    scopeGrid: { s: { stages: { a: 'EXECUTE', b: 'SKIP', c: 'EXECUTE', d: 'EXECUTE' } } },
+    ...extra
+  });
+  fs.writeFileSync(
+    path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-x', 'aidlc-state.md'),
+    `# State\n\n## Stages\n${stateLines.join('\n')}\n`
+  );
+  return root;
+}
+
+test('plan override: a state-file EXECUTE suffix brings a scope-SKIP stage into the plan, and it can be the position', () => {
+  const root = planProject(['- [x] a — EXECUTE', '- [-] b — EXECUTE', '- [ ] c — SKIP'], {
+    runtimeGraph: { scope: 's', stages: [{ stage_slug: 'a', outcome: 'approved' }, { stage_slug: 'b', outcome: 'pending' }] }
+  });
+  const j = buildV2(root).intents[0].journey;
+  const by = Object.fromEntries(j.checkpoints.map((cp) => [cp.id, cp]));
+  assert.equal(by.b.outOfScope, undefined, 'b was SKIP in the grid; the plan runs it');
+  assert.equal(by.b.status, 'active');
+  assert.equal(by.b.planOverride, 'EXECUTE');
+  assert.equal(by.c.outOfScope, true, 'c was EXECUTE in the grid; the plan drops it');
+  assert.equal(by.c.planOverride, 'SKIP');
+  assert.equal(by.d.outOfScope, undefined, 'd has no suffix: the grid decides');
+  assert.equal(by.d.planOverride, undefined);
+  assert.equal(j.checkpoints[j.currentIndex].id, 'b', 'the position is the added stage, not the completed one before it');
+  assert.equal(j.plannedTotal, 3, 'a, b, d');
+});
+
+test('plan override: the regex is the engine\'s; every checkbox state it accepts is read, and other lines are not', () => {
+  const overrides = graph.planOverridesFromState(
+    [
+      '- [ ] p — EXECUTE',
+      '- [x] q — SKIP',
+      '- [-] r — EXECUTE',
+      '- [S] s — SKIP',
+      '- [R] t — EXECUTE',
+      '- [?] u — SKIP',
+      '- [ ] v - EXECUTE', // hyphen, not an em dash: not the engine\'s format
+      '- [ ] w — MAYBE',
+      '* [ ] x — EXECUTE', // not a checklist line the engine writes
+      'Plan: y — EXECUTE'
+    ].join('\n')
+  );
+  assert.deepEqual(
+    [...overrides],
+    [['p', 'EXECUTE'], ['q', 'SKIP'], ['r', 'EXECUTE'], ['s', 'SKIP'], ['t', 'EXECUTE'], ['u', 'SKIP']]
+  );
+  assert.deepEqual([...graph.planOverridesFromState(undefined)], []);
+  assert.deepEqual([...graph.planOverridesFromState('')], []);
+});
+
+test('plan override: no state file, or one without suffixes, leaves the scope grid in charge', () => {
+  const root = ledgerProject({
+    scopeGrid: { s: { stages: { a: 'EXECUTE', b: 'SKIP', c: 'EXECUTE', d: 'EXECUTE' } } }
+  });
+  const j = buildV2(root).intents[0].journey;
+  assert.equal(j.checkpoints.find((cp) => cp.id === 'b').outOfScope, true);
+  assert.ok(j.checkpoints.every((cp) => cp.planOverride === undefined));
+});

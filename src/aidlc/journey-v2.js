@@ -10,6 +10,8 @@
 //
 // Pure module: never import `vscode` here.
 
+const fs = require('fs');
+const path = require('path');
 const graphReader = require('./graph');
 const runtimeReader = require('./runtime');
 const auditReader = require('./audit');
@@ -100,6 +102,9 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
       // stages and absent on every v1 checkpoint, so a reader of this field cannot
       // accidentally relabel v1.
       outOfScope: stage.inScope ? undefined : true,
+      // 'EXECUTE' or 'SKIP' when the intent's plan overrode the scope grid for this
+      // stage; undefined when the grid decided. v2 only.
+      planOverride: stage.planOverride,
       status,
       source,
       outcome: record ? record.outcome : undefined,
@@ -197,6 +202,14 @@ function unitsInFlightFor(stage, status, unitsCompleted, unitsSeen) {
 // Everything the supervision surface needs for one project, or a reason it could
 // not be built. Callers get `ok: false` with a `reason` rather than a thrown
 // error, because a half-installed project is a normal state to render.
+function readStateFile(intentDir) {
+  try {
+    return fs.readFileSync(path.join(intentDir, 'aidlc-state.md'), 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
 function buildV2(root, options = {}) {
   const stageGraph = graphReader.readStageGraph(root);
   if (!stageGraph) return { ok: false, reason: 'stage-graph-unreadable' };
@@ -218,7 +231,9 @@ function buildV2(root, options = {}) {
       // so a project whose runtime graph is gone still shows its scope's stages
       // as not in scope rather than 21 of them as pending.
       const scopeName = runtime ? runtime.scope : intent.scope;
-      const stages = graphReader.stagesForScope(stageGraph, scopeGrid, scopeName);
+      // The intent's own plan changes outrank the scope grid; see planOverridesFromState.
+      const overrides = graphReader.planOverridesFromState(readStateFile(intent.dir));
+      const stages = graphReader.stagesForScope(stageGraph, scopeGrid, scopeName, overrides);
       // Every stage slug this intent's scope knows, so the ledger reader can recognise
       // a stage inside a Context path whatever position it sits at. The runtime graph
       // would list only the stages that have run, which is too few for this.

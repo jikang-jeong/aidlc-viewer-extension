@@ -144,12 +144,32 @@ function readScopeGrid(root) {
 // Stages of a scope, in workflow order, each tagged with whether the scope runs
 // it. A scope name absent from the grid yields every stage as in-scope, because
 // claiming a stage is skipped on missing data would understate the work left.
-function stagesForScope(stageGraph, scopeGrid, scopeName) {
+// Per-intent plan changes, as the engine records them: the state file's checklist
+// carries each stage's plan action as a suffix (`- [ ] practices-discovery — EXECUTE`),
+// and the engine's own `effectivePlanAction` reads that before the scope grid. A plan
+// composed for one piece of work (`--add` / `--skip`, or a recompose) lives only here;
+// no scope file is written. The regex is the engine's `parseStateStageSuffixes`, copied
+// rather than paraphrased, so this reads exactly the channel the engine reads.
+//
+// From a real brownfield run on 2.11.3: the refactor scope says practices-discovery is
+// SKIP, the plan added it, the engine started it, and the map showed it as "not in
+// scope" with the position one stage behind on a completed stage.
+const STATE_SUFFIX = /^- \[[ xSR?-]\] (\S+)\s*\u2014\s*(EXECUTE|SKIP)\b/gm;
+function planOverridesFromState(stateContent) {
+  const out = new Map();
+  if (typeof stateContent !== 'string') return out;
+  for (const m of stateContent.matchAll(STATE_SUFFIX)) out.set(m[1], m[2]);
+  return out;
+}
+
+// `overrides` outranks the grid wherever it names a stage; the grid decides the rest.
+function stagesForScope(stageGraph, scopeGrid, scopeName, overrides = new Map()) {
   const entry = scopeGrid && scopeName ? scopeGrid.scopes[scopeName] : undefined;
-  return stageGraph.stages.map((stage) => ({
-    ...stage,
-    inScope: entry ? entry.inScope.has(stage.slug) : true
-  }));
+  return stageGraph.stages.map((stage) => {
+    const override = overrides.get(stage.slug);
+    const inScope = override ? override === EXECUTE : entry ? entry.inScope.has(stage.slug) : true;
+    return { ...stage, inScope, planOverride: override };
+  });
 }
 
 module.exports = {
@@ -160,5 +180,6 @@ module.exports = {
   readStageGraph,
   readScopeGrid,
   phaseOrder,
-  stagesForScope
+  stagesForScope,
+  planOverridesFromState
 };

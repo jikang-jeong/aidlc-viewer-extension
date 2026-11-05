@@ -47,7 +47,7 @@ event count, or a path that exists.
 |---|---|
 | v1, v2, both, or neither | path existence (`src/aidlc/detect.js`) |
 | stage list, order, phases, per-stage contract | `.kiro/tools/data/stage-graph.json` |
-| which stages this scope runs | `.kiro/tools/data/scope-grid.json` |
+| which stages this scope runs | `.kiro/tools/data/scope-grid.json`, overridden per intent by the state file's checklist suffixes (`- [ ] slug — EXECUTE\|SKIP`), the channel the engine's own `effectivePlanAction` reads first |
 | what actually ran | `runtime-graph.json`, `outcome` field; for a stage it has no record of, the audit ledger's `STAGE_*` events (checkpoint `source: 'ledger'`) |
 | which scope ran | `runtime-graph.json` `scope`; without it, the intent manifest's |
 | units of work and their dependencies | `runtime-graph.json`, `bolt_dag` |
@@ -397,6 +397,23 @@ two-space; `sed -n` output shows two more) and on escapes. Prefer the `strReplac
 after a `read` of the exact line. Commit messages go in a temp file and `git commit -F`;
 the agent's shell policy blocks command text matching `kiro…crew … token` and paths under
 `~/Library/Application Support` and `~/.aws`.
+
+**The intent's plan outranks the scope grid, and the engine records it in the state
+file.** A plan composed for one piece of work (`--add` / `--skip`, or a recompose) runs on
+a stock scope with its own stage changes; the engine writes them as each checklist line's
+suffix in `aidlc-state.md` (`- [-] practices-discovery — EXECUTE`) and reads that before
+the grid (`effectivePlanAction`, `parseStateStageSuffixes`). No scope file changes. The
+first 2.11.3 run seen in the field was a brownfield refactor whose plan added
+practices-discovery, units-generation and delivery-planning and dropped the two deployment
+stages; the grid alone showed the running added stage as "not in scope" and the position
+one stage behind, on a completed stage. Reading the state file is otherwise avoided here
+(it is prose the agent writes), but this suffix is written and parsed by the engine with a
+fixed regex, which is copied verbatim into `graph.planOverridesFromState`; the four earlier
+samples carry the same suffixes and agree with their grids, which is why this went
+unnoticed. The checkpoint carries `planOverride` and the Progress tooltip says how many
+stages the state file decided. Sample: v2-brownfield-wordbook (regress, fifth). Pins:
+v2-robustness "plan override: …" (three; two fail on the prior code, the third holds the
+grid in charge when no suffix exists).
 
 **The audit ledger is the position's second source; the runtime graph is the first.**
 The map's position came from `runtime-graph.json` alone, with the ledger read only for

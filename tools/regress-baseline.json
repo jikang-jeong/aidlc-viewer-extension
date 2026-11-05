@@ -158,20 +158,19 @@
     "active": {
       "scope": "mvp",
       "at": "CI Pipeline",
-      "plannedTotal": 22,
+      "plannedTotal": 21,
       "counts": {
         "done": 20,
         "active": 1,
-        "pending": 1,
-        "skipped": 11
+        "pending": 0,
+        "skipped": 12
       },
       "units": [
         "map-app"
       ],
       "labels": {
         "done": 20,
-        "not in scope": 10,
-        "if needed": 1,
+        "not in scope": 11,
         "skipped": 1,
         "in progress": 1
       },
@@ -186,7 +185,7 @@
         "team-formation": "not in scope",
         "rough-mockups": "done",
         "approval-handoff": "not in scope",
-        "reverse-engineering": "if needed",
+        "reverse-engineering": "not in scope",
         "practices-discovery": "done",
         "requirements-analysis": "done",
         "user-stories": "done",
@@ -421,18 +420,17 @@
     "active": {
       "scope": "poc",
       "at": "Build and Test",
-      "plannedTotal": 8,
+      "plannedTotal": 7,
       "counts": {
         "done": 6,
         "active": 1,
-        "pending": 1,
-        "skipped": 25
+        "pending": 0,
+        "skipped": 26
       },
       "units": [],
       "labels": {
         "done": 6,
-        "not in scope": 25,
-        "if needed": 1,
+        "not in scope": 26,
         "in progress": 1
       },
       "byStage": {
@@ -446,7 +444,7 @@
         "team-formation": "not in scope",
         "rough-mockups": "not in scope",
         "approval-handoff": "not in scope",
-        "reverse-engineering": "if needed",
+        "reverse-engineering": "not in scope",
         "practices-discovery": "not in scope",
         "requirements-analysis": "done",
         "user-stories": "not in scope",
@@ -489,6 +487,105 @@
           "unaccounted": 14
         }
       }
+    }
+  },
+  "v2-brownfield-wordbook": {
+    "generation": "v2",
+    "stageCount": 33,
+    "phases": [
+      "initialization",
+      "ideation",
+      "inception",
+      "construction",
+      "operation"
+    ],
+    "scopeCount": 11,
+    "gaps": {
+      "unknownStageFields": [
+        "cites",
+        "for_each",
+        "optional_produces",
+        "produces_kinds",
+        "review_artifact",
+        "workspace_requires"
+      ],
+      "unknownEvents": [
+        "DECISION_RECORDED",
+        "PHASE_VERIFIED",
+        "PIPELINE_LINK_COMPLETED",
+        "SUBAGENT_DISPATCHED",
+        "WORKSPACE_INITIALISED",
+        "WORKSPACE_SCAFFOLDED",
+        "WORKSPACE_SCANNED"
+      ],
+      "nonPhaseDirs": [
+        "audit",
+        "verification"
+      ]
+    },
+    "active": {
+      "scope": "refactor",
+      "at": "Practices Discovery",
+      "plannedTotal": 11,
+      "counts": {
+        "done": 4,
+        "active": 1,
+        "pending": 6,
+        "skipped": 22
+      },
+      "units": [],
+      "labels": {
+        "done": 4,
+        "not in scope": 22,
+        "in progress": 1,
+        "not started": 5,
+        "if needed": 1
+      },
+      "byStage": {
+        "workspace-scaffold": "done",
+        "workspace-detection": "done",
+        "state-init": "done",
+        "intent-capture": "not in scope",
+        "market-research": "not in scope",
+        "feasibility": "not in scope",
+        "scope-definition": "not in scope",
+        "team-formation": "not in scope",
+        "rough-mockups": "not in scope",
+        "approval-handoff": "not in scope",
+        "reverse-engineering": "done",
+        "practices-discovery": "in progress",
+        "requirements-analysis": "not started",
+        "user-stories": "not in scope",
+        "refined-mockups": "not in scope",
+        "domain-design": "not in scope",
+        "units-generation": "not started",
+        "contract-design": "not in scope",
+        "delivery-planning": "not started",
+        "functional-design": "if needed",
+        "nfr-requirements": "not in scope",
+        "nfr-design": "not in scope",
+        "infrastructure-design": "not in scope",
+        "code-generation": "not started",
+        "build-and-test": "not started",
+        "ci-pipeline": "not in scope",
+        "deployment-pipeline": "not in scope",
+        "environment-provisioning": "not in scope",
+        "deployment-execution": "not in scope",
+        "observability-setup": "not in scope",
+        "incident-response": "not in scope",
+        "performance-validation": "not in scope",
+        "feedback-optimization": "not in scope"
+      },
+      "refusals": 0,
+      "refusalsLive": 0,
+      "approvalGates": 0,
+      "waitingOnYou": [
+        "practices-discovery"
+      ],
+      "sensorFailureTotal": 0,
+      "sensorsByStage": {},
+      "contrastRows": 0,
+      "contrast": {}
     }
   }
 }
