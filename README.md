@@ -66,6 +66,25 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 ## What's New
 
+### 0.1.2
+
+- **The viewer follows the folder open in Kiro.** Open your project and it is watched;
+  nothing to pick. With no folder open, **Open Workspace** opens one in Kiro. A watched
+  folder with no AI-DLC in it shows a **Set up AI-DLC** panel in place of the tree, and
+  its button asks the same two questions in the corner as before.
+- **Setup never writes into a project that already has AI-DLC**, of either generation,
+  from any button, decided at the moment you press it. Seen in a workshop: the setup
+  toast was still on screen after the project had been configured by hand in a terminal,
+  and pressing its v2 button asked Kiro IDE or CLI again; the other answer switched the
+  project's harness and `/aidlc` disappeared. Upgrades and harness changes are
+  `aidlc config` in a terminal, and the message now says so.
+- **The position map reads the engine's audit ledger as well as its runtime graph.** A
+  project whose `runtime-graph.json` was missing or behind (hooks that did not run, an
+  untrusted workspace) read **Not started** with eleven stages completed; the ledger now
+  fills in, and the tooltip says when it did. A conditional stage the engine declined
+  reads **skipped** instead of in progress.
+- **Usage lists stages in the order the run reached them**, not largest first.
+
 ### 0.1.1
 
 - Minor bug fixes.
