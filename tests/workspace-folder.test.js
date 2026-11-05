@@ -324,11 +324,39 @@ test('the old aidlc-docs auto-detect prompt is gone: the workspace folder is wat
   assert.doesNotMatch(src, /Watch this workspace/);
 });
 
-test('the Not started row is the setup button when the folder has no AI-DLC', () => {
-  const src = fs.readFileSync(EXTENSION, 'utf8');
-  const start = src.indexOf('class ProgressItem');
-  const end = src.indexOf('function formatJourneyCounts');
-  const body = src.slice(start, end);
-  assert.match(body, /summary\.generation === 'none'/);
-  assert.match(body, /command: 'markdownWatchViewer\.setupRules'/);
+test('a watched folder with no AI-DLC shows an empty tree, so the set-up welcome panel appears in place of the no-folder one', async () => {
+  // Run the real tree provider against a real empty folder. The welcome panel is VS
+  // Code's; what the extension controls is that the tree is empty and the context key
+  // selects the second panel, whose buttons are Set up and Guide.
+  const root = emptyProject();
+  const { WatchController, calls } = loadController({ workspaceFolders: [root] });
+  const store = new Map();
+  const state = { get: (k, f) => (store.has(k) ? store.get(k) : f), update: async (k, v) => { store.set(k, v); } };
+  const controller = new WatchController({ extensionUri: { fsPath: path.join(__dirname, '..') }, workspaceState: state, globalState: state });
+  controller.treeDataProvider.setRootUri({ fsPath: root });
+  const children = await controller.treeDataProvider.getChildren();
+  assert.deepStrictEqual(children, [], 'empty tree on a folder with no AI-DLC');
+
+  controller.refreshSupervision();
+  const setContext = calls.commands.filter((c) => c.command === 'setContext');
+  const key = setContext.find((c) => c.args[0] === 'aidlcViewer.setupNeeded');
+  assert.ok(key, 'the context key is set from the same read');
+  assert.strictEqual(key.args[1], true);
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const panels = pkg.contributes.viewsWelcome.filter((v) => v.view === 'markdownWatchViewer.tree');
+  assert.strictEqual(panels.length, 2);
+  const noFolder = panels.find((v) => v.when === '!aidlcViewer.setupNeeded');
+  const setup = panels.find((v) => v.when === 'aidlcViewer.setupNeeded');
+  assert.ok(noFolder && setup, 'two panels, gated on the same key, one each way');
+  assert.match(setup.contents, /\(command:markdownWatchViewer\.setupRules\)/, 'Set up button');
+  assert.match(setup.contents, /\(command:markdownWatchViewer\.showHelp\)/, 'Guide button, as on the no-folder panel');
+  assert.match(noFolder.contents, /\(command:markdownWatchViewer\.selectFolder\)/);
+  // Every command a panel button invokes is a registered command.
+  const registered = new Set(pkg.contributes.commands.map((c) => c.command));
+  for (const panel of panels) {
+    for (const m of panel.contents.matchAll(/\(command:([\w.]+)\)/g)) {
+      assert.ok(registered.has(m[1]), `${m[1]} is contributed`);
+    }
+  }
 });

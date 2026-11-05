@@ -412,7 +412,11 @@ a window that stored another one back in line) and asks the setup question. A di
 kept there at first for sub-folders, and the first press of the button in Kiro asked why
 it did not just take the open folder; v1 has no sub-folder case either, its rules being in
 the root's `.kiro/steering`. The `aidlc-docs` auto-detect prompt is gone: it asked for the
-one thing that is now automatic, and it knew only v1. Pin: workspace-folder.test.js,
+one thing that is now automatic, and it knew only v1. A folder watched this way with no
+AI-DLC in it shows an empty tree and a second viewsWelcome panel (gated on the
+`aidlcViewer.setupNeeded` context key, set in `refreshSupervision` from the same read as
+the tree) whose buttons are Set up and Guide, the shape of the no-folder panel; a "Not
+started" row with a hint was tried first and asked to be this. Pin: workspace-folder.test.js,
 which runs the real `restoreWatcher` and `selectFolder` against a `vscode` stub with 0, 1
 and several workspace folders; all fail on the code before this change.
 

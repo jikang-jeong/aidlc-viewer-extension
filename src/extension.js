@@ -66,6 +66,7 @@ function startHint(generation) {
   return START_HINT.none;
 }
 const V2_CONTEXT_KEY = 'aidlcViewer.v2Detected';
+const SETUP_NEEDED_CONTEXT_KEY = 'aidlcViewer.setupNeeded';
 const { readProject } = require('./aidlc/index');
 const { checkpointIndexForPath } = require('./aidlc/journey-v2');
 const { detectGeneration } = require('./aidlc/detect');
@@ -214,6 +215,10 @@ class WatchController {
     }
     const isV2 = Boolean(project && (project.generation === 'v2' || project.generation === 'both'));
     vscode.commands.executeCommand('setContext', V2_CONTEXT_KEY, isV2);
+    // Which welcome panel the empty tree shows: the no-folder one, or the set-up one.
+    // Set from the same read, so the panel and the tree cannot disagree.
+    const setupNeeded = Boolean(root) && Boolean(project) && project.generation === 'none';
+    vscode.commands.executeCommand('setContext', SETUP_NEEDED_CONTEXT_KEY, setupNeeded);
     if (!root) return;
     for (const page of Object.values(this.pages)) {
       if (!page.panel) continue;
@@ -1073,6 +1078,15 @@ class MarkdownTreeDataProvider {
 
     if (!element) {
       const stageSummary = await this.getStageSummary(this.rootUri);
+      // A watched folder with no AI-DLC in it is the first state most people now see,
+      // because the workspace folder is watched without being picked. An empty tree
+      // here shows the second viewsWelcome panel (gated on aidlcViewer.setupNeeded),
+      // whose buttons are Set up and Guide: the same shape as the no-folder panel,
+      // which is what a person who has just opened a folder expects to see next. A
+      // "Not started" row with a hint was tried first and asked to be this instead.
+      if (stageSummary.generation === 'none') {
+        return [];
+      }
       const entries = await this.getDirectoryEntries(this.rootUri, null);
       // One row says where the workflow is. There used to be two: this one, from
       // the artifact tree, and above it one from parsing aidlc-state.md. They
@@ -1600,12 +1614,6 @@ class ProgressItem extends vscode.TreeItem {
     this.description = current && !onlySetup ? formatJourneyCounts(journey) : startHint(summary.generation);
     this.tooltip = buildProgressTooltip(summary);
     this.contextValue = 'progress';
-    // A watched folder with no AI-DLC in it is now the normal first state, since the
-    // workspace folder is watched without being picked. The hint beside this row names
-    // the toolbar button; the row itself is that button.
-    if (summary.generation === 'none') {
-      this.command = { command: 'markdownWatchViewer.setupRules', title: 'Set up AI-DLC' };
-    }
     this.iconPath = new vscode.ThemeIcon('pulse', getStageColor(summary.currentStage));
   }
 }

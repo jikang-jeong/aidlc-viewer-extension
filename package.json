@@ -127,7 +127,13 @@
     "viewsWelcome": [
       {
         "view": "markdownWatchViewer.tree",
-        "contents": "No project folder is open in Kiro. The viewer follows the workspace folder, which is where Kiro runs AI-DLC from.\n\n[Open an AI-DLC Project Folder](command:markdownWatchViewer.selectFolder)\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)"
+        "contents": "No project folder is open in Kiro. The viewer follows the workspace folder, which is where Kiro runs AI-DLC from.\n\n[Open an AI-DLC Project Folder](command:markdownWatchViewer.selectFolder)\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)",
+        "when": "!aidlcViewer.setupNeeded"
+      },
+      {
+        "view": "markdownWatchViewer.tree",
+        "when": "aidlcViewer.setupNeeded",
+        "contents": "This folder has no AI-DLC yet.\n\n[Set up AI-DLC](command:markdownWatchViewer.setupRules)\n\nOne prompt asks which generation: v1 is the rule files your agent reads, v2 is an engine installed on this machine that drives the workflow.\n\n[Open AI-DLC Viewer Guide](command:markdownWatchViewer.showHelp)"
       }
     ],
     "menus": {
