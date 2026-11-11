@@ -66,6 +66,27 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 ## What's New
 
+### 0.1.3
+
+- **Unit-major runs show where they are.** With `Construction Iteration: unit-major`, the
+  engine walks one unit through every per-unit stage before the next unit begins, and the
+  later stages leave only unit rows in the ledger. The viewer read none of them, so a
+  project two units in showed those stages as **not started** and the row looked stuck
+  while `aidlc --status` moved. Every stage a unit has touched is now in progress with
+  its unit count, and the position is the stage the latest unit row names, shown as
+  **· on u3-…** beside the counts, which is what the engine's own status reports. Thanks
+  to [@protzetter](https://github.com/protzetter) for the report and to
+  [@wyptaotao](https://github.com/wyptaotao) for the diagnosis and a tested patch
+  ([#2](https://github.com/jikang-jeong/aidlc-viewer-extension/issues/2)). 👍
+- **Other extensions' settings register again.** An invalid language-override key in this
+  extension's `configurationDefaults` could stop Kiro from registering settings contributed
+  by other extensions (`git.enabled` "not a registered configuration", Volar failing to
+  activate). The key never had any effect and is gone. Thanks to
+  [@wyptaotao](https://github.com/wyptaotao) for finding and verifying it
+  ([#3](https://github.com/jikang-jeong/aidlc-viewer-extension/issues/3)). 👍
+- A changelog now ships with the extension, so the marketplace's Changes tab carries the
+  same notes as this section.
+
 ### 0.1.2
 
 - **The viewer follows the folder open in Kiro.** Open your project and it is watched;

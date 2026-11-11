@@ -2,7 +2,7 @@
   "name": "aidlc-viewer",
   "displayName": "AIDLC-VIEWER",
   "description": "Companion tool for AWS AI-DLC. Sets the workflow up in one click, and shows where it has got to.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "jikjeong",
   "license": "MIT",
   "repository": {
@@ -122,9 +122,6 @@
       ]
     },
     "configurationDefaults": {
-      "[markdownWatchViewer.tree]": {
-        "workbench.tree.indent": 20
-      },
       "workbench.tree.indent": 20,
       "workbench.tree.renderIndentGuides": "always"
     },

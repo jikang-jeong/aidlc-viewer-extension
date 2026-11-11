@@ -541,6 +541,34 @@ which removed one name from v2-probe3's `unknownEvents` baseline. Pins: v2-robus
 promote a stage the ledger closed or skipped"; five fail on the code before this change
 and the plan-question one on the lifecycle-only beat.
 
+**A bracketed key under `configurationDefaults` is a language override; one that names
+a view can take every other extension's settings down with it.** GitHub issue #3, Windows
+Kiro, 0.1.1: Git "not enabled", `git.enabled` "is not a registered configuration", Volar
+failing on `vue.server` undefined, all gone when this extension was disabled. The cause
+was `"[markdownWatchViewer.tree]": { "workbench.tree.indent": 20 }` in `package.json`,
+there since 0.0.x. In `configurationDefaults` a `[...]` key is a per-language override
+and the brackets must hold a language id; `markdownWatchViewer.tree` is a view id, and
+`workbench.tree.indent` is not language-overridable, so the entry never did anything.
+Why it reached other extensions: VS Code's `configuration` extension point depends on
+`configurationDefaults` and both are applied in one `deltaConfiguration` call, so a
+registry that throws on the bad key loses every extension's `configuration` contribution
+in that delta. Upstream VS Code main tolerates the key and this Mac's Kiro showed no
+symptom, so the throw is specific to some Kiro builds; the reporter proved the cause by
+removal. The fix is the removal and nothing else: the two plain defaults beside it
+(`workbench.tree.indent`, `renderIndentGuides`) stay, because they are what 8,000
+installs see today and dropping them would narrow every tree in the editor, which is a
+separate decision. Pin: changelog.test.js "configurationDefaults has no bracketed
+key", which fails on the 0.1.2 manifest.
+
+**The release notes ship as CHANGELOG.md and are kept identical to the README's What's
+New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the
+vsix and was empty through 0.1.2 (the API's `files` had no `changelog`). The README
+section stays because the overview tab reads that. Two copies are a drift risk, so
+changelog.test.js checks same versions, same order, same text under each, newest equals
+`package.json`'s version, and the file is not in `.vscodeignore`. A generator was the
+alternative and was not taken: the repo has no build step and the test is enough to make
+editing one without the other fail the suite.
+
 ## Units of work
 
 `stage-graph.json` declares `for_each: "unit-of-work"` on five stages. The unit
