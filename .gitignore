@@ -4,3 +4,6 @@ node_modules/
 *.log
 .kiro/
 
+
+# Claude Code local permission settings; per machine, never shared
+.claude/
