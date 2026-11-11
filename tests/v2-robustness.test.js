@@ -1204,3 +1204,181 @@ test('plan override: no state file, or one without suffixes, leaves the scope gr
   assert.equal(j.checkpoints.find((cp) => cp.id === 'b').outOfScope, true);
   assert.ok(j.checkpoints.every((cp) => cp.planOverride === undefined));
 });
+
+// ---------------------------------------------------------------------------
+// unit-major iteration: the block's later stages have only unit rows (issue #2)
+// ---------------------------------------------------------------------------
+//
+// Under `Construction Iteration: unit-major` the engine walks one unit through every
+// per-unit stage before starting the next unit, and its Current Stage stays on the
+// block's first stage the whole time. So the later per-unit stages get no runtime
+// record and no STAGE_* row; their only trace is UNIT_STARTED / UNIT_COMPLETED (and
+// review rows) carrying Stage and Unit. Reported with u1 and u2 finished and u3 on
+// functional-design: the viewer showed the four later stages as "not started".
+//
+// Row shape copied from a real ledger (v2-probe3): `**Event**: UNIT_STARTED`,
+// `**Stage**: functional-design`, `**Unit**: u1-...`, `**Timestamp**: ...Z`.
+
+const UNIT_MAJOR_GRAPH = [
+  { slug: 'units-generation', name: 'Units Generation', phase: 'inception', execution: 'ALWAYS' },
+  { slug: 'functional-design', name: 'Functional Design', phase: 'construction', execution: 'ALWAYS', for_each: 'unit-of-work' },
+  { slug: 'nfr-design', name: 'NFR Design', phase: 'construction', execution: 'CONDITIONAL', for_each: 'unit-of-work' },
+  { slug: 'code-generation', name: 'Code Generation', phase: 'construction', execution: 'ALWAYS', for_each: 'unit-of-work' },
+  { slug: 'build-and-test', name: 'Build and Test', phase: 'construction', execution: 'ALWAYS' }
+];
+const UNIT_MAJOR_GRID = {
+  s: { stages: { 'units-generation': 'EXECUTE', 'functional-design': 'EXECUTE', 'nfr-design': 'EXECUTE', 'code-generation': 'EXECUTE', 'build-and-test': 'EXECUTE' } }
+};
+const THREE_UNITS = { units: [{ name: 'u1' }, { name: 'u2' }, { name: 'u3' }], batches: [['u1'], ['u2'], ['u3']] };
+
+// One unit walking the whole block, as the engine records it: no STAGE_* rows.
+function unitWalk(unit, t0) {
+  const rows = [];
+  let t = t0;
+  for (const stage of ['functional-design', 'nfr-design', 'code-generation']) {
+    rows.push({ Event: 'UNIT_STARTED', Stage: stage, Unit: unit, Timestamp: `2026-01-01T00:${String(t++).padStart(2, '0')}:00Z` });
+    rows.push({ Event: 'UNIT_COMPLETED', Stage: stage, Unit: unit, Timestamp: `2026-01-01T00:${String(t++).padStart(2, '0')}:00Z` });
+  }
+  return rows;
+}
+
+function unitMajorProject(auditRows, runtimeStages = [{ stage_slug: 'functional-design', outcome: 'pending' }]) {
+  return makeProject({
+    stageGraph: UNIT_MAJOR_GRAPH,
+    scopeGrid: UNIT_MAJOR_GRID,
+    manifest: [{ dirName: '260101-um', scope: 's' }],
+    intentDir: '260101-um',
+    runtimeGraph: {
+      scope: 's',
+      stages: [{ stage_slug: 'units-generation', outcome: 'approved' }, ...runtimeStages],
+      bolt_dag: THREE_UNITS
+    },
+    auditShard: shard([
+      { Event: 'STAGE_COMPLETED', Stage: 'units-generation', Timestamp: '2026-01-01T00:00:00Z' },
+      { Event: 'STAGE_STARTED', Stage: 'functional-design', Timestamp: '2026-01-01T00:00:30Z' },
+      ...auditRows
+    ])
+  });
+}
+
+test('unit-major: per-unit stages with only UNIT_* rows are in progress, with their unit counts', () => {
+  const root = unitMajorProject([
+    ...unitWalk('u1', 1),
+    ...unitWalk('u2', 10),
+    { Event: 'UNIT_STARTED', Stage: 'functional-design', Unit: 'u3', Timestamp: '2026-01-01T00:20:00Z' }
+  ]);
+  const j = buildV2(root).intents[0].journey;
+  const byId = Object.fromEntries(j.checkpoints.map((cp) => [cp.id, cp]));
+  assert.equal(byId['functional-design'].status, 'active', 'runtime record');
+  assert.equal(byId['functional-design'].source, undefined);
+  assert.equal(byId['nfr-design'].status, 'active', 'no runtime record, no STAGE_* row: the unit rows say it ran');
+  assert.equal(byId['nfr-design'].source, 'ledger');
+  assert.equal(byId['code-generation'].status, 'active');
+  assert.equal(byId['code-generation'].source, 'ledger');
+  assert.equal(byId['build-and-test'].status, 'pending', 'not per-unit, never touched');
+  for (const slug of ['functional-design', 'nfr-design', 'code-generation']) {
+    assert.deepEqual(byId[slug].unitProgress, { done: 2, total: 3 }, `${slug} shows 2/3`);
+  }
+  assert.deepEqual(byId['functional-design'].unitsInFlight, ['u3']);
+});
+
+test('unit-major: the position is the stage the latest unit row names, not the furthest stage with evidence', () => {
+  // u1 and u2 walked through code-generation, so that is the furthest stage with
+  // evidence. The run is on u3 at functional-design, which is where the engine's own
+  // Current Stage and its `parked` directive put it.
+  const root = unitMajorProject([
+    ...unitWalk('u1', 1),
+    ...unitWalk('u2', 10),
+    { Event: 'UNIT_STARTED', Stage: 'functional-design', Unit: 'u3', Timestamp: '2026-01-01T00:20:00Z' }
+  ]);
+  const j = buildV2(root).intents[0].journey;
+  assert.equal(j.checkpoints[j.currentIndex].id, 'functional-design');
+  assert.deepEqual(j.position, { unit: 'u3', inFlight: true });
+});
+
+test('unit-major: the position follows the unit through the block', () => {
+  const root = unitMajorProject([
+    ...unitWalk('u1', 1),
+    ...unitWalk('u2', 10),
+    { Event: 'UNIT_STARTED', Stage: 'functional-design', Unit: 'u3', Timestamp: '2026-01-01T00:20:00Z' },
+    { Event: 'UNIT_COMPLETED', Stage: 'functional-design', Unit: 'u3', Timestamp: '2026-01-01T00:21:00Z' },
+    { Event: 'UNIT_STARTED', Stage: 'nfr-design', Unit: 'u3', Timestamp: '2026-01-01T00:22:00Z' }
+  ]);
+  const j = buildV2(root).intents[0].journey;
+  assert.equal(j.checkpoints[j.currentIndex].id, 'nfr-design');
+  assert.deepEqual(j.position, { unit: 'u3', inFlight: true });
+  assert.deepEqual(j.checkpoints.find((cp) => cp.id === 'functional-design').unitProgress, { done: 3, total: 3 });
+});
+
+test('unit-major: shard order is not time order -- the latest unit row is found by timestamp', () => {
+  const walk2 = unitWalk('u2', 10);
+  const walk1 = unitWalk('u1', 1);
+  const root = unitMajorProject([
+    { Event: 'UNIT_STARTED', Stage: 'functional-design', Unit: 'u3', Timestamp: '2026-01-01T00:20:00Z' },
+    ...walk2,
+    ...walk1
+  ]);
+  const j = buildV2(root).intents[0].journey;
+  assert.equal(j.checkpoints[j.currentIndex].id, 'functional-design');
+  assert.equal(j.position.unit, 'u3');
+});
+
+test('unit-major: once the block is settled with STAGE_COMPLETED rows, the stages are done and the position moves on', () => {
+  // The engine settles the block's gates itself once every unit is approved
+  // (settleBookkeepingGate: report awaiting-approval, then approved, per stage), which
+  // writes STAGE_COMPLETED and a runtime record for each. The existing rules take it
+  // from there; this pins that the unit rows do not hold the stages at "in progress".
+  const root = unitMajorProject(
+    [
+      ...unitWalk('u1', 1),
+      ...unitWalk('u2', 10),
+      ...unitWalk('u3', 20),
+      { Event: 'STAGE_COMPLETED', Stage: 'functional-design', Timestamp: '2026-01-01T00:40:00Z' },
+      { Event: 'STAGE_COMPLETED', Stage: 'nfr-design', Timestamp: '2026-01-01T00:41:00Z' },
+      { Event: 'STAGE_COMPLETED', Stage: 'code-generation', Timestamp: '2026-01-01T00:42:00Z' },
+      { Event: 'STAGE_STARTED', Stage: 'build-and-test', Timestamp: '2026-01-01T00:43:00Z' }
+    ],
+    [
+      { stage_slug: 'functional-design', outcome: 'approved' },
+      { stage_slug: 'nfr-design', outcome: 'approved' },
+      { stage_slug: 'code-generation', outcome: 'approved' },
+      { stage_slug: 'build-and-test', outcome: 'pending' }
+    ]
+  );
+  const j = buildV2(root).intents[0].journey;
+  const byId = Object.fromEntries(j.checkpoints.map((cp) => [cp.id, cp]));
+  for (const slug of ['functional-design', 'nfr-design', 'code-generation']) {
+    assert.equal(byId[slug].status, 'done');
+    assert.deepEqual(byId[slug].unitProgress, { done: 3, total: 3 });
+  }
+  assert.equal(j.checkpoints[j.currentIndex].id, 'build-and-test', 'a non-repeating stage past the block keeps the position');
+  assert.equal(j.position, undefined, 'and carries no unit');
+});
+
+test('stage-major: unit rows change nothing -- every per-unit stage already has a STAGE_STARTED and a runtime record', () => {
+  // v2-probe3's shape: the stage runs for every unit before the next stage begins. The
+  // furthest active stage is where the latest unit row is, so the position is the same
+  // with or without the unit beat.
+  const root = unitMajorProject(
+    [
+      { Event: 'UNIT_STARTED', Stage: 'functional-design', Unit: 'u1', Timestamp: '2026-01-01T00:01:00Z' },
+      { Event: 'UNIT_COMPLETED', Stage: 'functional-design', Unit: 'u1', Timestamp: '2026-01-01T00:02:00Z' },
+      { Event: 'UNIT_STARTED', Stage: 'functional-design', Unit: 'u2', Timestamp: '2026-01-01T00:03:00Z' }
+    ]
+  );
+  const j = buildV2(root).intents[0].journey;
+  const byId = Object.fromEntries(j.checkpoints.map((cp) => [cp.id, cp]));
+  assert.equal(j.checkpoints[j.currentIndex].id, 'functional-design');
+  assert.equal(byId['nfr-design'].status, 'pending');
+  assert.equal(byId['code-generation'].status, 'pending');
+  assert.deepEqual(j.position, { unit: 'u2', inFlight: true });
+});
+
+test('unit rows never promote a stage the ledger closed or skipped', () => {
+  const root = unitMajorProject([
+    { Event: 'STAGE_SKIPPED', Stage: 'nfr-design', Timestamp: '2026-01-01T00:01:00Z' },
+    { Event: 'REVIEW_COMPLETED', Stage: 'nfr-design', Unit: 'u1', Timestamp: '2026-01-01T00:02:00Z' }
+  ]);
+  const j = buildV2(root).intents[0].journey;
+  assert.equal(j.checkpoints.find((cp) => cp.id === 'nfr-design').status, 'skipped');
+});

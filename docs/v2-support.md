@@ -502,6 +502,39 @@ promise held, configures the folder between showing and pressing, and asserts th
 installer module is never called; and install-prompts "installV2 no longer reads a
 recorded harness".
 
+**Under unit-major iteration the block's later stages have only unit rows, and the
+position is the live (stage, unit) beat, not the furthest stage.** GitHub issue #2, two
+reports three weeks apart. With `Construction Iteration: unit-major` the engine walks one
+unit through functional-design, NFR, infrastructure and code-generation before the next
+unit begins, and its Current Stage stays on the block's first stage the whole time
+(engine source, `aidlc-orchestrate.ts`: "Under the unit-major walk Current Stage stays on
+the block's first stage"). So the later per-unit stages get no runtime record and no
+`STAGE_*` row; their only trace is `UNIT_STARTED` / `UNIT_COMPLETED` and review rows
+carrying `Stage` and `Unit`. The ledger fallback read `STAGE_*` rows only, so a project
+with two of nine units through the whole block showed those four stages as "not started"
+and the row looked stuck, while `aidlc --status` moved. Two changes. (1) A row naming a
+stage and a unit is that stage entered, when nothing stronger is known: the same
+evidence rule `unitsSeen` already applied, now applied to the stage's state too; it never
+overrides completed or skipped. (2) With every stage in the block then active, "furthest
+with evidence" put the position on code-generation while the run was on u3's
+functional-design, which the second reporter called out. The engine's own `parked`
+directive names the live (stage, unit) beat for the same reason (#1411), so the position
+is the stage of the latest unit lifecycle row by timestamp, when both it and the furthest
+stage are open per-unit stages; the row shows `· on u3` and the tooltip bolds that stage.
+A stage-major run is unaffected by construction (its latest unit row is already on the
+furthest active stage) and a non-repeating stage past the block keeps the position. The
+reporter's open question, whether the block ends with stage-level `STAGE_COMPLETED`
+rows, is answered by the engine's `settleBookkeepingGate`: once every unit is approved it
+reports awaiting-approval then approved per stage, which writes the rows and the runtime
+records the existing rules read. None of the five samples is a unit-major Construction
+run (word-book is unit-major but has not reached Construction), so the pins are built
+from the engine's row shape as seen on v2-probe3, and a real unit-major ledger is still
+wanted as a sixth sample. `UNIT_STARTED` and the rest of the engine's unit lifecycle set
+are now known events, which removed one name from v2-probe3's `unknownEvents` baseline.
+Pins: v2-robustness "unit-major: …" (five), "stage-major: unit rows change nothing" and
+"unit rows never promote a stage the ledger closed or skipped"; five fail on the code
+before this change.
+
 ## Units of work
 
 `stage-graph.json` declares `for_each: "unit-of-work"` on five stages. The unit

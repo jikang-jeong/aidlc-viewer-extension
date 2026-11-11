@@ -53,6 +53,13 @@ const EVENT = {
   // record of per-unit progress: `runtime-graph.json` tracks a stage as a single
   // row no matter how many units it ran for.
   UNIT_COMPLETED: 'UNIT_COMPLETED',
+  // The rest of the engine's unit lifecycle (its own set, aidlc-lib.ts: STARTED,
+  // PAUSED, RESUMED, COMPLETED, SKIPPED). Under unit-major iteration these are the
+  // only rows the later per-unit stages ever get; see summarise.
+  UNIT_STARTED: 'UNIT_STARTED',
+  UNIT_PAUSED: 'UNIT_PAUSED',
+  UNIT_RESUMED: 'UNIT_RESUMED',
+  UNIT_SKIPPED: 'UNIT_SKIPPED',
   WORKFLOW_STARTED: 'WORKFLOW_STARTED',
   WORKFLOW_COMPLETED: 'WORKFLOW_COMPLETED',
   PHASE_STARTED: 'PHASE_STARTED',
@@ -72,6 +79,14 @@ const EVENT = {
 };
 
 const KNOWN_EVENTS = new Set(Object.values(EVENT));
+
+const UNIT_LIFECYCLE_EVENTS = new Set([
+  EVENT.UNIT_STARTED,
+  EVENT.UNIT_PAUSED,
+  EVENT.UNIT_RESUMED,
+  EVENT.UNIT_COMPLETED,
+  EVENT.UNIT_SKIPPED
+]);
 
 function field(record, name) {
   // Anchored to line start so a field name quoted inside a value cannot match.
@@ -204,11 +219,26 @@ function summarise(intentDir, knownStages) {
   //   leaves such a record at `pending`, which read as "in progress" (v2-probe2,
   //   contract-design); the ledger's word is the specific one, so it is kept here even
   //   when a record exists, unless that record says approved.
+  // - A row that names a stage AND a unit is the stage having been entered for that
+  //   unit, when nothing stronger is known. Under `Construction Iteration: unit-major`
+  //   the engine walks one unit through every per-unit stage while its Current Stage
+  //   stays on the block's first stage (engine source: "Under the unit-major walk
+  //   Current Stage stays on the block's first stage"). The later stages then get no
+  //   runtime record and no STAGE_* row at all; their only trace is UNIT_* and review
+  //   rows carrying Stage and Unit. Reading only STAGE_* rows left them "not started"
+  //   with two units finished (issue #2). Same evidence rule as unitsSeen below.
   const stageLedger = new Map();
   const ledgerState = (stage) => {
     if (!stageLedger.has(stage)) stageLedger.set(stage, { state: undefined });
     return stageLedger.get(stage);
   };
+  // The (stage, unit) the run last touched, by timestamp, from the engine's unit
+  // lifecycle rows. Under unit-major the furthest stage with evidence is NOT where the
+  // run is: once u1 and u2 have walked through code-generation, u3 starting
+  // functional-design is the live position, and the engine's own `parked` directive
+  // names exactly this beat rather than Current Stage (engine #1411). Timestamps, not
+  // shard order: shard filename order is not execution order.
+  let unitBeat;
   for (const entry of events) {
     if (entry.stage && entry.event === EVENT.STAGE_STARTED) {
       const s = ledgerState(entry.stage);
@@ -223,6 +253,21 @@ function summarise(intentDir, knownStages) {
     } else if (entry.stage && entry.event === EVENT.STAGE_AWAITING_APPROVAL) {
       const s = ledgerState(entry.stage);
       if (s.state === undefined) s.state = 'started';
+    } else if (entry.stage && entry.unit) {
+      const s = ledgerState(entry.stage);
+      if (s.state === undefined) s.state = 'started';
+    }
+    if (entry.stage && entry.unit && UNIT_LIFECYCLE_EVENTS.has(entry.event) && entry.timestamp) {
+      if (!unitBeat || String(entry.timestamp) >= String(unitBeat.timestamp)) {
+        unitBeat = {
+          stage: entry.stage,
+          unit: entry.unit,
+          event: entry.event,
+          timestamp: entry.timestamp,
+          // Started or resumed and not yet closed by this row: the unit is being worked.
+          inFlight: entry.event === EVENT.UNIT_STARTED || entry.event === EVENT.UNIT_RESUMED
+        };
+      }
     }
     if (entry.event === EVENT.SENSOR_FAILED) {
       sensorFailures.push(entry);
@@ -265,6 +310,7 @@ function summarise(intentDir, knownStages) {
     unitsCompleted,
     unitsSeen,
     stageLedger,
+    unitBeat,
     unknownEvents,
     events
   };

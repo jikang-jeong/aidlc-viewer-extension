@@ -29,7 +29,10 @@ const V2_STATUS = STATUS;
 // `unitsCompleted` and `unitsSeen` map a stage slug to unit-name sets taken from
 // the audit ledger. They are passed in rather than read here so this function
 // stays a pure transform over data the caller already gathered.
-function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen = new Map(), stageLedger = new Map()) {
+//
+// `unitBeat` is the (stage, unit) the ledger's unit lifecycle rows last touched, or
+// undefined; see audit.summarise. It decides the position inside a unit-major block.
+function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen = new Map(), stageLedger = new Map(), unitBeat = undefined) {
   const unitNames = runtime && runtime.units ? runtime.units.units.map((u) => u.name) : [];
   const checkpoints = [];
   for (const stage of stages) {
@@ -147,6 +150,39 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
     if (node.status === V2_STATUS.DONE || node.status === V2_STATUS.ACTIVE) currentIndex = i;
   }
 
+  // Inside an open block of per-unit stages, "furthest with evidence" is the wrong
+  // question. Under `Construction Iteration: unit-major` one unit walks every per-unit
+  // stage before the next unit begins, so after two units the whole block has evidence
+  // and the furthest stage is code-generation, while the run is on the third unit's
+  // functional-design. The engine's own `parked` directive answers with the live
+  // (stage, unit) beat for exactly this reason (#1411), so the position does too: the
+  // stage of the latest unit lifecycle row, when both it and the furthest stage are
+  // per-unit stages still open. A stage-major run is untouched by construction: there
+  // the latest unit row is on the furthest active stage already, and a non-repeating
+  // stage past the block (build-and-test) keeps the position because it is not
+  // `forEach`. Issue #2, second report.
+  let position;
+  if (unitBeat && currentIndex >= 0) {
+    const furthest = checkpoints[currentIndex];
+    const beatIndex = checkpoints.findIndex((cp) => cp.id === unitBeat.stage);
+    const beat = beatIndex >= 0 ? checkpoints[beatIndex] : undefined;
+    if (
+      beat &&
+      beatIndex < currentIndex &&
+      beat.forEach &&
+      beat.status === V2_STATUS.ACTIVE &&
+      furthest.forEach &&
+      furthest.status === V2_STATUS.ACTIVE
+    ) {
+      currentIndex = beatIndex;
+    }
+    if (beat && beatIndex === currentIndex && beat.status === V2_STATUS.ACTIVE) {
+      // Which unit the current stage is on, for the row beside the stage name. Only
+      // when the beat IS the position, so a stale unit row cannot label a later stage.
+      position = { unit: unitBeat.unit, inFlight: unitBeat.inFlight === true };
+    }
+  }
+
   const counts = { done: 0, active: 0, pending: 0, skipped: 0 };
   for (const node of checkpoints) counts[node.status] += 1;
 
@@ -159,6 +195,9 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
     currentIndex,
     recentIndex: currentIndex,
     openIndex: -1,
+    // The unit the current per-unit stage is working, from the ledger; undefined when
+    // the current stage is not per-unit or no unit row names it. v2 only.
+    position,
     counts,
     plannedTotal,
     unattributed: []
@@ -241,7 +280,7 @@ function buildV2(root, options = {}) {
       // Per-unit progress lives only in the ledger, so the audit has to be read
       // before the journey can be honest about a stage that repeats.
       const audit = auditReader.summarise(intent.dir, stageSlugs);
-      const journey = buildFromStages(stages, runtime, audit.unitsCompleted, audit.unitsSeen, audit.stageLedger);
+      const journey = buildFromStages(stages, runtime, audit.unitsCompleted, audit.unitsSeen, audit.stageLedger, audit.unitBeat);
       const disk = runtimeReader.phaseDirsOnDisk(intent.dir, phases);
       intents.push({
         id: intent.id,

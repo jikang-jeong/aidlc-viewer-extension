@@ -1625,7 +1625,11 @@ class ProgressItem extends vscode.TreeItem {
     // has reached only that has not started either; its label stays "Setup repo", as
     // it always has, and the hint takes the place of a "1/14" that said nothing.
     const onlySetup = current && current.id === 'setup-repo';
-    this.description = current && !onlySetup ? formatJourneyCounts(journey) : startHint(summary.generation);
+    // On a per-unit stage, which unit it is on. Under unit-major iteration the stage
+    // name alone ("Functional Design") is the same for every unit, so without this
+    // the row reads as stuck while the run moves from u1 to u2 to u3 (issue #2).
+    const onUnit = journey && journey.position && journey.position.unit ? ` · on ${journey.position.unit}` : '';
+    this.description = current && !onlySetup ? formatJourneyCounts(journey) + onUnit : startHint(summary.generation);
     this.tooltip = buildProgressTooltip(summary);
     this.contextValue = 'progress';
     this.iconPath = new vscode.ThemeIcon('pulse', getStageColor(summary.currentStage));
@@ -2138,7 +2142,8 @@ function buildProgressTooltip(summary) {
     const units =
       cp.unitProgress && cp.unitProgress.total > 1 ? ` (${cp.unitProgress.done}/${cp.unitProgress.total})` : '';
     const isCurrent = journey.checkpoints.indexOf(cp) === journey.currentIndex;
-    lines.push(`${MARK[cp.status] || '·'} ${isCurrent ? `**${cp.label}**` : cp.label}${units}`);
+    const onUnit = isCurrent && journey.position && journey.position.unit ? ` · on ${journey.position.unit}` : '';
+    lines.push(`${MARK[cp.status] || '·'} ${isCurrent ? `**${cp.label}**` : cp.label}${units}${onUnit}`);
   }
 
   lines.push('', `**Reached**: ${formatJourneyCounts(journey)}`);
