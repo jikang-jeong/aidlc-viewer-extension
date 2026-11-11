@@ -105,7 +105,7 @@ test('two pages: Usage starts and ends with credits; Waiting is its own', () =>
       assert.match(waiting, /2 of 5 questions unanswered in inception\/requirements-analysis\/q\.md/);
       assert.match(waiting, /fill in each empty <code>\[Answer\]:<\/code>/);
 
-      // The Engine Log page is gone (0.1.3); nothing exports it.
+      // The Engine Log page is gone (0.1.4); nothing exports it.
       assert.equal(page.renderEngineRecordsPage, undefined);
     }
   ));

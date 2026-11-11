@@ -627,7 +627,7 @@ test('the v2-only row never appears in a v1 tree, and appears in a v2 one', () =
   // Waiting for you is a row, gated on the generation, not on "does the project have
   // something to show", because a v1 project has no engine to wait on and a row that
   // promised one would be a new thing for 6,000 people to wonder about. (The v2 Engine
-  // Log row that sat beside it was removed in 0.1.3 as not worth its place.)
+  // Log row that sat beside it was removed in 0.1.4 as not worth its place.)
   const { WaitingItem, CreditsItem } = loadExtensionInternals();
   assert.equal(new CreditsItem().label, 'Usage');
   const w = new WaitingItem({ count: 2, stages: ['intent-capture'] });

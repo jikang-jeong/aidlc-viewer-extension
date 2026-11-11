@@ -133,7 +133,7 @@ nothing about their origin. Pin: kiro-usage "a session names the store it came f
 **Separate pages, separate rows; nothing folded inside something else.** Waiting for you,
 Credits and Engine records were one page for a day, with the first at the top of a page
 called Credits and the third folded at its bottom. (The Engine records row and page were
-removed in 0.1.3; see the pitfall "The v2 Engine Log was removed" below. The rule stands
+removed in 0.1.4; see the pitfall "The v2 Engine Log was removed" below. The rule stands
 for the two that remain.) Separate things are separate rows in the tree,
 gated on the generation (`isV2`), never on "does the project have something to show" -- a
 v1 tree must not gain a row. The three panels share one poll and one render loop
@@ -345,7 +345,7 @@ Inline code is `terminal-ansiRed` on a 10% tint of itself; headings use the ANSI
 Read the theme's JSON and compute the ratio before choosing a token; a token's name says
 nothing about its contrast. No light/dark branch exists to get wrong.
 
-Was known and deliberately left until 0.1.3: `**strong**` text used `terminal-ansiYellow`,
+Was known and deliberately left until 0.1.4: `**strong**` text used `terminal-ansiYellow`,
 2.7:1 on Kiro Light (11.6:1 on Kiro Dark), with no yellow-family token legible on both
 backgrounds. The move to Kiro's own preview typography (below) made strong, em and the
 headings the text colour, as Kiro's preview has them, so the item is closed by removal

@@ -3,6 +3,19 @@
 The same notes as the README's What's New section, kept identical by a test
 (tests/changelog.test.js). Edit both, or the suite fails. Newest first.
 
+## 0.1.4
+
+- **The viewer renders like Kiro's own Markdown preview.** It now uses the same engine
+  (markdown-it) and follows the same typography. The hand-written renderer it replaces
+  could not nest: on 423 real AI-DLC artifacts, half came out with broken structure, every
+  code block wrapped in a paragraph, hard-wrapped paragraphs split per line, nested lists
+  spilling out of their list, `snake_case` names italicised. Those read correctly now.
+  Headings are the text colour rather than one colour per level; links and inline code
+  keep their accents. Dimmed HTML comments, Mermaid, and double-click to edit are unchanged.
+- **The v2 Engine Log row and page are gone.** Refusals and parked plans that need you
+  were already on **Waiting for you**; the rest (sensor findings, the agent's coverage
+  claim beside the engine's check) read the same on every project and nobody acted on it.
+
 ## 0.1.3
 
 - **Unit-major runs show where they are.** With `Construction Iteration: unit-major`, the
@@ -21,16 +34,6 @@ The same notes as the README's What's New section, kept identical by a test
   activate). The key never had any effect and is gone. Thanks to
   [@wyptaotao](https://github.com/wyptaotao) for finding and verifying it
   ([#3](https://github.com/jikang-jeong/aidlc-viewer-extension/issues/3)). 👍
-- **The viewer renders like Kiro's own Markdown preview.** It now uses the same engine
-  (markdown-it) and follows the same typography. The hand-written renderer it replaces
-  could not nest: on 423 real AI-DLC artifacts, half came out with broken structure, every
-  code block wrapped in a paragraph, hard-wrapped paragraphs split per line, nested lists
-  spilling out of their list, `snake_case` names italicised. Those read correctly now.
-  Headings are the text colour rather than one colour per level; links and inline code
-  keep their accents. Dimmed HTML comments, Mermaid, and double-click to edit are unchanged.
-- **The v2 Engine Log row and page are gone.** Refusals and parked plans that need you
-  were already on **Waiting for you**; the rest (sensor findings, the agent's coverage
-  claim beside the engine's check) read the same on every project and nobody acted on it.
 - A changelog now ships with the extension, so the marketplace's Changes tab carries the
   same notes as this section.
 
