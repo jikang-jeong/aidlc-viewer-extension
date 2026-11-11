@@ -92,10 +92,6 @@
         "title": "AI-DLC: Waiting for you"
       },
       {
-        "command": "markdownWatchViewer.showEngineRecords",
-        "title": "AI-DLC: v2 Engine Log"
-      },
-      {
         "command": "markdownWatchViewer.openChatToStart",
         "title": "AI-DLC: Open chat to start"
       },
@@ -182,10 +178,6 @@
         },
         {
           "command": "markdownWatchViewer.showWaiting",
-          "when": "aidlcViewer.v2Detected"
-        },
-        {
-          "command": "markdownWatchViewer.showEngineRecords",
           "when": "aidlcViewer.v2Detected"
         },
         {

@@ -165,157 +165,6 @@ function collectCreditsModel(root, project) {
 }
 
 
-// Paths the engine records are relative to the project; links on the page need absolute.
-function absolute(root, target) {
-  if (!root) return target;
-  return path.isAbsolute(target) ? target : path.join(root, target);
-}
-
-// ---------------------------------------------------------------------------
-// The engine's own records (formerly the Supervision panel)
-// ---------------------------------------------------------------------------
-//
-// Moved here verbatim from the panel these replaced, with `this.absolute` made a free
-// function. Their facts are unchanged and still the engine's: refusals the ledger shows
-// as unresolved, sensor findings per stage, and the agent's self-record beside the
-// engine's check of the same artifact. They sit below the fold because the two sections
-// above them are what a person acts on.
-
-function blocking(intent, root) {
-  const live = intent.diagnosis.live;
-  if (live.length === 0) {
-    return `<h2>Anything stuck</h2><p class="quiet">No. The engine refused an action ${
-      intent.diagnosis.refusals.length
-    } time(s) during this run &mdash; usually a step running out of order &mdash; and every one was resolved. Nothing is waiting on you here.</p>`;
-  }
-  const blocks = live
-    .map((entry) => {
-      const sequence = entry.context
-        .map((row) => {
-          const isHit = row.event === 'ERROR_LOGGED' && row.timestamp === entry.timestamp;
-          return `<div class="${isHit ? 'hit' : 'quiet'}">${escapeHtml(
-            String(row.timestamp ?? '').slice(11, 19)
-          )}  ${escapeHtml(row.event)}${row.unit ? `  ${escapeHtml(row.unit)}` : ''}</div>`;
-        })
-        .join('');
-      return `<div class="block">
-<div class="msg">${escapeHtml(entry.message)}</div>
-${entry.command ? `<div class="quiet" style="margin-top:4px"><code>${escapeHtml(entry.command)}</code></div>` : ''}
-<div class="quiet" style="margin-top:6px">What led here, oldest first:</div>
-<div class="seq">${sequence}</div>
-</div>`;
-    })
-    .join('');
-  // The sequence is the point. The engine's message states the remedy but not
-  // how the workflow reached the state it refuses, and that is only visible as
-  // an ordering of events.
-  return `<h2 class="warn">Anything stuck</h2>
-<p class="quiet">The engine is refusing an action. Its own words are below, with the events that led to it.</p>${blocks}`;
-}
-
-// What the agent said about its own coverage, next to what the engine's sensor
-// found in the same file. Two numbers, no verdict.
-//
-// The pairing is worth surfacing because only one side of it ever reached the
-// user: an agent recorded 45 of 46 requirements covered while the sensor
-// reported 89 findings in that same record, and the summary shown in chat was
-// the agent's. Which is right is not decided here -- the two answer slightly
-// different questions, and a computed difference would look authoritative
-// without being true.
-function contrast(intent, root) {
-  const { rows, faultedWithoutRecord } = intent.contrast;
-  if (rows.length === 0 && faultedWithoutRecord.length === 0) return '';
-
-  const body = rows
-    .map((row) => {
-      if (!row.readable) {
-        return `<tr><td class="k">${escapeHtml(
-          row.filePath.split('/').slice(-2).join('/')
-        )}</td><td class="n warn">unreadable</td></tr>`;
-      }
-      const claim = [...row.byStatus]
-        .map(([status, count]) => `${count} ${escapeHtml(status)}`)
-        .join(', ');
-      const detail = row.detailPaths[0]
-        ? `<a data-path="${escapeHtml(absolute(root, row.detailPaths[0]))}">read what the engine could not account for</a>`
-        : '<span class="quiet">no detail recorded</span>';
-      return `<tr><td class="k">${escapeHtml(row.stage ?? '(stage unstated)')}</td><td class="n">${
-        row.itemCount
-      } requirement(s)${row.recordCount > 1 ? ` in ${row.recordCount} records` : ''}</td></tr>
-<tr><td class="quiet indent">agent says</td><td class="n quiet">${claim || '&mdash;'}</td></tr>
-<tr><td class="quiet indent">engine found</td><td class="n warn">${
-        row.sensorFindings
-      } unaccounted, over ${row.sensorFirings} check(s)</td></tr>
-<tr><td colspan="2" class="indent" style="padding-bottom:6px">${detail}</td></tr>`;
-    })
-    .join('');
-
-  const orphans = faultedWithoutRecord.length
-    ? `<p class="quiet">Sensor faulted with no record found: ${escapeHtml(
-        faultedWithoutRecord.join(', ')
-      )}.</p>`
-    : '';
-
-  return `<h2 class="warn">The agent's claim, and the engine's check of it</h2>
-<p class="quiet">At some stages the agent writes a record of which requirements it covered. The engine then reads that same file and reports what it could not account for. The chat showed you the agent's version. Both numbers are below and neither is corrected against the other &mdash; they answer slightly different questions, so the judgement is yours.</p>
-<table>${body}</table>${orphans}`;
-}
-
-// What the engine's own checks flagged and nobody was told.
-//
-// "Sensor" is the engine's word for an automatic check it runs over each
-// artifact as it is written: whether the required sections are present, whether
-// every upstream requirement is accounted for, whether the traceability record
-// adds up, whether the code lints. They are advisory by design, so a failing one
-// never stops the workflow and never appears in chat.
-//
-// Findings are counted per sensor rather than listed one per row. A first
-// version repeated the sensor's name once per finding, so a stage with fifteen
-// findings from one check printed that check's name fifteen times, and the six
-// that fitted looked like an arbitrary subset.
-function sensors(intent, root) {
-  const byStage = intent.diagnosis.sensorFailures;
-  if (byStage.size === 0) {
-    return `<h2>Checks the engine ran</h2>
-<p class="quiet">Nothing was flagged. The engine checks each artifact as it is written and records the result; none of those checks failed in this run.</p>`;
-  }
-
-  const rows = [...byStage]
-    .sort((a, b) => b[1].length - a[1].length)
-    .map(([stage, failures]) => {
-      // Group by sensor so a name appears once with its count, and keep the
-      // first detail file per sensor as the thing to open.
-      const bySensor = new Map();
-      for (const failure of failures) {
-        const key = failure.sensorId ?? 'unnamed check';
-        if (!bySensor.has(key)) bySensor.set(key, { count: 0, detail: undefined });
-        const entry = bySensor.get(key);
-        entry.count += 1;
-        entry.detail = entry.detail ?? failure.detailPath ?? failure.outputPath;
-      }
-      const detailRows = [...bySensor]
-        .sort((a, b) => b[1].count - a[1].count)
-        .map(([name, entry]) => {
-          const label = `${escapeHtml(name)}${entry.count > 1 ? ` ×${entry.count}` : ''}`;
-          // Every finding observed so far had a detail file, so a name without a
-          // link means the engine did not record one — worth being able to tell
-          // apart at a glance rather than guessing.
-          const cell = entry.detail
-            ? `<a data-path="${escapeHtml(absolute(root, entry.detail))}">${label}</a>`
-            : `${label} <span class="quiet">(no detail recorded)</span>`;
-          return `<tr><td colspan="2" class="indent">${cell}</td></tr>`;
-        })
-        .join('');
-      return `<tr><td class="k">${escapeHtml(stage)}</td><td class="n warn">${failures.length}</td></tr>
-${detailRows}`;
-    })
-    .join('');
-
-  return `<h2 class="warn">Checks the engine ran</h2>
-<p class="quiet">The engine checks each artifact as it is written &mdash; required sections, upstream coverage, traceability, linting. These are advisory, so the workflow continued and the chat said nothing. Click a check to read exactly what it found.</p>
-<table>${rows}</table>`;
-}
-
 // ---------------------------------------------------------------------------
 // Sections
 // ---------------------------------------------------------------------------
@@ -457,23 +306,7 @@ function waitingSection(project) {
   return `<section class="urgent"><h2>Waiting for you</h2><ul class="waits">${items}</ul><p class="quiet">A stage waiting on you is stopped, not slow. "Engine says" is the engine\u2019s own record (a file it wrote); "inferred" is this extension\u2019s reading of the ledger\u2019s order.</p></section>`;
 }
 
-// The former Supervision panel, folded. Its facts are still true and still the engine's;
-// they are below the fold because the two sections above are what a person acts on.
-function engineRecordsSection(project, root) {
-  const intent = project?.v2?.active;
-  if (!intent) return `<section><h2>v2 Engine Log</h2><p class="quiet">No AI-DLC v2 intent has started on this folder.</p></section>`;
-  const parts = [blocking(intent, root), sensors(intent, root), contrast(intent, root)].filter(Boolean);
-  if (parts.length === 0) {
-    return `<section><h2>v2 Engine Log</h2><p class="quiet">The engine has recorded no refusal, no sensor finding and no self-report to compare for this intent.</p></section>`;
-  }
-  return `<p class="quiet">Refusals, what the engine\u2019s checks flagged, and the agent\u2019s own record beside the engine\u2019s check of it. These are the engine\u2019s records, shown as written.</p>\n${parts.join('\n')}`;
-}
-
-// The turns themselves, newest first and folded. The rollups above answer "how much";
-// this answers "when, and on what" -- and lets a person check that a figure in a table
-// is made of turns they recognise. Capped so a long-lived project does not render
-// thousands of rows; the cap is said on the page.
-const PAGE_TITLE = { credits: 'Usage', waiting: 'Waiting for you', records: 'v2 Engine Log' };
+const PAGE_TITLE = { credits: 'Usage', waiting: 'Waiting for you' };
 const HISTORY_LIMIT = 200;
 function historySection(model) {
   if (!model.ok || !model.history || model.history.length === 0) return '';
@@ -534,19 +367,6 @@ function renderWaitingPage({ webview, root, project, nonce: fixedNonce }) {
   return shell({ webview, root, project, nonce: fixedNonce, title: PAGE_TITLE.waiting }, [waitingSection(project)]);
 }
 
-function renderEngineRecordsPage({ webview, root, project, nonce: fixedNonce }) {
-  return shell({ webview, root, project, nonce: fixedNonce, title: PAGE_TITLE.records }, [engineRecordsSection(project, root)]);
-}
-
-// The page that opens once, right after setup, in the editor area: the one thing to
-// type to start, large, with a button that puts it where it is typed. Asked for because
-// the completion toast led with what was installed and said what to do next in a
-// trailing sentence that was gone in seconds; a person who has just set this up has
-// exactly one question and it is not "which files were written".
-//
-// No script, like every page here: the buttons are command: links, which the webview
-// routes to the extension host when the panel enables them. What was installed is still
-// on the page, smaller, below the thing to do.
 function renderStartPage({ webview, root, project, nonce: fixedNonce, generation, installed = [], notices = [] }) {
   const gen = generation === 'both' ? 'v2' : generation;
   const isV2 = gen === 'v2';
@@ -683,4 +503,4 @@ ${body}
 </html>`;
 }
 
-module.exports = { collectCreditsModel, renderCreditsPage, renderWaitingPage, renderEngineRecordsPage, renderStartPage, waitingSummary, PAGE_TITLE, nonce, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };
+module.exports = { collectCreditsModel, renderCreditsPage, renderWaitingPage, renderStartPage, waitingSummary, PAGE_TITLE, nonce, fmtCredits, fmtDuration, fmtTokens, HISTORY_LIMIT };

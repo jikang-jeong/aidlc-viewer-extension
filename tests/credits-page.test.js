@@ -82,7 +82,7 @@ const V2_WAITING = (project) => ({
   }
 });
 
-test('three pages: Usage starts and ends with credits; Waiting and Engine log are their own', () =>
+test('two pages: Usage starts and ends with credits; Waiting is its own', () =>
   withKiroHome(
     ({ home, project }) => ideSession(home, project, [{ at: T, credits: 5 }]),
     ({ project }) => {
@@ -105,9 +105,8 @@ test('three pages: Usage starts and ends with credits; Waiting and Engine log ar
       assert.match(waiting, /2 of 5 questions unanswered in inception\/requirements-analysis\/q\.md/);
       assert.match(waiting, /fill in each empty <code>\[Answer\]:<\/code>/);
 
-      const records = page.renderEngineRecordsPage({ webview, root: project, project: v2 });
-      assert.match(records, /<title>v2 Engine Log<\/title>/);
-      assert.doesNotMatch(records, /<details class="records">/, 'unfolded: it is the whole page now');
+      // The Engine Log page is gone (0.1.3); nothing exports it.
+      assert.equal(page.renderEngineRecordsPage, undefined);
     }
   ));
 
@@ -131,13 +130,12 @@ test('the Waiting row summary carries the count and the stages, and says nothing
     }
   ));
 
-test('each page says so when no v2 intent has started, rather than rendering an empty body', () =>
+test('the Waiting page says so when no v2 intent has started, rather than rendering an empty body', () =>
   withKiroHome(
     () => {},
     ({ project }) => {
       const none = { generation: 'v2', v2: { active: undefined } };
       assert.match(page.renderWaitingPage({ webview, root: project, project: none }), /No AI-DLC v2 intent has started/);
-      assert.match(page.renderEngineRecordsPage({ webview, root: project, project: none }), /No AI-DLC v2 intent has started/);
     }
   ));
 

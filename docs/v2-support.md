@@ -130,9 +130,11 @@ run on 2026-10-13 landed there, not in `sessions/cli/`). The layout does not say
 wrote it, so a label that did was a guess read as a fact. Sessions show their model and
 nothing about their origin. Pin: kiro-usage "a session names the store it came from".
 
-**Three pages, three rows; nothing folded inside something else.** Waiting for you, Credits
-and Engine records were one page for a day, with the first at the top of a page called
-Credits and the third folded at its bottom. Separate things are separate rows in the tree,
+**Separate pages, separate rows; nothing folded inside something else.** Waiting for you,
+Credits and Engine records were one page for a day, with the first at the top of a page
+called Credits and the third folded at its bottom. (The Engine records row and page were
+removed in 0.1.3; see the pitfall "The v2 Engine Log was removed" below. The rule stands
+for the two that remain.) Separate things are separate rows in the tree,
 gated on the generation (`isV2`), never on "does the project have something to show" -- a
 v1 tree must not gain a row. The three panels share one poll and one render loop
 (`pages`), each with a fixed nonce so an unchanged report is byte-identical. Pins:
@@ -595,6 +597,24 @@ Found while running the suite: the word-book regress sample is open in a Kiro wi
 carries the engine's hooks, so Kiro's session start appends `SESSION_STARTED` to the
 copy's ledger and moves its baseline (one `unknownEvents` entry, 2026-11-11 12:53). A
 sample must not be a live project: close the copy in Kiro, or copy without `.kiro/hooks`.
+
+**The v2 Engine Log was removed; a surface that reads the same on every project is not
+earning its row.** The row and page carried three sections: the engine's live refusals
+with the events that led to each, sensor findings per stage, and the agent's coverage
+claim beside the engine's check of it. The user looked at it after a month of real runs
+and called it unnecessary. The refusals a person must clear and the plans parked for
+approval had already moved to Waiting for you (0.0.26), which is where someone acts; what
+was left was a diagnostic that showed the same kind of list on every project and that no
+one in a workshop opened twice. The same judgement was reached once before for the
+"unknown events" list (above, "A panel section that lists things the extension does not
+understand"). Removed: the `EngineRecordsItem` row, the `showEngineRecords` command and
+palette entry, `renderEngineRecordsPage`, the `blocking`/`sensors`/`contrast` section
+renderers and their `absolute()` helper, the guide cards (EN and KO), the README line.
+Kept: the read layer under it (`diagnose`, `contrast.js`, `intent.contrast`), because
+Waiting for you reads `diagnosis` and the probe and regress baseline read the rest; a
+maintainer surface for that data is `npm run probe`, as the earlier rule says. Pins:
+v1-isolation "the v2-only row never appears in a v1 tree" asserts the row's class and
+command are gone from the source; credits-page asserts the page is no longer exported.
 
 **The release notes ship as CHANGELOG.md and are kept identical to the README's What's
 New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the

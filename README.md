@@ -49,8 +49,6 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 ## Also
 
-**v2 Engine Log** is a row and a page with the engine's own account of the run: what it refused, what its checks flagged, the agent's claim beside the engine's check of it.
-
 **Setup is reversible.** `AI-DLC v2: Remove` takes back only what the extension installed and refuses if it has no record of installing anything. `AI-DLC v2: Check setup` says what is present and what is missing when `/aidlc` does not appear, which is usually that Kiro reads agents from the workspace root and the folder you set up is not it.
 
 **v1 needs nothing and works offline.** v2's engine is installed by the installer AWS publishes with each release, which verifies what it downloads and needs no administrator rights. If that cannot run where you are, setup hands you the same command to run yourself.
@@ -91,6 +89,9 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
   spilling out of their list, `snake_case` names italicised. Those read correctly now.
   Headings are the text colour rather than one colour per level; links and inline code
   keep their accents. Dimmed HTML comments, Mermaid, and double-click to edit are unchanged.
+- **The v2 Engine Log row and page are gone.** Refusals and parked plans that need you
+  were already on **Waiting for you**; the rest (sensor findings, the agent's coverage
+  claim beside the engine's check) read the same on every project and nobody acted on it.
 - A changelog now ships with the extension, so the marketplace's Changes tab carries the
   same notes as this section.
 

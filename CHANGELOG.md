@@ -28,6 +28,9 @@ The same notes as the README's What's New section, kept identical by a test
   spilling out of their list, `snake_case` names italicised. Those read correctly now.
   Headings are the text colour rather than one colour per level; links and inline code
   keep their accents. Dimmed HTML comments, Mermaid, and double-click to edit are unchanged.
+- **The v2 Engine Log row and page are gone.** Refusals and parked plans that need you
+  were already on **Waiting for you**; the rest (sensor findings, the agent's coverage
+  claim beside the engine's check) read the same on every project and nobody acted on it.
 - A changelog now ships with the extension, so the marketplace's Changes tab carries the
   same notes as this section.
 

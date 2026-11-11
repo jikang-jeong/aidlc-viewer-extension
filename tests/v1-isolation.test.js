@@ -373,7 +373,7 @@ function loadExtensionInternals() {
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
     loaded._compile(
       `${fs.readFileSync(file, 'utf8')}
-module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, EngineRecordsItem, StageDecorationProvider, MarkdownTreeDataProvider, sortItems, newlyInstalled, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
+module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, StageDecorationProvider, MarkdownTreeDataProvider, sortItems, newlyInstalled, parseAidlcState, isIgnoredEventPath, shouldSkipDirectory };`,
       file
     );
     return loaded.exports;
@@ -623,12 +623,12 @@ test('a set-up project that has not run shows what to type, per generation, and 
   assert.doesNotMatch(v1.description, /\/aidlc/, 'v1 is not started with a slash command');
 });
 
-test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', () => {
-  // Waiting for you and Engine records are rows now. They are gated on the generation,
-  // not on "does the project have something to show", because a v1 project has neither
-  // an engine to wait on nor one to record, and a row that promised either would be a
-  // new thing for 6,000 people to wonder about.
-  const { WaitingItem, EngineRecordsItem, CreditsItem } = loadExtensionInternals();
+test('the v2-only row never appears in a v1 tree, and appears in a v2 one', () => {
+  // Waiting for you is a row, gated on the generation, not on "does the project have
+  // something to show", because a v1 project has no engine to wait on and a row that
+  // promised one would be a new thing for 6,000 people to wonder about. (The v2 Engine
+  // Log row that sat beside it was removed in 0.1.3 as not worth its place.)
+  const { WaitingItem, CreditsItem } = loadExtensionInternals();
   assert.equal(new CreditsItem().label, 'Usage');
   const w = new WaitingItem({ count: 2, stages: ['intent-capture'] });
   assert.equal(w.label, 'Waiting for you');
@@ -636,12 +636,12 @@ test('the v2-only rows never appear in a v1 tree, and both appear in a v2 one', 
   assert.equal(new WaitingItem({ count: 0, stages: [] }).description, 'nothing right now');
   assert.equal(new WaitingItem({ count: 0, stages: [], agentBusy: true }).description, 'agent is working', 'a third state: the next question is on its way');
   assert.equal(new WaitingItem({ count: 0, stages: [], endedInChat: true }).description, 'see the agent\u2019s last message', 'a fourth: the agent stopped with a message and no workflow step');
-  assert.equal(new EngineRecordsItem().label, 'v2 Engine Log');
 
-  // The gate itself, read from the source: the two rows are spread in under `isV2`.
+  // The gate itself, read from the source: the row is spread in under `isV2`, and the
+  // removed row is gone from the tree.
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
   assert.match(src, /\.\.\.\(isV2 \? \[new WaitingItem\(waiting\)\] : \[\]\)/);
-  assert.match(src, /\.\.\.\(isV2 \? \[new EngineRecordsItem\(\)\] : \[\]\)/);
+  assert.doesNotMatch(src, /EngineRecordsItem|showEngineRecords/);
 });
 
 

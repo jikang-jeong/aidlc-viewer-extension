@@ -43,7 +43,7 @@ const html = helpHtml();
 
 // Each entry: what the guide must say, in EN and KO. A missing one names the feature.
 const MUST_SAY = {
-  'the three pages are named as the code names them': [PAGE_TITLE.credits, PAGE_TITLE.waiting, PAGE_TITLE.records],
+  'the two pages are named as the code names them': [PAGE_TITLE.credits, PAGE_TITLE.waiting],
   'setup asks the generation first, then the harness in the same place': ['a second prompt in the same place', '같은 자리에 두 번째 알림'],
   'a project that has not run says Not started': ['Not started'],
   'the viewer has View and Edit, with double-click': ['✎ Edit', '🔍 View'],
@@ -72,7 +72,7 @@ for (const [what, needles] of Object.entries(MUST_SAY)) {
 // Wording that described a previous build and must not come back.
 const MUST_NOT_SAY = {
   'bars scaled to the largest row': ['relative to the costliest', '가장 비싼 단계'],
-  'the old page names': ['Credits (Tokens)', 'Engine records', 'AI-DLC Engine Log', 'Supervision panel'],
+  'the old page names': ['Credits (Tokens)', 'Engine records', 'AI-DLC Engine Log', 'v2 Engine Log', 'Supervision panel'],
   'the old Read button': ['>Read<'],
   'a claim that the IDE records no tokens, which blamed the wrong thing': ['Kiro IDE records credits only'],
   'the folded engine records inside the Usage page': ['folded below']
@@ -85,7 +85,7 @@ for (const [what, needles] of Object.entries(MUST_NOT_SAY)) {
 }
 
 test('the guide is in both languages, and each v2 row has a card in each', () => {
-  for (const title of [PAGE_TITLE.waiting, PAGE_TITLE.records]) {
+  for (const title of [PAGE_TITLE.waiting]) {
     const count = html.split(title).length - 1;
     assert.ok(count >= 2, `${title} appears ${count} time(s); expected a card in EN and in KO`);
   }

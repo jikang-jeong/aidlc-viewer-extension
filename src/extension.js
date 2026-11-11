@@ -1,7 +1,7 @@
 const vscode = require('vscode');
 const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
-const { renderCreditsPage, renderWaitingPage, renderEngineRecordsPage, renderStartPage, waitingSummary, PAGE_TITLE, nonce: pageNonce } = require('./credits-page');
+const { renderCreditsPage, renderWaitingPage, renderStartPage, waitingSummary, PAGE_TITLE, nonce: pageNonce } = require('./credits-page');
 
 // Drives the `when` clause on the v2-only command (Remove AI-DLC v2). Set from the
 // project the tree reads, since the panel that used to set it is gone.
@@ -119,7 +119,6 @@ function activate(context) {
     // is the same shape for v1 and v2. This replaced the v2-only Supervision panel.
     vscode.commands.registerCommand('markdownWatchViewer.showCredits', () => controller.showCredits()),
     vscode.commands.registerCommand('markdownWatchViewer.showWaiting', () => controller.showWaiting()),
-    vscode.commands.registerCommand('markdownWatchViewer.showEngineRecords', () => controller.showEngineRecords()),
     vscode.commands.registerCommand('markdownWatchViewer.openChatToStart', (generation) => controller.openChatToStart(generation)),
     // One setup button. It asks which generation, because it used to install v1
     // unconditionally and a second button for v2 beside it did not help: pressing
@@ -263,8 +262,7 @@ class WatchController {
     if (!this._pages) {
       this._pages = {
         credits: { id: 'markdownWatchViewer.credits', title: `AI-DLC ${PAGE_TITLE.credits}`, render: renderCreditsPage },
-        waiting: { id: 'markdownWatchViewer.waiting', title: `AI-DLC ${PAGE_TITLE.waiting}`, render: renderWaitingPage },
-        records: { id: 'markdownWatchViewer.records', title: PAGE_TITLE.records, render: renderEngineRecordsPage }
+        waiting: { id: 'markdownWatchViewer.waiting', title: `AI-DLC ${PAGE_TITLE.waiting}`, render: renderWaitingPage }
       };
     }
     return this._pages;
@@ -305,10 +303,6 @@ class WatchController {
 
   showWaiting() {
     this.showPage('waiting');
-  }
-
-  showEngineRecords() {
-    this.showPage('records');
   }
 
   async restoreWatcher() {
@@ -1127,7 +1121,6 @@ class MarkdownTreeDataProvider {
         new ProgressItem(stageSummary),
         ...(isV2 ? [new WaitingItem(waiting)] : []),
         new CreditsItem(),
-        ...(isV2 ? [new EngineRecordsItem()] : []),
         ...entries
       ];
     }
@@ -1593,16 +1586,6 @@ class WaitingItem extends vscode.TreeItem {
   }
 }
 
-class EngineRecordsItem extends vscode.TreeItem {
-  constructor() {
-    super(PAGE_TITLE.records, vscode.TreeItemCollapsibleState.None);
-    this.contextValue = 'records';
-    this.iconPath = new vscode.ThemeIcon('shield', new vscode.ThemeColor('descriptionForeground'));
-    this.command = { command: 'markdownWatchViewer.showEngineRecords', title: `Open the ${PAGE_TITLE.records} page` };
-    this.description = 'what the engine refused, flagged and checked';
-    this.tooltip = "The engine's own records: refusals, what its checks flagged, and the agent's claim beside the engine's check of it.";
-  }
-}
 
 class ProgressItem extends vscode.TreeItem {
   constructor(summary) {
@@ -3768,10 +3751,6 @@ function getHelpHtml() {
   <p>Each item says whether the engine stated the wait (a file it wrote) or this extension inferred it from the ledger's order.</p>
 </div>
 
-<div class="stage-card supervision">
-  <h3>🛡 v2 Engine Log — v2 only</h3>
-  <p>The engine's own account of the run: what it refused and why, what its checks flagged, and the agent's claim set beside the engine's check of it. Shown as written, never summarised.</p>
-</div>
 
 <h2>Toolbar Reference</h2>
 <table>
@@ -3866,10 +3845,6 @@ function getHelpHtml() {
   <p>각 항목에는 엔진이 밝힌 것(엔진이 쓴 파일)인지 이 익스텐션이 원장의 순서에서 추론한 것인지가 적혀 있습니다.</p>
 </div>
 
-<div class="stage-card supervision">
-  <h3>🛡 v2 Engine Log(엔진 기록) — v2 전용</h3>
-  <p>엔진 자신의 기록입니다. 무엇을 왜 거부했는지, 점검이 무엇을 지적했는지, 에이전트의 주장 옆에 놓인 엔진의 판정. 요약하지 않고 쓰인 그대로 보여줍니다.</p>
-</div>
 
 <h2>툴바 안내</h2>
 <table>
