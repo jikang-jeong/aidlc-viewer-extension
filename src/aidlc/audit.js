@@ -80,13 +80,7 @@ const EVENT = {
 
 const KNOWN_EVENTS = new Set(Object.values(EVENT));
 
-const UNIT_LIFECYCLE_EVENTS = new Set([
-  EVENT.UNIT_STARTED,
-  EVENT.UNIT_PAUSED,
-  EVENT.UNIT_RESUMED,
-  EVENT.UNIT_COMPLETED,
-  EVENT.UNIT_SKIPPED
-]);
+
 
 function field(record, name) {
   // Anchored to line start so a field name quoted inside a value cannot match.
@@ -232,11 +226,16 @@ function summarise(intentDir, knownStages) {
     if (!stageLedger.has(stage)) stageLedger.set(stage, { state: undefined });
     return stageLedger.get(stage);
   };
-  // The (stage, unit) the run last touched, by timestamp, from the engine's unit
-  // lifecycle rows. Under unit-major the furthest stage with evidence is NOT where the
-  // run is: once u1 and u2 have walked through code-generation, u3 starting
-  // functional-design is the live position, and the engine's own `parked` directive
-  // names exactly this beat rather than Current Stage (engine #1411). Timestamps, not
+  // The (stage, unit) the run last touched, by timestamp, from any row naming both.
+  // Under unit-major the furthest stage with evidence is NOT where the run is: once u1
+  // and u2 have walked through code-generation, u3 starting functional-design is the
+  // live position, and the engine's own `parked` directive names exactly this beat
+  // rather than Current Stage (engine #1411). Any unit-bearing row, not only the
+  // UNIT_* lifecycle rows, for the same reason as the state rule above and because of
+  // a 42-minute window seen on a live run: u2 had closed functional-design and the
+  // engine was asking the person to approve u2's code-generation plan (QUESTION_ASKED,
+  // PLAN_APPROVAL_RECORDED, both on code-generation u2) with no UNIT_STARTED yet, and
+  // the lifecycle-only beat kept the position on functional-design. Timestamps, not
   // shard order: shard filename order is not execution order.
   let unitBeat;
   for (const entry of events) {
@@ -257,16 +256,9 @@ function summarise(intentDir, knownStages) {
       const s = ledgerState(entry.stage);
       if (s.state === undefined) s.state = 'started';
     }
-    if (entry.stage && entry.unit && UNIT_LIFECYCLE_EVENTS.has(entry.event) && entry.timestamp) {
+    if (entry.stage && entry.unit && entry.timestamp) {
       if (!unitBeat || String(entry.timestamp) >= String(unitBeat.timestamp)) {
-        unitBeat = {
-          stage: entry.stage,
-          unit: entry.unit,
-          event: entry.event,
-          timestamp: entry.timestamp,
-          // Started or resumed and not yet closed by this row: the unit is being worked.
-          inFlight: entry.event === EVENT.UNIT_STARTED || entry.event === EVENT.UNIT_RESUMED
-        };
+        unitBeat = { stage: entry.stage, unit: entry.unit, event: entry.event, timestamp: entry.timestamp };
       }
     }
     if (entry.event === EVENT.SENSOR_FAILED) {

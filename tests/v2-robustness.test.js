@@ -1382,3 +1382,21 @@ test('unit rows never promote a stage the ledger closed or skipped', () => {
   const j = buildV2(root).intents[0].journey;
   assert.equal(j.checkpoints.find((cp) => cp.id === 'nfr-design').status, 'skipped');
 });
+
+test('unit-major: the beat follows any unit-bearing row, so a plan question on the next stage moves the position before UNIT_STARTED', () => {
+  // Seen live on word-book (2.11.3, unit-major, 2 units): u2 closed functional-design at
+  // 02:39, the engine asked for u2's code-generation plan at 02:41 and recorded the
+  // approval at 03:22, and UNIT_STARTED on code-generation came only at 03:23. For 42
+  // minutes the run was on code-generation for u2 and a lifecycle-only beat said
+  // functional-design.
+  const root = unitMajorProject([
+    ...unitWalk('u1', 1),
+    { Event: 'UNIT_STARTED', Stage: 'functional-design', Unit: 'u2', Timestamp: '2026-01-01T00:20:00Z' },
+    { Event: 'UNIT_COMPLETED', Stage: 'functional-design', Unit: 'u2', Timestamp: '2026-01-01T00:21:00Z' },
+    { Event: 'QUESTION_ASKED', Stage: 'code-generation', Unit: 'u2', Timestamp: '2026-01-01T00:22:00Z' },
+    { Event: 'PLAN_APPROVAL_RECORDED', Stage: 'code-generation', Unit: 'u2', Timestamp: '2026-01-01T00:23:00Z' }
+  ]);
+  const j = buildV2(root).intents[0].journey;
+  assert.equal(j.checkpoints[j.currentIndex].id, 'code-generation');
+  assert.deepEqual(j.position, { unit: 'u2', inFlight: true });
+});

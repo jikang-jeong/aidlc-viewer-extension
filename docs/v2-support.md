@@ -519,21 +519,27 @@ overrides completed or skipped. (2) With every stage in the block then active, "
 with evidence" put the position on code-generation while the run was on u3's
 functional-design, which the second reporter called out. The engine's own `parked`
 directive names the live (stage, unit) beat for the same reason (#1411), so the position
-is the stage of the latest unit lifecycle row by timestamp, when both it and the furthest
+is the stage of the latest unit-bearing row by timestamp, when both it and the furthest
 stage are open per-unit stages; the row shows `· on u3` and the tooltip bolds that stage.
+Any row naming a stage and a unit, not only the `UNIT_*` lifecycle rows: the first cut
+used the lifecycle rows, and the live word-book run showed a 42-minute window where u2
+had closed functional-design, the engine was asking for u2's code-generation plan
+(`QUESTION_ASKED`, `PLAN_APPROVAL_RECORDED`, both on code-generation u2) and no
+`UNIT_STARTED` had been written yet, so the position sat on the stage just finished.
 A stage-major run is unaffected by construction (its latest unit row is already on the
 furthest active stage) and a non-repeating stage past the block keeps the position. The
 reporter's open question, whether the block ends with stage-level `STAGE_COMPLETED`
 rows, is answered by the engine's `settleBookkeepingGate`: once every unit is approved it
 reports awaiting-approval then approved per stage, which writes the rows and the runtime
-records the existing rules read. None of the five samples is a unit-major Construction
-run (word-book is unit-major but has not reached Construction), so the pins are built
-from the engine's row shape as seen on v2-probe3, and a real unit-major ledger is still
-wanted as a sixth sample. `UNIT_STARTED` and the rest of the engine's unit lifecycle set
-are now known events, which removed one name from v2-probe3's `unknownEvents` baseline.
-Pins: v2-robustness "unit-major: …" (five), "stage-major: unit rows change nothing" and
-"unit rows never promote a stage the ledger closed or skipped"; five fail on the code
-before this change.
+records the existing rules read. The word-book sample was refreshed the same day and is
+the first unit-major Construction run among the samples (2 units, u1 through
+code-generation, u2 on code-generation): before the change it read functional-design
+with code-generation "not started" at 1/2; after, code-generation, on u2, in progress.
+`UNIT_STARTED` and the rest of the engine's unit lifecycle set are now known events,
+which removed one name from v2-probe3's `unknownEvents` baseline. Pins: v2-robustness
+"unit-major: …" (six), "stage-major: unit rows change nothing" and "unit rows never
+promote a stage the ledger closed or skipped"; five fail on the code before this change
+and the plan-question one on the lifecycle-only beat.
 
 ## Units of work
 

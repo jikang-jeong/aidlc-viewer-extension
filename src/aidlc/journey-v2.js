@@ -30,7 +30,7 @@ const V2_STATUS = STATUS;
 // the audit ledger. They are passed in rather than read here so this function
 // stays a pure transform over data the caller already gathered.
 //
-// `unitBeat` is the (stage, unit) the ledger's unit lifecycle rows last touched, or
+// `unitBeat` is the (stage, unit) the ledger's unit-bearing rows last touched, or
 // undefined; see audit.summarise. It decides the position inside a unit-major block.
 function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen = new Map(), stageLedger = new Map(), unitBeat = undefined) {
   const unitNames = runtime && runtime.units ? runtime.units.units.map((u) => u.name) : [];
@@ -179,7 +179,9 @@ function buildFromStages(stages, runtime, unitsCompleted = new Map(), unitsSeen 
     if (beat && beatIndex === currentIndex && beat.status === V2_STATUS.ACTIVE) {
       // Which unit the current stage is on, for the row beside the stage name. Only
       // when the beat IS the position, so a stale unit row cannot label a later stage.
-      position = { unit: unitBeat.unit, inFlight: unitBeat.inFlight === true };
+      // In flight unless the ledger closed this unit at this stage.
+      const closed = unitsCompleted.get(beat.id);
+      position = { unit: unitBeat.unit, inFlight: !(closed && closed.has(unitBeat.unit)) };
     }
   }
 
