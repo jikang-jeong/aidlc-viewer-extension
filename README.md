@@ -33,7 +33,7 @@ Position comes from the project's structure, never from parsing the Markdown, so
 
 ![An artifact, rendered, with the strip above it](media/ai-dlc_viewer.png)
 
-New artifacts are marked and their folders open themselves, so what the agent just wrote is in front of you. Each one opens rendered, Mermaid diagrams inline. **Edit**, or double-click the text you want to change, swaps the same pane for the source with the cursor near that spot; **Save** brings the view back. What you type is exactly what is saved. The HTML comments AI-DLC uses to instruct the agent are shown dimmed rather than dropped.
+New artifacts are marked and their folders open themselves, so what the agent just wrote is in front of you. Each one opens rendered the way Kiro's own Markdown preview renders it (same engine, same typography), Mermaid diagrams inline. **Edit**, or double-click the text you want to change, swaps the same pane for the source with the cursor near that spot; **Save** brings the view back. What you type is exactly what is saved. The HTML comments AI-DLC uses to instruct the agent are shown dimmed rather than dropped.
 
 ## Know when it is waiting on you (v2)
 
@@ -84,6 +84,13 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
   activate). The key never had any effect and is gone. Thanks to
   [@wyptaotao](https://github.com/wyptaotao) for finding and verifying it
   ([#3](https://github.com/jikang-jeong/aidlc-viewer-extension/issues/3)). 👍
+- **The viewer renders like Kiro's own Markdown preview.** It now uses the same engine
+  (markdown-it) and follows the same typography. The hand-written renderer it replaces
+  could not nest: on 423 real AI-DLC artifacts, half came out with broken structure, every
+  code block wrapped in a paragraph, hard-wrapped paragraphs split per line, nested lists
+  spilling out of their list, `snake_case` names italicised. Those read correctly now.
+  Headings are the text colour rather than one colour per level; links and inline code
+  keep their accents. Dimmed HTML comments, Mermaid, and double-click to edit are unchanged.
 - A changelog now ships with the extension, so the marketplace's Changes tab carries the
   same notes as this section.
 

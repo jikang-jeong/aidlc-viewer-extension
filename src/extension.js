@@ -2431,6 +2431,8 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
   const safeJourney = JSON.stringify(journey || null).replace(/</g, '\\u003c');
   const title = escapeHtml(fileUri.fsPath);
   const mermaidUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
+  const markdownItUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'markdown-it.min.js'));
+  const taskListsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'markdown-it-task-lists.min.js'));
   const nonce = getNonce();
 
   return `<!DOCTYPE html>
@@ -2462,14 +2464,14 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
            not define charts.* (those fall back to VS Code's dark-leaning defaults),
            but they do define the ANSI colours for both backgrounds at legible
            contrast, and that is what a document's accent colours need. */
-        --md-h1: var(--vscode-terminal-ansiRed, #e06c75);
-        --md-h2: var(--vscode-textLink-foreground, #61afef);
-        --md-h3: var(--vscode-terminal-ansiMagenta, #c678dd);
-        --md-h4: var(--vscode-terminal-ansiYellow, #d19a66);
-        --md-h5: var(--vscode-terminal-ansiGreen, #98c379);
-        --md-strong: var(--vscode-terminal-ansiYellow, #e5c07b);
-        --md-em: var(--vscode-editorInfo-foreground, #56b6c2);
         --md-link: var(--vscode-textLink-foreground, #61afef);
+        /* Headings, strong and em take the text colour, as Kiro's own Markdown preview
+           does. The per-level heading palette (red h1, blue h2, magenta h3, yellow h4,
+           green h5, yellow strong) went with the hand-written renderer it dressed; the
+           yellow strong was the one accent with no token legible on both themes
+           (2.7:1 on Kiro Light), and it is no longer needed. The accents that remain
+           are the ones a document needs to tell apart: links and code. */
+        --md-rule: var(--vscode-widget-border, var(--border));
         /* Inline code is NOT textPreformat-foreground. Kiro Light defines that as a
            mid grey on a 10%-grey chip, 2.8:1 against its page -- grey on light grey,
            reported from a screenshot right after the first theme pass. The terminal
@@ -2480,7 +2482,7 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         --md-code-fg: var(--vscode-terminal-ansiRed, #e06c75);
         --md-code-bg: color-mix(in srgb, var(--md-code-fg) 10%, var(--bg));
         --md-pre-bg: var(--vscode-textCodeBlock-background, color-mix(in srgb, var(--panel) 85%, var(--text) 6%));
-        --md-quote: var(--vscode-textBlockQuote-border, var(--md-h3));
+        --md-quote: var(--vscode-textBlockQuote-border, var(--md-link));
         --md-quote-bg: var(--vscode-textBlockQuote-background, color-mix(in srgb, var(--md-quote) 8%, transparent));
       }
 
@@ -2783,11 +2785,20 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         background: color-mix(in srgb, var(--text) 8%, transparent);
       }
 
-      /* ========== Prettier Markdown Viewer ========== */
+      /* ========== Rendered Markdown ==========
+         The typography follows markdown.css from VS Code's markdown-language-features
+         extension, which Kiro ships for its own Markdown preview (MIT, Microsoft; see
+         media/THIRD-PARTY-NOTICES.md): same heading sizes and rules, paragraph and
+         list spacing, table, blockquote and code block treatment, scoped to .preview.
+         So a document reads the same here as in Kiro's preview, and a person who
+         knows one knows the other. Two colours are this extension's and stay: inline
+         code (see --md-code-fg) and the link colour. */
       .preview {
-        font-family: -apple-system, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
-        font-size: 14.5px;
+        font-family: var(--markdown-font-family, var(--vscode-font-family, -apple-system, "Segoe UI", system-ui, sans-serif));
+        font-size: var(--markdown-font-size, 14px);
+        line-height: var(--markdown-line-height, 22px);
         color: var(--text);
+        word-wrap: break-word;
       }
 
       .preview > *:first-child { margin-top: 0; }
@@ -2795,155 +2806,128 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
 
       .preview h1, .preview h2, .preview h3,
       .preview h4, .preview h5, .preview h6 {
+        font-weight: 600;
+        margin-top: 24px;
+        margin-bottom: 16px;
         line-height: 1.25;
-        font-weight: 700;
-        margin: 1.4em 0 0.6em;
-        letter-spacing: -0.01em;
       }
-
       .preview h1 {
         font-size: 2em;
-        color: var(--md-h1);
-        border-bottom: 3px solid color-mix(in srgb, var(--md-h1) 45%, transparent);
         padding-bottom: 0.3em;
-        margin-top: 0.2em;
+        border-bottom: 1px solid var(--md-rule);
       }
       .preview h2 {
-        font-size: 1.55em;
-        color: var(--md-h2);
-        border-bottom: 2px solid color-mix(in srgb, var(--md-h2) 35%, transparent);
-        padding-bottom: 0.25em;
+        font-size: 1.5em;
+        padding-bottom: 0.3em;
+        border-bottom: 1px solid var(--md-rule);
       }
-      .preview h3 {
-        font-size: 1.28em;
-        color: var(--md-h3);
-      }
-      .preview h3::before {
-        content: '▸ ';
-        color: color-mix(in srgb, var(--md-h3) 70%, transparent);
-      }
-      .preview h4 {
-        font-size: 1.1em;
-        color: var(--md-h4);
-      }
-      .preview h5 {
-        font-size: 1em;
-        color: var(--md-h5);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .preview h6 {
-        font-size: 0.92em;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-      }
+      .preview h3 { font-size: 1.25em; }
+      .preview h4 { font-size: 1em; }
+      .preview h5 { font-size: 0.875em; }
+      .preview h6 { font-size: 0.85em; }
 
       .preview p {
-        margin: 0.7em 0;
+        margin-top: 0;
+        margin-bottom: 16px;
       }
-
-      .preview strong {
-        color: var(--md-strong);
-        font-weight: 700;
-      }
-      .preview em {
-        color: var(--md-em);
-        font-style: italic;
+      .preview li p {
+        margin-bottom: 0.7em;
       }
 
       .preview a {
         color: var(--md-link);
         text-decoration: none;
-        border-bottom: 1px dashed color-mix(in srgb, var(--md-link) 50%, transparent);
       }
       .preview a:hover {
-        border-bottom-style: solid;
+        text-decoration: underline;
       }
 
       .preview ul, .preview ol {
-        padding-left: 1.6em;
-        margin: 0.6em 0;
+        margin-top: 0;
+        margin-bottom: 0.7em;
       }
-      .preview li {
-        margin: 0.28em 0;
+      .preview ul ul:first-child, .preview ul ol:first-child,
+      .preview ol ul:first-child, .preview ol ol:first-child {
+        margin-bottom: 0;
       }
-      .preview ul > li::marker {
-        color: var(--md-h5);
+      .preview li.task-list-item {
+        list-style-type: none;
       }
-      .preview ol > li::marker {
-        color: var(--md-h4);
-        font-weight: 600;
+      .preview li.task-list-item input {
+        margin: 0 0.4em 0.25em -1.4em;
+        vertical-align: middle;
       }
+
+      .preview sub, .preview sup { line-height: 0; }
 
       .preview hr {
         border: 0;
-        border-top: 2px dashed color-mix(in srgb, var(--border) 80%, var(--text) 20%);
-        margin: 2em 0;
+        height: 1px;
+        border-bottom: 1px solid var(--md-rule);
+        margin: 16px 0;
       }
 
       .preview pre {
+        margin-top: 0;
+        margin-bottom: 16px;
+        padding: 16px;
+        border-radius: 3px;
         overflow: auto;
-        padding: 14px 16px;
-        border-radius: 8px;
         background: var(--md-pre-bg);
-        border-left: 3px solid var(--md-h5);
-        font-size: 0.92em;
-        line-height: 1.55;
-        margin: 1em 0;
+        border: 1px solid var(--md-rule);
       }
       .preview pre code {
-        background: transparent;
+        display: inline-block;
+        background: none;
         padding: 0;
-        color: color-mix(in srgb, var(--text) 92%, transparent);
+        border: 0;
+        color: var(--text);
+        tab-size: 4;
+        font-size: 1em;
       }
 
+      /* Inline code keeps this extension's colours rather than textPreformat-*; see
+         --md-code-fg for the measured reason. */
       .preview code {
-        font-family: var(--vscode-editor-font-family, "SF Mono", Menlo, Consolas, monospace);
-        background: var(--md-code-bg);
+        font-family: var(--vscode-editor-font-family, "SF Mono", Monaco, Menlo, Consolas, "Ubuntu Mono", "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace);
+        font-size: 0.9em;
+        line-height: 1.357em;
         color: var(--md-code-fg);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 0.88em;
-        border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+        background: var(--md-code-bg);
+        padding: 1px 5px;
+        border-radius: 3px;
       }
 
       .preview blockquote {
-        margin: 1em 0;
-        padding: 8px 14px;
-        border-left: 4px solid var(--md-quote);
+        margin: 0 0 16px;
+        padding: 0 16px 0 10px;
+        border-left: 5px solid var(--md-quote);
         background: var(--md-quote-bg);
-        color: color-mix(in srgb, var(--text) 88%, var(--muted) 12%);
-        border-radius: 0 6px 6px 0;
+        border-radius: 2px;
       }
-      .preview blockquote p { margin: 0.3em 0; }
+      .preview blockquote > :last-child { margin-bottom: 0; }
+      .preview blockquote > p { padding: 6px 0; }
 
       .preview table {
         border-collapse: collapse;
-        width: 100%;
-        margin: 1em 0;
-        font-size: 0.94em;
+        margin-bottom: 0.7em;
       }
-      .preview table th,
-      .preview table td {
-        border: 1px solid var(--border);
-        padding: 8px 12px;
+      .preview th {
         text-align: left;
+        border-bottom: 1px solid color-mix(in srgb, var(--text) 69%, transparent);
       }
-      .preview table th {
-        background: color-mix(in srgb, var(--md-h2) 15%, transparent);
-        color: var(--md-h2);
-        font-weight: 600;
+      .preview th, .preview td {
+        padding: 5px 10px;
       }
-      .preview table tr:nth-child(even) td {
-        background: color-mix(in srgb, var(--panel) 40%, transparent);
+      .preview table > tbody > tr + tr > td {
+        border-top: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
       }
 
-      .preview img { max-width: 100%; border-radius: 6px; }
+      .preview img { max-width: 100%; max-height: 100%; }
 
       .preview pre.mermaid {
         background: transparent;
-        border-left: none;
+        border: none;
         padding: 8px 0;
         text-align: center;
       }
@@ -2964,8 +2948,7 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
 
       /* Task list checkboxes */
       .preview input[type="checkbox"] {
-        accent-color: var(--md-h5);
-        margin-right: 6px;
+        accent-color: var(--md-link);
       }
 
       .status {
@@ -3005,6 +2988,8 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       </section>
     </div>
 
+    <script nonce="${nonce}" src="${markdownItUri}"></script>
+    <script nonce="${nonce}" src="${taskListsUri}"></script>
     <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
       const initialValue = ${safeInitialValue};
@@ -3522,121 +3507,91 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         actions.classList.toggle('visible', forceVisible);
       }
 
-      function markdownToHtml(source) {
-        const codeBlocks = [];
-        const inlineCodes = [];
-
-        // 1) Extract fenced code blocks first so inner markdown is preserved
-        let src = source.replace(/\`\`\`(\\w*)\\n?([\\s\\S]*?)\`\`\`/g, (_, lang, code) => {
-          const idx = codeBlocks.length;
-          codeBlocks.push({ lang: lang || '', code });
-          return '\\u0000CODEBLOCK' + idx + '\\u0000';
-        });
-
-        // 2) Extract inline code
-        src = src.replace(/\`([^\`\\n]+)\`/g, (_, code) => {
-          const idx = inlineCodes.length;
-          inlineCodes.push(code);
-          return '\\u0000INLINECODE' + idx + '\\u0000';
-        });
-
-        // 2b) HTML comments. AI-DLC artifacts carry instructions to the agent in
-        // them, e.g. "<!-- Things agents must never do -->". A Markdown renderer
-        // would drop them; this one used to escape them into body text. They are
-        // shown, dimmed, so a person can see what the file tells the agent without
-        // it reading as part of the document. The text inside is escaped on the way
-        // back, so a comment cannot smuggle markup.
-        const comments = [];
-        src = src.replace(/<!--([\\s\\S]*?)-->/g, (_, body) => {
-          const idx = comments.length;
-          comments.push(body);
-          return '\\u0000COMMENT' + idx + '\\u0000';
-        });
-
-        // 3) Escape the rest
-        let html = escapeHtml(src);
-
-        // 4) Horizontal rule
-        html = html.replace(/^\\s*(?:---|\\*\\*\\*|___)\\s*$/gm, '<hr>');
-
-        // 5) Headings H1~H6
-        html = html.replace(/^######\\s+(.*)$/gm, '<h6>$1</h6>');
-        html = html.replace(/^#####\\s+(.*)$/gm, '<h5>$1</h5>');
-        html = html.replace(/^####\\s+(.*)$/gm, '<h4>$1</h4>');
-        html = html.replace(/^###\\s+(.*)$/gm, '<h3>$1</h3>');
-        html = html.replace(/^##\\s+(.*)$/gm, '<h2>$1</h2>');
-        html = html.replace(/^#\\s+(.*)$/gm, '<h1>$1</h1>');
-
-        // 6) Blockquote
-        html = html.replace(/^&gt;\\s?(.*)$/gm, '<blockquote>$1</blockquote>');
-
-        // 7) Tables (| a | b | ... with --- divider row)
-        html = html.replace(/((?:^\\|.+\\|\\s*\\n)+)/gm, (block) => {
-          const lines = block.trim().split('\\n');
-          if (lines.length < 2) return block;
-          const sep = lines[1];
-          if (!/^\\|?\\s*:?-+:?\\s*(\\|\\s*:?-+:?\\s*)+\\|?\\s*$/.test(sep)) return block;
-          const split = (l) => l.replace(/^\\||\\|$/g, '').split('|').map(s => s.trim());
-          const headers = split(lines[0]);
-          const rows = lines.slice(2).map(split);
-          let out = '<table><thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>';
-          for (const row of rows) {
-            out += '<tr>' + row.map(c => '<td>' + c + '</td>').join('') + '</tr>';
+      // The Markdown renderer is markdown-it (CommonMark + tables + strikethrough +
+      // linkify, task lists through its plugin), the renderer VS Code's and Kiro's own
+      // preview use. It replaced a hand-written regex converter that could not nest:
+      // on 423 real AI-DLC artifacts, 52% rendered with structurally invalid HTML --
+      // every fenced block wrapped in a <p>, hard-wrapped paragraphs split per line,
+      // nested list items outside any list, snake_case words italicised. See
+      // docs/v2-support.md, "The viewer renders with markdown-it".
+      //
+      // Raw HTML is off (html: false): a tag in the source shows as text, as before.
+      // The artifacts carry almost none (the corpus had <p>, <code>, <span> a few
+      // times, all in prose about HTML), and off means nothing a file says can become
+      // markup in the webview. Links are allowed only to http(s), mailto, a fragment
+      // or a relative path; anything else renders as plain text.
+      // Built on first use: renderMarkdown runs at the top of this script, before this
+      // line, so a top-level const here would be read in its temporal dead zone.
+      function markdownRenderer() {
+        if (markdownRenderer.md) return markdownRenderer.md;
+        const md = window.markdownit({ html: false, linkify: true, typographer: false, breaks: false })
+          .use(window.markdownitTaskLists, { enabled: false });
+        md.validateLink = (url) => /^(https?:|mailto:|#)/i.test(url) || /^[^:]*$/.test(url);
+        // A mermaid fence stays a <pre class="mermaid"> with the diagram source as its
+        // text, which the mermaid hook below reads; every other fence is markdown-it's.
+        const defaultFence = md.renderer.rules.fence;
+        md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+          const token = tokens[idx];
+          const lang = (token.info || '').trim().split(/\\s+/)[0];
+          if (lang === 'mermaid') {
+            return '<pre class="mermaid">' + token.content.replace(/\\n$/, '') + '</pre>\\n';
           }
-          out += '</tbody></table>';
-          return out + '\\n';
-        });
+          return defaultFence(tokens, idx, options, env, self);
+        };
+        markdownRenderer.md = md;
+        return md;
+      }
 
-        // 8) Task lists (- [ ] / - [x]) — must run before generic list rule
-        html = html.replace(/^(\\s*)[-*]\\s+\\[\\s\\]\\s+(.*)$/gm, '$1<li class="task"><input type="checkbox" disabled> $2</li>');
-        html = html.replace(/^(\\s*)[-*]\\s+\\[(x|X)\\]\\s+(.*)$/gm, '$1<li class="task"><input type="checkbox" checked disabled> $3</li>');
+      // HTML comments are shown, dimmed. AI-DLC artifacts carry instructions to the
+      // agent in them ("<!-- Things agents must never do -->"); a Markdown renderer
+      // drops them and the old converter escaped them into body text. They are lifted
+      // out before parsing and put back after, with their text escaped, so a comment
+      // cannot smuggle markup. Comments inside a fenced block or a code span are left
+      // alone: there they are code. The placeholder uses private-use characters, which
+      // markdown-it passes through as text (it would replace U+0000 with U+FFFD).
+      function liftComments(source) {
+        const COMMENT_MARK = '\\uE000';
+        const comments = [];
+        const out = [];
+        let inFence = false;
+        // A comment that opened on an earlier line and has not closed: its lines are
+        // appended to it, so a multi-line comment is one dimmed span.
+        let open = -1;
+        for (const line of source.split('\\n')) {
+          if (open >= 0) {
+            const close = line.indexOf('-->');
+            if (close < 0) { comments[open] += '\\n' + line; continue; }
+            comments[open] += '\\n' + line.slice(0, close);
+            const rest = line.slice(close + 3);
+            open = -1;
+            out.push(COMMENT_MARK + 'c' + (comments.length - 1) + COMMENT_MARK + rest);
+            continue;
+          }
+          if (/^\\s{0,3}(\`\`\`|~~~)/.test(line)) inFence = !inFence;
+          if (inFence) { out.push(line); continue; }
+          // Protect code spans on the line, then lift comments from what is left.
+          const spans = [];
+          let text = line.replace(/\`[^\`\\n]+\`/g, (m) => { spans.push(m); return COMMENT_MARK + 's' + (spans.length - 1) + COMMENT_MARK; });
+          text = text.replace(/<!--([\\s\\S]*?)-->/g, (_, c) => { comments.push(c); return COMMENT_MARK + 'c' + (comments.length - 1) + COMMENT_MARK; });
+          const openAt = text.indexOf('<!--');
+          if (openAt >= 0) {
+            comments.push(text.slice(openAt + 4));
+            open = comments.length - 1;
+            text = text.slice(0, openAt);
+          }
+          text = text.replace(new RegExp(COMMENT_MARK + 's(\\\\d+)' + COMMENT_MARK, 'g'), (_, i) => spans[+i]);
+          out.push(text);
+        }
+        return { text: out.join('\\n'), comments };
+      }
 
-        // 9) Ordered & unordered lists
-        html = html.replace(/^(\\s*)\\d+\\.\\s+(.*)$/gm, '$1<li data-ol="1">$2</li>');
-        html = html.replace(/^(\\s*)[-*+]\\s+(.*)$/gm, '$1<li>$2</li>');
-
-        // Wrap consecutive <li> groups, preferring <ol> when marked
-        html = html.replace(/(?:^<li[^>]*>.*(?:\\n|$))+/gm, (block) => {
-          const isOl = /data-ol="1"/.test(block);
-          const cleaned = block.replace(/ data-ol="1"/g, '');
-          return isOl ? '<ol>' + cleaned + '</ol>' : '<ul>' + cleaned + '</ul>';
-        });
-
-        // 10) Bold & Italic (bold first to avoid overlap)
-        html = html.replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>');
-        html = html.replace(/__([^_\\n]+)__/g, '<strong>$1</strong>');
-        html = html.replace(/(^|[^*])\\*([^*\\n]+)\\*/g, '$1<em>$2</em>');
-        html = html.replace(/(^|[^_])_([^_\\n]+)_/g, '$1<em>$2</em>');
-
-        // 11) Strikethrough
-        html = html.replace(/~~([^~\\n]+)~~/g, '<del>$1</del>');
-
-        // 12) Links & images  ![alt](url)  [text](url)
-        html = html.replace(/!\\[([^\\]]*)\\]\\(([^)\\s]+)\\)/g, (_, alt, url) => '<img src="' + sanitizeUrl(url) + '" alt="' + alt + '">');
-        html = html.replace(/\\[([^\\]]+)\\]\\(([^)\\s]+)\\)/g, (_, text, url) => '<a href="' + sanitizeUrl(url) + '">' + text + '</a>');
-
-        // 13) Autolinks (bare URLs)
-        html = html.replace(/(^|[\\s(])(https?:\\/\\/[^\\s<)]+)/g, '$1<a href="$2">$2</a>');
-
-        // 14) Paragraphs: wrap remaining plain lines
-        html = html.replace(/^(?!<h\\d|<ul|<ol|<li|<pre|<blockquote|<table|<hr|<img|\\s*$)([^\\n<].*)$/gm, '<p>$1</p>');
-
-        // 15) Restore inline code then fenced code blocks
-        html = html.replace(/\\u0000COMMENT(\\d+)\\u0000/g, (_, i) => {
+      function markdownToHtml(source) {
+        const COMMENT_MARK = '\\uE000';
+        const { text, comments } = liftComments(source);
+        let html = markdownRenderer().render(text);
+        html = html.replace(new RegExp(COMMENT_MARK + 'c(\\\\d+)' + COMMENT_MARK, 'g'), (_, i) => {
           return '<span class="md-comment">&lt;!--' + escapeHtml(comments[+i]) + '--&gt;</span>';
         });
-        html = html.replace(/\\u0000INLINECODE(\\d+)\\u0000/g, (_, i) => {
-          return '<code>' + escapeHtml(inlineCodes[+i]) + '</code>';
-        });
-        html = html.replace(/\\u0000CODEBLOCK(\\d+)\\u0000/g, (_, i) => {
-          const block = codeBlocks[+i];
-          if (block.lang === 'mermaid') {
-            return '<pre class="mermaid">' + block.code.replace(/\\n$/, '') + '</pre>';
-          }
-          const langClass = block.lang ? ' class="language-' + block.lang + '"' : '';
-          return '<pre><code' + langClass + '>' + escapeHtml(block.code.replace(/\\n$/, '')) + '</code></pre>';
-        });
-
         return html;
       }
 
@@ -3646,14 +3601,6 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;');
-      }
-
-      // Allow only safe link/image destinations; anything else (javascript:,
-      // vbscript:, data: pages, ...) renders as inert "#".
-      function sanitizeUrl(url) {
-        if (/^(https?:|mailto:|#)/i.test(url)) return url;
-        if (/^[^:]*$/.test(url)) return url; // relative path, no scheme
-        return '#';
       }
     </script>
     <script nonce="${nonce}" src="${mermaidUri}"></script>

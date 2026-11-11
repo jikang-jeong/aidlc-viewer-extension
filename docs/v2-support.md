@@ -343,12 +343,12 @@ Inline code is `terminal-ansiRed` on a 10% tint of itself; headings use the ANSI
 Read the theme's JSON and compute the ratio before choosing a token; a token's name says
 nothing about its contrast. No light/dark branch exists to get wrong.
 
-Known and deliberately left: `**strong**` text uses `terminal-ansiYellow`, which Kiro Light
-defines at 2.7:1 (11.6:1 on Kiro Dark). No yellow-family token is legible on both
-backgrounds, so the choice is between losing the dark theme's accent and adding a
-light/dark branch; the user looked at it and chose neither, since bold weight carries the
-emphasis on its own. Do not reopen without a token that measures above 4.5:1 on both. Pin: viewer-single-pane "the viewer
-stylesheet hard-codes no colour", which fails on a single hex outside a var() fallback.
+Was known and deliberately left until 0.1.3: `**strong**` text used `terminal-ansiYellow`,
+2.7:1 on Kiro Light (11.6:1 on Kiro Dark), with no yellow-family token legible on both
+backgrounds. The move to Kiro's own preview typography (below) made strong, em and the
+headings the text colour, as Kiro's preview has them, so the item is closed by removal
+rather than by a token. Pin: viewer-single-pane "the viewer stylesheet hard-codes no
+colour", which fails on a single hex outside a var() fallback.
 
 **Stage directories sort in workflow order.** The tree sorted directories alphabetically,
 so under Inception `contract-design` came before `requirements-analysis`. The order is the
@@ -559,6 +559,42 @@ removal. The fix is the removal and nothing else: the two plain defaults beside 
 installs see today and dropping them would narrow every tree in the editor, which is a
 separate decision. Pin: changelog.test.js "configurationDefaults has no bracketed
 key", which fails on the 0.1.2 manifest.
+
+**The viewer renders with markdown-it, and its typography is Kiro's own preview's.** The
+renderer had been a hand-written converter of fifteen regex passes, no dependency, and it
+could not nest or span lines. Rendering the 423 user-facing artifacts in the five samples
+with it and with markdown-it side by side (`$KIROCREW_SCRATCH/mdcmp/compare.js` at the
+time; the corpus check is now renderer.test.js) showed 52% producing structurally invalid
+HTML: every fenced block inside a `<p>` (42%, because the fence placeholder matched the
+paragraph rule, so each code block carried a stray empty paragraph), hard-wrapped
+paragraphs split per line (13%), nested list items outside any list (6%), `snake_case`
+identifiers italicised (5%), list continuation lines dropped out of the list (4%),
+blockquotes split per line (2%). Agents hard-wrap at 80 columns and nest bullets, so a
+third of artifacts hit one of these. The replacement is markdown-it 14 (CommonMark + GFM
+tables + strikethrough + linkify) with the task-lists plugin, the engine VS Code's and
+Kiro's preview use, loaded as the shipped browser bundles from media/ with a nonce (CSP
+unchanged); `html: false`, so a tag in the source is text as before, and `validateLink`
+keeps the old rule (http(s), mailto, fragment, relative). The stylesheet follows Kiro's
+`markdown.css` (MIT, Microsoft) scoped to `.preview`: same heading sizes and rules,
+spacing, table, quote and code block treatment, so an artifact reads the same here as in
+Kiro's preview. The per-level heading palette went with it, which also retires the
+yellow-strong 2.7:1 item above; links and inline code keep this extension's measured
+colours. Three things were kept on purpose and each has a pin: dimmed HTML comments,
+lifted before parsing in a single pass that tracks fences, code spans and an open
+multi-line comment (a second whole-text pass undid the fence protection and dimmed a
+comment inside a code block, caught by the test); the mermaid fence left as
+`<pre class="mermaid">` for the existing hook; double-click to edit, which finds the
+source by block text and never depended on the markup. One engine note: markdown-it
+replaces U+0000 with U+FFFD, so the comment placeholder is a private-use character, not
+NUL as before. Pins: renderer.test.js (fifteen construct cases from the defect classes,
+plus the whole corpus asserting none of the old defect shapes), viewer-single-pane
+(runs the real bundles in the sandbox now). The `THIRD-PARTY-NOTICES.md` in media/ lists
+the bundles and the stylesheet's origin.
+
+Found while running the suite: the word-book regress sample is open in a Kiro window and
+carries the engine's hooks, so Kiro's session start appends `SESSION_STARTED` to the
+copy's ledger and moves its baseline (one `unknownEvents` entry, 2026-11-11 12:53). A
+sample must not be a live project: close the copy in Kiro, or copy without `.kiro/hooks`.
 
 **The release notes ship as CHANGELOG.md and are kept identical to the README's What's
 New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the

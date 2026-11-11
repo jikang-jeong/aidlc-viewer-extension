@@ -118,8 +118,17 @@ function makeDom(html) {
   return { document, elements, listeners, fire, body, html };
 }
 
+// The Markdown renderer the webview loads from media/, the shipped bundles themselves,
+// so what these tests render is what the viewer renders. Evaluated once per process.
+const MEDIA = path.join(__dirname, '..', 'media');
+const RENDERER_BUNDLES = ['markdown-it.min.js', 'markdown-it-task-lists.min.js'].map((f) =>
+  fs.readFileSync(path.join(MEDIA, f), 'utf8')
+);
+
 function runViewerScript(markdown, state = {}, journey) {
   const html = renderHtml(markdown, journey);
+  // The first INLINE script: the external <script src> tags before it are the renderer
+  // bundles, which are loaded into the sandbox below rather than fetched.
   const script = /<script nonce="[^"]+">([\s\S]*?)<\/script>/.exec(html)[1];
   const dom = makeDom(html);
   const posted = [];
@@ -128,9 +137,7 @@ function runViewerScript(markdown, state = {}, journey) {
     document: dom.document,
     window: { addEventListener() {}, devicePixelRatio: 1 },
     acquireVsCodeApi: () => ({ postMessage: (m) => posted.push(m), getState: () => stored, setState: (s) => { stored = s; } }),
-    marked: { parse: (s) => `<p>${s}</p>`, setOptions() {}, use() {} },
     mermaid: { initialize() {}, run: async () => {}, render: async () => ({ svg: '' }) },
-    DOMPurify: { sanitize: (s) => s },
     requestAnimationFrame: (fn) => fn(),
     getComputedStyle: () => ({ lineHeight: '20px' }),
     setTimeout: (fn) => fn(),
@@ -139,6 +146,11 @@ function runViewerScript(markdown, state = {}, journey) {
   };
   sandbox.window.document = dom.document;
   vm.createContext(sandbox);
+  // The UMD bundles attach to globalThis; the viewer script reads them off `window`.
+  for (const bundle of RENDERER_BUNDLES) vm.runInContext(bundle, sandbox);
+  // (markdown-it attaches to globalThis, the task-lists plugin to `window` when it exists.)
+  sandbox.window.markdownit = sandbox.window.markdownit || sandbox.markdownit;
+  sandbox.window.markdownitTaskLists = sandbox.window.markdownitTaskLists || sandbox.markdownitTaskLists;
   vm.runInContext(script, sandbox);
   return { dom, posted, state: () => stored };
 }
