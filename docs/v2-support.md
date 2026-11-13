@@ -755,6 +755,23 @@ not a silent one. Pins: engine-install "the extension's harness ids are translat
 renamed, and the legacy CLI follows the installed engine"; install-prompts and setup-gate
 assert the new labels.
 
+**Read the installer's JSON where the installer puts it; the first Windows run proved the
+guess wrong.** install.ps1's `-Json` result is `{ schemaVersion, ok, code, status, message,
+remediation?, data }` and the PATH outcome is `data.path.status` (`updated`, `unchanged`,
+`failed`, `conflict`, `skipped`). The first cut read `path.status` at the top level, which is
+never there, so `pathStatus` was undefined, `pathCaveat` fired ("the installer could not add
+the engine's command directory to your PATH"), and `kiroReadiness` chose the manual-PATH
+wording, all on a machine where the script had just registered PATH correctly: after
+quitting and reopening Kiro, `aidlc` resolved and the project ran. Seen on the first real
+Windows test, 2026-11-13, the same afternoon the path shipped; nothing here could have
+caught it, because no test ran the script and the fixture JSON was written from memory of
+the script rather than from it. The fix reads `data.path.status` (and still accepts the
+flat spelling), and the pin uses the script's real `Write-Result` shape copied from the
+source. The lesson is the standing one about samples: a fixture of an external program's
+output is a guess until it is pasted from that program. Pin: kiro-restart "the script's
+JSON result is read from its last JSON line, and PATH status from data.path.status as the
+script writes it".
+
 **The release notes ship as CHANGELOG.md and are kept identical to the README's What's
 New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the
 vsix and was empty through 0.1.2 (the API's `files` had no `changelog`). The README
