@@ -331,7 +331,7 @@ test('both Windows executable names are looked for, not the POSIX habit', () => 
 
 
 test('Windows is warned about PATH only when the installer could not register it', () => {
-  // install.ps1 registers the command directory on the account's PATH itself (0.1.4; the
+  // install.ps1 registers the command directory on the account's PATH itself (0.1.5; the
   // extension hands it the verified directory with -From). Its result says whether that
   // worked. Only when it did not is there a manual step, and then the folder is named.
   // Since the project's hooks call `aidlc` by bare name, that step decides whether the

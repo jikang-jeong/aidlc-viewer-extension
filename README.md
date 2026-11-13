@@ -66,7 +66,7 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 ## What's New
 
-### 0.1.4
+### 0.1.5
 
 - **The Kiro harness buttons say which Kiro they are for.** The engine's `kiro-ide` harness
   covers the Kiro editor *and* Kiro CLI 3.x (its v3 engine, the default since Kiro CLI 3.0);
@@ -98,6 +98,9 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
   adds the engine to your account's PATH the way the official command does, so the manual
   "add this folder to PATH" step is gone. Kiro run as administrator gets upstream's own
   warning with **Install anyway** or Cancel instead of a refusal upstream no longer makes.
+
+### 0.1.4
+
 - **The viewer renders like Kiro's own Markdown preview.** It now uses the same engine
   (markdown-it) and follows the same typography. The hand-written renderer it replaces
   could not nest: on 423 real AI-DLC artifacts, half came out with broken structure, every

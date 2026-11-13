@@ -6,7 +6,7 @@
 //   - kiro-readiness decides between "Reload Window" and "Quit Kiro" from one fact,
 //     whether Kiro's PATH resolves `aidlc`, and carries a Korean line with every English one.
 //   - The completion dialog is modal (a toast never shows `detail`, which is how the
-//     next step went unseen for every release before 0.1.4), offers the readiness
+//     next step went unseen for every release before 0.1.5), offers the readiness
 //     action and Later, and the person's choice comes back to extension.js.
 //   - runSetup schedules the Start page in workspaceState before restarting, and
 //     restoreWatcher opens it once when the extension comes back.
