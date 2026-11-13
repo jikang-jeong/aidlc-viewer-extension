@@ -34,6 +34,8 @@
 // Pure module: never import `vscode`. Node built-ins and subprocesses only.
 
 const { execFile } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const { needsShell } = require('./engine-install');
 
 // Long enough to write 323 files on a slow disk, short enough that a wedged run does
@@ -41,13 +43,49 @@ const { needsShell } = require('./engine-install');
 const CONFIG_TIMEOUT_MS = 5 * 60 * 1000;
 
 // Harness ids the engine accepts, mapped from the ids this extension has always used.
-// The extension's `kiro-cli` is the engine's `kiro`. The extension-side key is kept
-// because install receipts already on disk record it, and renaming it would make those
-// unreadable.
+// The extension-side keys are kept because the toasts, the preselection strings
+// ('v2:kiro-cli') and the tests are wired to them.
+//
+// What the two ids MEAN, read from the 2.11.3 engine and its release manifests:
+//   kiro-ide  "Kiro"      -- Kiro IDE, and Kiro CLI on its v3 engine (`kiro-cli --v3`).
+//   kiro      "Kiro CLI"  -- Kiro CLI on its v2 engine (`kiro-cli --v2`), the legacy CLI.
+// So the extension's "Kiro CLI" option was the v2-engine harness, and with Kiro CLI 3.0
+// shipping v3 by default, a CLI user who picked it was configured for the wrong engine
+// and met `agent "aidlc" needs upgrading`. Found while checking a workshop guide against
+// the engine (2026-11-13). The labels now say which Kiro each one is.
+//
+// Upstream's main README already names the v2 CLI harness `kiro-v2` (and `kiro` the
+// v3 one); the 2.11.4 preview of 2026-11-12 does not carry that rename yet. When the
+// installed engine's version.json lists a `kiro-v2` distribution, the legacy option
+// passes that; until then it passes `kiro`, which is today's behaviour exactly.
 const HARNESS_IDS = {
   'kiro-ide': 'kiro-ide',
   'kiro-cli': 'kiro'
 };
+const LEGACY_CLI_RENAMED = 'kiro-v2';
+
+// The distributions the installed engine ships, from the version.json beside its binary
+// (`.../versions/<v>/aidlc` and `.../versions/<v>/version.json`). Empty when unreadable.
+function installedDistributions(binary) {
+  if (!binary) return [];
+  try {
+    const file = path.join(path.dirname(binary), 'version.json');
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(parsed.distributions)
+      ? parsed.distributions.map((d) => d && d.name).filter((n) => typeof n === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+// The engine id for an extension harness key, against the installed engine.
+function harnessIdFor(harness, { distributions = [] } = {}) {
+  const id = HARNESS_IDS[harness];
+  if (!id) return undefined;
+  if (harness === 'kiro-cli' && distributions.includes(LEGACY_CLI_RENAMED)) return LEGACY_CLI_RENAMED;
+  return id;
+}
 
 // Run `aidlc config` for one project.
 //
@@ -55,7 +93,7 @@ const HARNESS_IDS = {
 // chooses a value on the user's behalf, so this cannot silently accept a default the
 // user did not ask for. `--dry-run` returns the plan without writing.
 function configureProject({ binary, root, harness, dryRun = false, env } = {}) {
-  const id = HARNESS_IDS[harness];
+  const id = harnessIdFor(harness, { distributions: installedDistributions(binary) });
   if (!id) {
     return Promise.resolve({
       ok: false,
@@ -166,6 +204,9 @@ function firstMeaningfulLine(text) {
 
 module.exports = {
   HARNESS_IDS,
+  LEGACY_CLI_RENAMED,
+  harnessIdFor,
+  installedDistributions,
   configureProject,
   parsePlan,
   parseOutstanding

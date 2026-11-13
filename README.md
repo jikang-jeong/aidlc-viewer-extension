@@ -11,7 +11,7 @@ Works in **Kiro** and in VS Code and its forks, with both generations of AI-DLC.
 
 ![One toast asks which generation](media/setup_aidlc.png)
 
-Pick the folder, press one button, answer one question. **v1** is the rule files your agent reads; **v2** is an engine that drives the workflow itself, and the extension installs it for you from the official release and configures the project with it. For v2 a second prompt in the same place asks Kiro IDE or Kiro CLI. Nothing you already have is overwritten. Setup ends with one dialog that says what Kiro still has to do, in English with a Korean line beneath: usually **Reload Window**; on Windows, the first time the engine is installed, **Quit Kiro** and open it again. Press the button and the start page is waiting when Kiro is back.
+Pick the folder, press one button, answer one question. **v1** is the rule files your agent reads; **v2** is an engine that drives the workflow itself, and the extension installs it for you from the official release and configures the project with it. For v2 a second prompt in the same place asks **Kiro IDE, or Kiro CLI 3.x** (the engine's `kiro-ide` harness, which covers both) or **Kiro CLI 2.x** on its v2 engine. Nothing you already have is overwritten. Setup ends with one dialog that says what Kiro still has to do, in English with a Korean line beneath: usually **Reload Window**; on Windows, the first time the engine is installed, **Quit Kiro** and open it again. Press the button and the start page is waiting when Kiro is back.
 
 ## Start it
 
@@ -66,6 +66,13 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 ### 0.1.4
 
+- **The Kiro harness buttons say which Kiro they are for.** The engine's `kiro-ide` harness
+  covers the Kiro editor *and* Kiro CLI 3.x (its v3 engine, the default since Kiro CLI 3.0);
+  its `kiro` harness is the legacy v2-engine CLI only. The buttons read "Kiro IDE" / "Kiro
+  CLI", so a CLI 3.x user who picked the second was configured for the wrong engine and met
+  `agent "aidlc" needs upgrading`. They now read **Kiro IDE, or Kiro CLI 3.x** and **Kiro
+  CLI 2.x (v2 engine)**. Upstream is renaming the legacy id to `kiro-v2`; when the installed
+  engine lists it, the legacy button passes it, and until then nothing changes.
 - **The start page builds your `/aidlc` command, and explains it.** At the top, one row per
   choice: what kind of work (let AI-DLC propose, a workshop, one bug, prove an idea, existing
   code with a spec, or a named plan), new or existing code, how much to write, how many

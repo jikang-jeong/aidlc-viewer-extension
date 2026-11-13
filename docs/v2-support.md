@@ -729,6 +729,32 @@ in the minute after setup is not much of one. Pins: command-builder.test.js (the
 escaping, placeholder, the host's filter, source-embedding equality, presets gated on the
 installed engine); credits-page's two start-page tests, rewritten for the builder.
 
+**The harness labels say which Kiro, because the engine's ids do not.** The engine's
+`kiro-ide` harness is the Kiro editor AND Kiro CLI on its v3 engine (`kiro-cli --v3`; the
+engine's own text: "Kiro CLI on its v3 engine"); its `kiro` harness is the legacy
+v2-engine CLI (`kiro-cli --v2`; its manifest's recovery line: "If Kiro says agent "aidlc"
+needs upgrading … start it again … with: kiro-cli --v2 --agent aidlc"). The extension's
+buttons read "Kiro IDE" / "Kiro CLI", mapping the second to `kiro`, which was right when
+Kiro CLI ran v2 and wrong once Kiro CLI 3.0 made v3 the default: a CLI user who pressed the
+natural button was configured for the wrong engine and met exactly that message. Found by
+checking a workshop preparation guide against the engine on 2026-11-13 (the guide was
+correct on every point checked, including 2.11.3's CVE-2026-111497 fix and the two Kiro
+error messages). Now "Kiro IDE, or Kiro CLI 3.x" / "Kiro CLI 2.x (v2 engine)", in the toast,
+the QuickPick (whose description shows the `--harness <id>` it will pass, and whose detail
+names the failure the wrong choice leads to), the guide in both languages and the README.
+The internal keys (`kiro-ide`, `kiro-cli`, `v2:kiro-cli`) are unchanged: the toasts,
+preselections and tests are wired to them. One forward step: upstream's main README
+already calls the legacy harness `kiro-v2` (and `kiro` the v3 one), but the 2.11.4 preview
+of 2026-11-12 still ships `kiro`/`kiro-ide`. `harnessIdFor` reads the installed engine's
+`version.json` distributions (beside its binary) and passes `kiro-v2` for the legacy option
+when that distribution exists, `kiro` otherwise, which is today's behaviour exactly; an
+unreadable file is today's behaviour too. Nothing is persisted and an already configured
+project is never re-set-up, so existing projects are untouched. The daily cron now records
+the release's distribution ids and reports a change, so the rename is a reviewed event,
+not a silent one. Pins: engine-install "the extension's harness ids are translated, not
+renamed, and the legacy CLI follows the installed engine"; install-prompts and setup-gate
+assert the new labels.
+
 **The release notes ship as CHANGELOG.md and are kept identical to the README's What's
 New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the
 vsix and was empty through 0.1.2 (the API's `files` had no `changelog`). The README

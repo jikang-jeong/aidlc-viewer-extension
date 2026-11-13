@@ -5,6 +5,13 @@ The same notes as the README's What's New section, kept identical by a test
 
 ## 0.1.4
 
+- **The Kiro harness buttons say which Kiro they are for.** The engine's `kiro-ide` harness
+  covers the Kiro editor *and* Kiro CLI 3.x (its v3 engine, the default since Kiro CLI 3.0);
+  its `kiro` harness is the legacy v2-engine CLI only. The buttons read "Kiro IDE" / "Kiro
+  CLI", so a CLI 3.x user who picked the second was configured for the wrong engine and met
+  `agent "aidlc" needs upgrading`. They now read **Kiro IDE, or Kiro CLI 3.x** and **Kiro
+  CLI 2.x (v2 engine)**. Upstream is renaming the legacy id to `kiro-v2`; when the installed
+  engine lists it, the legacy button passes it, and until then nothing changes.
 - **The start page builds your `/aidlc` command, and explains it.** At the top, one row per
   choice: what kind of work (let AI-DLC propose, a workshop, one bug, prove an idea, existing
   code with a spec, or a named plan), new or existing code, how much to write, how many

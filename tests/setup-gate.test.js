@@ -158,7 +158,7 @@ test('aidlcSetupNeeded: true only for a folder with no AI-DLC of either generati
 test('the workshop order: toast shown on an empty folder, folder configured by hand, then v2 pressed -- nothing is installed', async () => {
   const root = tmpDir('gate-stale-');
   // The toast's answers: v2, then Kiro CLI (the answer that used to switch the harness).
-  const { WatchController, calls } = load({ answers: ['AI-DLC v2', 'Kiro CLI'] });
+  const { WatchController, calls } = load({ answers: ['AI-DLC v2', 'Kiro CLI 2.x (v2 engine)'] });
   const c = controller(WatchController);
 
   // offerAidlcSetup checks the folder (empty), shows the generation toast, and waits.
@@ -207,7 +207,7 @@ test('runSetup from the toolbar refuses a v2 project and names the engine comman
     assert.strictEqual(calls.toasts.length, 1);
     assert.match(calls.toasts[0].message, /AI-DLC v2 is already set up/);
     assert.match(calls.toasts[0].message, /aidlc config/);
-    assert.match(calls.toasts[0].message, /Kiro IDE and Kiro CLI/, 'says what the command is for');
+    assert.match(calls.toasts[0].message, /Kiro IDE \/ CLI 3\.x and Kiro CLI 2\.x/, 'says what the command is for');
   }
   const v1 = tmpDir('gate-toolbar-v1-');
   makeV1(v1);
@@ -223,7 +223,7 @@ test('runSetup from the toolbar refuses a v2 project and names the engine comman
 
 test('an empty folder still reaches the installer, with the preselection intact', async () => {
   const root = tmpDir('gate-empty-go-');
-  const { WatchController, calls } = load({ answers: ['AI-DLC v2', 'Kiro IDE'] });
+  const { WatchController, calls } = load({ answers: ['AI-DLC v2', 'Kiro IDE, or Kiro CLI 3.x'] });
   const c = controller(WatchController);
   const pending = c.offerAidlcSetup({ fsPath: root });
   await new Promise((resolve) => setImmediate(resolve));

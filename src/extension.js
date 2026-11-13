@@ -57,7 +57,7 @@ function alreadySetUpMessage(folderUri, generation) {
   }
   return (
     `AI-DLC v2 is already set up in ${name}. ` +
-    'To upgrade it, or to change between Kiro IDE and Kiro CLI, run aidlc config in a terminal.'
+    'To upgrade it, or to change between Kiro IDE / CLI 3.x and Kiro CLI 2.x, run aidlc config in a terminal.'
   );
 }
 
@@ -484,8 +484,13 @@ class WatchController {
         return;
       }
       if (choice !== v2) return;
-      const ide = 'Kiro IDE';
-      const cli = 'Kiro CLI';
+      // The two Kiro harnesses, named by which Kiro they are for. The engine's
+      // `kiro-ide` covers the editor and Kiro CLI 3.x (v3 engine); its `kiro` is the
+      // legacy v2-engine CLI. The buttons used to read "Kiro IDE" / "Kiro CLI", and with
+      // Kiro CLI 3.0 shipping v3 by default the second configured CLI users for the wrong
+      // engine (`agent "aidlc" needs upgrading`). Found against a workshop guide, 2026-11-13.
+      const ide = 'Kiro IDE, or Kiro CLI 3.x';
+      const cli = 'Kiro CLI 2.x (v2 engine)';
       const harness = await vscode.window.showInformationMessage(
         'AI-DLC v2: which Kiro will run it?',
         ide,
@@ -3742,7 +3747,7 @@ function getHelpHtml() {
 <h2>Getting Started</h2>
 <ol>
   <li>Open your project folder in Kiro. The VIEWER panel follows the workspace folder; <strong>Open Workspace</strong> (folder icon) watches it again if needed, opens one when none is open, or chooses among several.</li>
-  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want, <strong>v1</strong> or <strong>v2</strong>; for v2 a second prompt in the same place asks <strong>Kiro IDE</strong> or <strong>Kiro CLI</strong>, unless the project already recorded one. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
+  <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want, <strong>v1</strong> or <strong>v2</strong>; for v2 a second prompt in the same place asks <strong>Kiro IDE, or Kiro CLI 3.x</strong> or <strong>Kiro CLI 2.x (v2 engine)</strong>: the first is the engine's <code>kiro-ide</code> harness, which covers the editor and the current CLI; the second is the legacy v2-engine CLI only. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
   <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Setup ends with one dialog that says what Kiro still has to do: usually <strong>Reload Window</strong>, so Kiro loads the new agent and hooks; on Windows, the first time the engine is installed, <strong>Quit Kiro</strong> and open it again, because Kiro reads PATH only when it starts. Press the button, and when Kiro is back a page opens in the editor with this command large and a button that opens Kiro\u2019s chat with it already typed. Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with the same command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
 </ol>
 
@@ -3836,7 +3841,7 @@ function getHelpHtml() {
 <h2>시작하기</h2>
 <ol>
   <li>Kiro에서 프로젝트 폴더를 엽니다. VIEWER 패널은 워크스페이스 폴더를 그대로 따라갑니다. <strong>Open Workspace</strong>(폴더 아이콘)는 그 폴더를 다시 맞추거나, 폴더를 아직 열지 않았을 때 열거나, 여러 개 중 하나를 고를 때 씁니다.</li>
-  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>인지 <strong>v2</strong>인지 먼저, v2라면 같은 자리에 두 번째 알림으로 <strong>Kiro IDE</strong>인지 <strong>Kiro CLI</strong>인지 묻습니다. 이미 기록된 프로젝트는 두 번째를 건너뜁니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
+  <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>인지 <strong>v2</strong>인지 먼저, v2라면 같은 자리에 두 번째 알림으로 <strong>Kiro IDE 또는 Kiro CLI 3.x</strong>인지 <strong>Kiro CLI 2.x(v2 엔진)</strong>인지 묻습니다. 앞은 엔진의 <code>kiro-ide</code> 하네스로 에디터와 현재 CLI를 모두 담당하고, 뒤는 v2 엔진의 옛 CLI 전용입니다. 이미 기록된 프로젝트는 두 번째를 건너뜁니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
   <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 설치는 Kiro가 아직 해야 할 일을 말하는 대화상자 하나로 끝납니다. 보통은 <strong>Reload Window</strong>로, 새 에이전트와 훅을 Kiro가 불러오게 합니다. Windows에서 엔진을 처음 설치한 경우에는 <strong>Quit Kiro</strong> 뒤 다시 여는 것인데, Kiro가 시작할 때의 PATH만 읽기 때문입니다. 버튼을 누르고 Kiro가 돌아오면 에디터에 이 명령을 크게 보여주는 페이지가 열리고, 그 명령이 입력된 상태로 Kiro 채팅을 여는 버튼이 함께 있습니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 같은 명령을 보여줍니다.</li>
 </ol>
 

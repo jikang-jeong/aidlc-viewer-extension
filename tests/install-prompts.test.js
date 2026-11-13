@@ -580,8 +580,10 @@ test('the setup toast asks the generation with two buttons, then the harness wit
   assert.deepEqual(toasts[1].buttons, ['ide', 'cli', 'Not now']);
   assert.match(body, /const v1 = 'AI-DLC v1'/);
   assert.match(body, /const v2 = 'AI-DLC v2'/);
-  assert.match(body, /const ide = 'Kiro IDE'/);
-  assert.match(body, /const cli = 'Kiro CLI'/);
+  // The labels name which Kiro each harness is for: the engine's `kiro-ide` is the editor
+  // AND Kiro CLI 3.x (v3 engine); its `kiro` is the legacy v2-engine CLI only.
+  assert.match(body, /const ide = 'Kiro IDE, or Kiro CLI 3\.x'/);
+  assert.match(body, /const cli = 'Kiro CLI 2\.x \(v2 engine\)'/);
   // Nothing between the two consults a recorded harness: a project that has one is
   // not offered setup at all, so there is no second question to skip.
   assert.doesNotMatch(body, /recordedHarness/);

@@ -103,11 +103,24 @@ test('the harness is always passed explicitly, because the release installs all 
   assert.deepEqual(engineConfig.HARNESS_IDS, { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro' });
 });
 
-test("the extension's harness ids are translated, not renamed", () => {
-  // Receipts already on disk record `kiro-cli`. Renaming the key would make them
-  // unreadable; only the engine-side value moved when upstream renamed the directory.
+test("the extension's harness ids are translated, not renamed, and the legacy CLI follows the installed engine", () => {
+  // The extension-side key stays `kiro-cli` (toasts, preselections and tests are wired to
+  // it); the engine-side id is what moves. On 2.11.3 the legacy v2-engine CLI is `kiro`.
+  // Upstream's main README already calls it `kiro-v2`; when the installed engine's
+  // version.json lists that distribution, the legacy option passes it, and until then
+  // today's id exactly. `kiro-ide` means the editor and Kiro CLI 3.x on both.
   assert.ok('kiro-cli' in engineConfig.HARNESS_IDS);
-  assert.equal(engineConfig.HARNESS_IDS['kiro-cli'], 'kiro');
+  assert.equal(engineConfig.harnessIdFor('kiro-cli', { distributions: ['kiro', 'kiro-ide'] }), 'kiro');
+  assert.equal(engineConfig.harnessIdFor('kiro-cli', { distributions: [] }), 'kiro', "unreadable version.json: today's behaviour");
+  assert.equal(engineConfig.harnessIdFor('kiro-cli', { distributions: ['kiro', 'kiro-v2', 'kiro-ide'] }), 'kiro-v2');
+  assert.equal(engineConfig.harnessIdFor('kiro-ide', { distributions: ['kiro', 'kiro-v2', 'kiro-ide'] }), 'kiro-ide');
+  assert.equal(engineConfig.harnessIdFor('nope'), undefined);
+  // The distributions come from the version.json beside the binary; anything else is [].
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-dist-'));
+  fs.writeFileSync(path.join(dir, 'version.json'), JSON.stringify({ distributions: [{ name: 'kiro' }, { name: 'kiro-v2' }, { bad: 1 }] }));
+  assert.deepEqual(engineConfig.installedDistributions(path.join(dir, 'aidlc')), ['kiro', 'kiro-v2']);
+  assert.deepEqual(engineConfig.installedDistributions('/nonexistent/aidlc'), []);
+  assert.deepEqual(engineConfig.installedDistributions(undefined), []);
 });
 
 test('an unknown harness is refused before the engine is invoked', async () => {

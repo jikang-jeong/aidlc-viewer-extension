@@ -59,8 +59,15 @@ function bilingual(en, ko) {
 }
 
 const HARNESS_LABELS = {
-  'kiro-ide': 'Kiro IDE',
-  'kiro-cli': 'Kiro CLI'
+  'kiro-ide': 'Kiro IDE, or Kiro CLI 3.x',
+  'kiro-cli': 'Kiro CLI 2.x (v2 engine)'
+};
+// What each one is, in the engine's terms. The first is the engine's `kiro-ide`
+// harness, which covers the editor AND Kiro CLI on its v3 engine (`kiro-cli --v3`, the
+// default since Kiro CLI 3.0). The second is the legacy v2-engine CLI (`kiro-cli --v2`).
+const HARNESS_DETAILS = {
+  'kiro-ide': 'The Kiro editor, and Kiro CLI 3.x (its v3 engine). Choose this unless you run an older Kiro CLI.',
+  'kiro-cli': 'Kiro CLI 2.x only, on its v2 engine. On Kiro CLI 3.x this ends in "agent aidlc needs upgrading".'
 };
 
 // The engine could not be installed, so setup stops here with the official command.
@@ -175,15 +182,12 @@ async function chooseHarness() {
   const picked = await vscode.window.showQuickPick(
     Object.keys(HARNESSES).map((key) => ({
       label: HARNESS_LABELS[key],
-      description: key,
-      detail:
-        key === 'kiro-ide'
-          ? 'Agent definitions and hooks for the Kiro editor.'
-          : 'Agent definitions with MCP wiring, for the Kiro command line.',
+      description: `--harness ${HARNESSES[key]}`,
+      detail: HARNESS_DETAILS[key],
       key
     })),
     {
-      title: 'AI-DLC v2: which harness?',
+      title: 'AI-DLC v2: which Kiro will run it?',
       placeHolder: 'Chosen once. To change it later, run aidlc config in a terminal.',
       ignoreFocusOut: true
     }
