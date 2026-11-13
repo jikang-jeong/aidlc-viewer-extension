@@ -458,7 +458,7 @@ async function installV2(root, state, preselectedHarness) {
     summary,
     {
       modal: true,
-      detail: [...notices, bilingual(readiness.en, readiness.ko)].join('\n\n')
+      detail: [...notices, bilingual(readiness.dialogEn, readiness.dialogKo)].join('\n\n')
     },
     readiness.label,
     later

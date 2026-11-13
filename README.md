@@ -72,7 +72,8 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
   real Windows install the engine and PATH were set up correctly, but the dialog said the
   installer could not add the command directory to PATH and sent you to edit it by hand. The
   extension read the installer's result at the wrong key. It now reads what the installer
-  wrote, so after a fresh install the one instruction is **Quit Kiro and open it again**.
+  wrote, so after a fresh install the one instruction is to press **Quit Kiro** and open Kiro
+  again, and the dialog now names the button it means.
 
 ### 0.1.5
 
