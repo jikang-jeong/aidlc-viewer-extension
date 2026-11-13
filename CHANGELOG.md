@@ -5,12 +5,16 @@ The same notes as the README's What's New section, kept identical by a test
 
 ## 0.1.4
 
-- **The start page explains `/aidlc`.** Under *What was set up*: the four ways to start
-  (describe it, name a scope, `compose`, or plain `/aidlc` to resume), every scope as a bar of
-  the stages it runs with its depth and purpose, the two dials (`--depth`, `--test-strategy`)
-  as three-step scales with the engine's own numbers, the switches, and a command per
-  situation. The scope rows are read from the project's installed engine, so a new scope
-  upstream shows up without a new release here.
+- **The start page builds your `/aidlc` command, and explains it.** At the top, one row per
+  choice: what kind of work (let AI-DLC propose, a workshop, one bug, prove an idea, existing
+  code with a spec, or a named plan), new or existing code, how much to write, how many
+  tests, and a sentence describing the work. Each option shows the flag it adds and the
+  command grows as you pick; pick nothing and it is `/aidlc`, the right start. One button
+  puts it in Kiro's chat, where Enter is yours. Below, under *What was set up*: the four
+  ways to start, every scope as a bar of the stages it runs with its depth and purpose, the
+  two dials as three-step scales with the engine's own numbers, the switches, and a command
+  per situation. Scope rows are read from the project's installed engine. The page opens
+  again from the tree's **Not started** row until the first stage is reached.
 - **Setup ends by saying what Kiro still has to do, and does it on request.** The engine's
   own completion message asks for `Developer: Reload Window` so Kiro loads the new agent and
   hooks; the extension used to drop that line and say the agent was already available,

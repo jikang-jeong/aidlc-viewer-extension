@@ -393,7 +393,7 @@ test('By stage lists stages in the order the run reached them, not by credits', 
 // The start page, opened once after setup
 // ---------------------------------------------------------------------------
 
-test('the start page leads with the one thing to type, per generation, with buttons that are command links', () => {
+test('the start page leads with the one thing to type, per generation; v2 is the command builder', () => {
   const v1 = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v1' }, generation: 'v1', installed: ['Kiro', 'Claude Code'] });
   assert.match(v1, /<h2>AI-DLC v1 is set up\. Start it:<\/h2>/);
   assert.match(v1, /Using AI-DLC, build/);
@@ -401,24 +401,34 @@ test('the start page leads with the one thing to type, per generation, with butt
   assert.match(v1, /Open chat with the phrase/);
   assert.doesNotMatch(v1, /copyStartPhrase/, 'no copy button: it did not work from a webview link');
   assert.match(v1, /What was set up[\s\S]*Claude Code/);
+  assert.doesNotMatch(v1, /class="builder"/, 'v1 is a sentence, not a grammar: no builder');
 
   const v2 = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v2' }, generation: 'v2', notices: ['PATH note'] });
-  assert.match(v2, /<code class="big">\/aidlc<\/code>/);
-  assert.match(v2, /href="command:markdownWatchViewer\.openChatToStart\?%5B%22v2%22%5D"/);
+  // The builder: the command at the top composes to /aidlc alone until something is picked.
+  assert.match(v2, /<code class="big" id="cmd">\/aidlc<\/code>/);
+  assert.match(v2, /id="openChat"/, 'the chat button posts the composed command');
   assert.match(v2, /Before you start[\s\S]*PATH note/);
-  // Still no script: the buttons are links the webview routes to the host.
-  assert.doesNotMatch(v2, /<script/);
+  // The builder script runs under the page nonce, and it IS composeCommand: the same
+  // function the tests exercise, embedded by source.
+  const nonce = /style-src [^;]*'nonce-([^']+)'/.exec(v2)[1];
+  assert.match(v2, new RegExp(`<script nonce="${nonce}">`));
+  assert.ok(v2.includes('const compose = function composeCommand(choices)'), 'the page runs the tested composer');
+  // The page carries the Guide as a command link and nothing else as one.
+  assert.match(v2, /href="command:markdownWatchViewer\.showHelp"/);
 });
 
 test('every command: link on the start page is one the panel enables, so no button can silently do nothing', () => {
   const html = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v2' }, generation: 'v2' });
-  const linked = [...new Set([...html.matchAll(/href="command:([a-zA-Z.]+)/g)].map((m) => m[1]))].sort();
-  // v1 links to the same set.
   const v1html = page.renderStartPage({ webview, root: '/p/x', project: { generation: 'v1' }, generation: 'v1' });
-  assert.deepEqual([...new Set([...v1html.matchAll(/href="command:([a-zA-Z.]+)/g)].map((m) => m[1]))].sort(), linked);
+  const links = (h) => [...new Set([...h.matchAll(/href="command:([a-zA-Z.]+)/g)].map((m) => m[1]))].sort();
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.js'), 'utf8');
   const enabled = JSON.parse(/enableCommandUris: (\[[^\]]+\])/.exec(src)[1].replace(/'/g, '"')).sort();
-  assert.deepEqual(linked, enabled);
+  for (const linked of [links(html), links(v1html)]) {
+    for (const command of linked) assert.ok(enabled.includes(command), `${command} is enabled on the panel`);
+  }
+  // v2 posts a message for the chat instead of a command: link, and the host accepts only
+  // a string the builder could have made.
+  assert.match(src, /message\.type === 'openChat' && acceptablePrompt\(message\.prompt\)/);
 });
 
 

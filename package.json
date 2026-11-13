@@ -96,6 +96,10 @@
         "title": "AI-DLC: Open chat to start"
       },
       {
+        "command": "markdownWatchViewer.showStartPage",
+        "title": "AI-DLC: Show the start page"
+      },
+      {
         "command": "markdownWatchViewer.offerSetup",
         "title": "AI-DLC: Set up (from the welcome panel)"
       }

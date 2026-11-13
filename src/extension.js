@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const path = require('path');
 const { buildJourney, checkpointIdForPath, CHECKPOINTS } = require('./aidlc/journey');
 const { renderCreditsPage, renderWaitingPage, renderStartPage, waitingSummary, PAGE_TITLE, nonce: pageNonce } = require('./credits-page');
+const { acceptablePrompt } = require('./aidlc/command-builder');
 
 // Drives the `when` clause on the v2-only command (Remove AI-DLC v2). Set from the
 // project the tree reads, since the panel that used to set it is gone.
@@ -130,6 +131,7 @@ function activate(context) {
     vscode.commands.registerCommand('markdownWatchViewer.showCredits', () => controller.showCredits()),
     vscode.commands.registerCommand('markdownWatchViewer.showWaiting', () => controller.showWaiting()),
     vscode.commands.registerCommand('markdownWatchViewer.openChatToStart', (generation) => controller.openChatToStart(generation)),
+    vscode.commands.registerCommand('markdownWatchViewer.showStartPage', () => controller.showStartPageForWatched()),
     // One setup button. It asks which generation, because it used to install v1
     // unconditionally and a second button for v2 beside it did not help: pressing
     // "Set up AI-DLC" still did what it had always done, and nothing said the
@@ -552,17 +554,34 @@ class WatchController {
       'markdownWatchViewer.start',
       'AI-DLC: ready to start',
       vscode.ViewColumn.One,
-      // Still no script. The buttons are command: links, which need enableCommandUris
-      // for exactly the commands they name, and nothing else.
+      // Scripts on, for the command builder: the page composes the command from the
+      // choices and posts it back; this side only ever puts it in Kiro's chat input,
+      // after checking it is a string the builder could have made. The Guide link is
+      // still a command: URI, so enableCommandUris names exactly the commands it needs.
       {
-        enableScripts: false,
+        enableScripts: true,
         enableCommandUris: ['markdownWatchViewer.openChatToStart', 'markdownWatchViewer.showHelp']
       }
     );
+    panel.webview.onDidReceiveMessage(async (message) => {
+      if (message && message.type === 'openChat' && acceptablePrompt(message.prompt)) {
+        await this.openChatWithPrompt(message.prompt);
+      }
+    });
     const installed = generation === 'v2'
       ? ['AI-DLC v2 engine on this machine', 'Project configured: .kiro/agents, hooks, aidlc/']
       : ['AI-DLC v1 rules in the project'];
     panel.webview.html = renderStartPage({ webview: panel.webview, root: folderUri.fsPath, project, generation, installed });
+  }
+
+  // The Start page again, from the tree's "Not started" row: the builder is useful until
+  // the first stage, not only in the minute after setup.
+  showStartPageForWatched() {
+    const folder = this.context.workspaceState.get(STATE_KEY);
+    if (!folder) return;
+    const generation = safeGeneration(folder);
+    if (generation === 'none') return;
+    this.showStartPage(vscode.Uri.file(folder), generation === 'both' ? 'v2' : generation);
   }
 
   // Kiro's chat, with /aidlc already in the input. Kiro's own commands do exactly this:
@@ -572,7 +591,10 @@ class WatchController {
   // the field, and a person who has to paste has not been helped much anyway. Without
   // Kiro's command the button says so rather than appearing to work.
   async openChatToStart(generation) {
-    const prompt = generation === 'v1' ? 'Using AI-DLC, build ' : '/aidlc ';
+    await this.openChatWithPrompt(generation === 'v1' ? 'Using AI-DLC, build ' : '/aidlc ');
+  }
+
+  async openChatWithPrompt(prompt) {
     try {
       await vscode.commands.executeCommand('kiroAgent.focusChatInput', { prompt, clear: true });
     } catch {
@@ -1647,6 +1669,11 @@ class ProgressItem extends vscode.TreeItem {
     this.tooltip = buildProgressTooltip(summary);
     this.contextValue = 'progress';
     this.iconPath = new vscode.ThemeIcon('pulse', getStageColor(summary.currentStage));
+    // Not started: the row is the way back to the Start page and its command builder,
+    // which otherwise opens only in the minute after setup.
+    if (!current || onlySetup) {
+      this.command = { command: 'markdownWatchViewer.showStartPage', title: 'Open the start page' };
+    }
   }
 }
 

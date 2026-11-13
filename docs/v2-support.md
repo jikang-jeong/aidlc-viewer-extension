@@ -702,6 +702,33 @@ drops inline styles (the same lesson as the Usage bars). Pins: command-guide.tes
 (counting without Initialization on a fixture, frontmatter parsing, no inline style, the
 page order and v1 exclusion, every class present in the stylesheet).
 
+**The Start page builds the command; it does not quiz for it.** The ask was a yes/no
+questionnaire ("is it a simple app?") that would end in a composed `/aidlc`. Declined in
+that form for three reasons, kept in the other. (1) The plan is decided by the KIND of
+work, a single choice: the five lightest scopes are all 5–7 stages at minimal depth and
+differ in kind, so a binary tree cannot separate them and its branches would be this
+extension's guesses. (2) The engine owns that judgement already: `/aidlc <description>`
+has the agent propose a plan, and `compose` scans the code and scores its uncertainty
+before proposing stages with reasons; a quiz that finished the command here would be a
+worse version of both and would route around them. (3) An answer that pops out at the end
+teaches nothing. So: one row per parameter (kind, new or existing code, depth, tests,
+description), each option carrying the flag it adds, and the command at the top rebuilt
+from the choices as they change (`command-builder.js`). The default composes `/aidlc`
+alone, the engine's own recommended start, so the untouched page says what it always
+said. Nothing is scored or inferred; `--review`, `--guard-policy` and the on/off switches
+are left to the scope's defaults and the guide's table. The grammar is the documented
+one: a named plan is `--scope <name> "task"`, never the bare word before text, which the
+engine treats as ambiguous when the word is also English and stops to ask. `composeCommand`
+is pure and is embedded in the page by source (`Function.prototype.toString`), so the
+tested function is the one the page runs; the page's webview now has scripts enabled
+under the shell's nonce, and the host accepts back only a string the builder could have
+made (`acceptablePrompt`: starts with `/aidlc`, one line, bounded) and puts it in the chat
+input, where Enter is still the person's. The page is reachable again from the tree's
+"Not started" row (`markdownWatchViewer.showStartPage`), since a builder that opens only
+in the minute after setup is not much of one. Pins: command-builder.test.js (the grammar,
+escaping, placeholder, the host's filter, source-embedding equality, presets gated on the
+installed engine); credits-page's two start-page tests, rewritten for the builder.
+
 **The release notes ship as CHANGELOG.md and are kept identical to the README's What's
 New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the
 vsix and was empty through 0.1.2 (the API's `files` had no `changelog`). The README

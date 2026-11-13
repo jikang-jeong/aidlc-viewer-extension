@@ -143,9 +143,9 @@ function renderCommandGuide({ root, catalogue }) {
     <div class="way-eg">/aidlc Fix the login timeout bug</div>
   </div>
   <div class="tile">
-    <div class="way-cmd"><code>/aidlc</code> <span class="arg">scope</span> <span class="arg">"task"</span></div>
+    <div class="way-cmd"><code>/aidlc --scope</code> <span class="arg">name</span> <span class="arg">"task"</span></div>
     <div class="way-what">You name the plan. Fixed stage list, one confirmation, then it runs.</div>
-    <div class="way-eg">/aidlc workshop "Add a review mode to WordBook"</div>
+    <div class="way-eg">/aidlc --scope workshop "Add a review mode to WordBook"</div>
   </div>
   <div class="tile">
     <div class="way-cmd"><code>/aidlc compose</code> <span class="arg">"task"</span></div>
@@ -189,10 +189,10 @@ ${scale('--test-strategy', [
 <h3>By situation</h3>
 <table class="examples">
 <tr><td class="k">First time, not sure</td><td><code>/aidlc</code> <span class="quiet">then describe the work when asked</span></td></tr>
-<tr><td class="k">A workshop, time-boxed</td><td><code>/aidlc workshop "…"</code> <span class="quiet">standard documents, minimal tests, every gate</span></td></tr>
+<tr><td class="k">A workshop, time-boxed</td><td><code>/aidlc --scope workshop "…"</code> <span class="quiet">standard documents, minimal tests, every gate</span></td></tr>
 <tr><td class="k">Existing code, requirements already written</td><td><code>/aidlc compose --project-type brownfield --depth minimal --test-strategy minimal "… follow CHANGE.md …"</code></td></tr>
-<tr><td class="k">One bug</td><td><code>/aidlc bugfix "…"</code></td></tr>
-<tr><td class="k">Prove an idea fast</td><td><code>/aidlc poc "…"</code> <span class="quiet">or lighter still, <code>express</code></span></td></tr>
+<tr><td class="k">One bug</td><td><code>/aidlc --scope bugfix "…"</code></td></tr>
+<tr><td class="k">Prove an idea fast</td><td><code>/aidlc --scope poc "…"</code> <span class="quiet">or lighter still, <code>express</code></span></td></tr>
 <tr><td class="k">Change course mid-run</td><td><code>/aidlc --depth minimal</code> · <code>/aidlc --review advisory</code> · <code>/aidlc compose "what to cut"</code> <span class="quiet">adjusts only the stages not yet run</span></td></tr>
 <tr><td class="k">Where is it</td><td><code>/aidlc --status</code> <span class="quiet">the same answer as the tree above</span></td></tr>
 </table>

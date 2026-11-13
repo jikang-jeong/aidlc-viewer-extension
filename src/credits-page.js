@@ -26,7 +26,8 @@
 const path = require('path');
 const { readKiroUsage, attributeTurns, summariseSessions, stageWindowsFromLedger, stageWindowsFromArtifacts } = require('./aidlc/kiro-usage');
 const auditReader = require('./aidlc/audit');
-const { renderCommandGuide } = require('./aidlc/command-guide');
+const { renderCommandGuide, readScopeCatalogue } = require('./aidlc/command-guide');
+const { renderCommandBuilder } = require('./aidlc/command-builder');
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -369,19 +370,23 @@ function renderWaitingPage({ webview, root, project, nonce: fixedNonce }) {
 }
 
 function renderStartPage({ webview, root, project, nonce: fixedNonce, generation, installed = [], notices = [] }) {
+  const n = fixedNonce || nonce();
   const gen = generation === 'both' ? 'v2' : generation;
   const isV2 = gen === 'v2';
   const chatHref = `command:markdownWatchViewer.openChatToStart?${encodeURIComponent(JSON.stringify([isV2 ? 'v2' : 'v1']))}`;
   const guideHref = 'command:markdownWatchViewer.showHelp';
-  const what = isV2
-    ? `<p class="lead">Type <code class="big">/aidlc</code> in Kiro\u2019s chat, followed by what you want to build.</p>
+  // v2's lead is the command builder: the command at the top, rebuilt from the choices
+  // beneath it, with the button that opens the chat with exactly that. Nothing picked
+  // composes `/aidlc` alone, so the default reads as the page always has. v1 keeps the
+  // sentence, because v1 is a sentence to the agent and has no grammar to build.
+  const catalogue = isV2 ? readScopeCatalogue(root) : [];
+  const lead = isV2
+    ? `<p class="lead">Type this in Kiro\u2019s chat:</p>
+       ${renderCommandBuilder({ catalogue, nonce: n, guideHref })}
        <p class="quiet">Setup installed a conductor agent and a set of role agents, so <code>/aidlc</code> starts or resumes the workflow; the others are there when you want a specific one.</p>`
     : `<p class="lead">Tell your agent: <code class="big">Using AI-DLC, build \u2026</code> and describe what you want.</p>
-       <p class="quiet">The rules your agent reads are in the project now. Any agent that reads them works: Kiro, Claude Code, or your editor\u2019s own.</p>`;
-  // One button that opens Kiro's chat with the start phrase already typed: /aidlc on
-  // v2, "Using AI-DLC, build " on v1. v1's rules are read by any agent, but the person
-  // who set this up from inside Kiro is in Kiro, and the button is for them.
-  const buttons = `<a class="btn primary" href="${chatHref}">${isV2 ? 'Open chat with /aidlc' : 'Open chat with the phrase'}</a><a class="btn" href="${guideHref}">Guide</a>`;
+       <p class="quiet">The rules your agent reads are in the project now. Any agent that reads them works: Kiro, Claude Code, or your editor\u2019s own.</p>
+       <div class="btns"><a class="btn primary" href="${chatHref}">Open chat with the phrase</a><a class="btn" href="${guideHref}">Guide</a></div>`;
   const installedList = installed.length
     ? `<section><h2>What was set up</h2><ul class="plain">${installed.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul></section>`
     : '';
@@ -390,13 +395,12 @@ function renderStartPage({ webview, root, project, nonce: fixedNonce, generation
     : '';
   // v2 only: v1 has no command grammar, it is a sentence to the agent. The scope rows are
   // read from this project's engine files, so what the page shows is the installed engine.
-  const commandGuide = isV2 ? renderCommandGuide({ root }) : '';
-  return shell({ webview, root, project, nonce: fixedNonce, title: 'Ready to start' }, [
+  const commandGuide = isV2 ? renderCommandGuide({ root, catalogue }) : '';
+  return shell({ webview, root, project, nonce: n, title: 'Ready to start' }, [
     `<section class="start">
       <h2>AI-DLC ${escapeHtml(gen ?? '')} is set up. Start it:</h2>
-      ${what}
-      <div class="btns">${buttons}</div>
-      <p class="quiet">This page opens once, after setup. The row at the top of the tree reads <strong>Not started</strong> with the same command until the first stage is reached.</p>
+      ${lead}
+      <p class="quiet">This page opens after setup, and again from the <strong>Not started</strong> row at the top of the tree until the first stage is reached.</p>
     </section>`,
     noticeList,
     installedList,
@@ -508,6 +512,23 @@ function shell({ webview, root, project, nonce: fixedNonce, title }, sections) {
   .step-name { margin-bottom: 3px; }
   .step-what { color: var(--vscode-descriptionForeground); }
   .switches td, .examples td { padding: 7px 10px; }
+  /* The command builder (command-builder.js). */
+  .builder .composed { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .builder .composed code.big { font-size: 17px; word-break: break-word; }
+  .builder .ph { color: var(--vscode-descriptionForeground); font-size: 16px; }
+  .builder button.btn { font: inherit; font-size: 13px; cursor: pointer; }
+  .rows { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; margin: 16px 0 8px; align-items: start; }
+  .row { display: contents; }
+  .row-q { color: var(--vscode-descriptionForeground); font-size: 12.5px; padding-top: 4px; white-space: nowrap; }
+  .row-opts { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+  .opt { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 4px; border: 1px solid var(--vscode-panel-border); border-radius: 14px; cursor: pointer; font-size: 12.5px; }
+  .opt:has(input:checked) { border-color: var(--purple); background: color-mix(in srgb, var(--vscode-editor-background) 88%, var(--purple) 12%); }
+  .opt input { margin: 0; accent-color: var(--purple); }
+  .opt-flag { font-family: var(--vscode-editor-font-family); font-size: 11px; color: var(--vscode-descriptionForeground); }
+  .opt:has(input:checked) .opt-flag { color: var(--purple); }
+  .pick { font: inherit; font-size: 12px; background: var(--vscode-input-background, transparent); color: var(--vscode-input-foreground, inherit); border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 1px 4px; }
+  .desc { width: 100%; max-width: 640px; font: inherit; font-size: 13px; padding: 5px 8px; background: var(--vscode-input-background, transparent); color: var(--vscode-input-foreground, inherit); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 4px; }
+  .desc:focus { outline: 1px solid var(--vscode-focusBorder); }
   details.records, details.history { margin-top: 26px; }
   details.history summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; list-style: none; }
   details.history summary::-webkit-details-marker { display: none; }
