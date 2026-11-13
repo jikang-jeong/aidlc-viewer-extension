@@ -107,9 +107,18 @@ test('on Windows the apply is install.ps1 with the verified directory, offline, 
   assert.equal(engineInstall.WINDOWS_INSTALLER, 'install.ps1');
 });
 
-test("the script's JSON result is read from its last JSON line, and anything else is undefined", () => {
-  const out = 'WARNING something\n{"ok":true,"status":"installed","path":{"status":"updated"}}\n';
-  assert.deepEqual(engineInstall.parseWindowsInstallerOutput(out).path, { status: 'updated' });
+test("the script's JSON result is read from its last JSON line, and PATH status from data.path.status as the script writes it", () => {
+  // install.ps1's Write-Result: { schemaVersion, ok, code, status, message, data }, with the
+  // PATH outcome at data.path.status. The first cut read path.status at the top level and
+  // every successful Windows install reported PATH as not registered (seen 2026-11-13).
+  const real = 'WARNING something\n{"schemaVersion":1,"ok":true,"code":0,"status":"ok","message":"Installed AI-DLC 2.11.3","data":{"installed":true,"ready":true,"path":{"scope":"user","status":"updated","changed":true,"owned":true}}}\n';
+  const parsed = engineInstall.parseWindowsInstallerOutput(real);
+  assert.equal(parsed.data.path.status, 'updated');
+  assert.equal(engineInstall.windowsPathStatus(parsed), 'updated');
+  assert.equal(engineInstall.windowsPathStatus({ data: { path: { status: 'unchanged' } } }), 'unchanged');
+  assert.equal(engineInstall.windowsPathStatus({ path: { status: 'failed' } }), 'failed', 'a flattened result is still read');
+  assert.equal(engineInstall.windowsPathStatus({ ok: true }), undefined);
+  assert.equal(engineInstall.windowsPathStatus(undefined), undefined);
   assert.equal(engineInstall.parseWindowsInstallerOutput('no json here'), undefined);
   assert.equal(engineInstall.parseWindowsInstallerOutput(''), undefined);
   assert.equal(engineInstall.parseWindowsInstallerOutput('{not json'), undefined);
