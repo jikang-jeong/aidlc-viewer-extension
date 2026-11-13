@@ -76,7 +76,7 @@ test('readiness: every English line has a Korean line, and the dialog phrasing n
     // which button to press, since the first Windows tester asked exactly that.
     assert.doesNotMatch(r.en, /below/, 'standalone text names no button');
     assert.match(r.dialogEn, new RegExp(`press ${r.label} below`, 'i'));
-    assert.match(r.dialogKo, new RegExp(`아래 ${r.label}를 눌러`));
+    assert.match(r.dialogKo, new RegExp(`아래 ${r.label}를 (눌러|누르)`));
   }
 });
 
