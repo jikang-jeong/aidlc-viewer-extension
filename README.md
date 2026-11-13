@@ -15,9 +15,11 @@ Pick the folder, press one button, answer one question. **v1** is the rule files
 
 ## Start it
 
-![The start page, with the one thing to type](media/lets_start_ai-dlc.png)
+![The start page: the command grows as you choose, and one button puts it in Kiro's chat](media/start_ai-dlc_command-builder.png)
 
-When setup finishes, a page opens with the one thing to type, large. One button opens Kiro's chat with it already in the input: `/aidlc` on v2, `Using AI-DLC, build …` on v1. Until the first stage is reached, the row at the top of the tree reads **Not started** with the same command beside it.
+When setup finishes, a page opens with the command to type, and builds it with you. One row per choice: what kind of work (let AI-DLC propose a plan, a workshop, one bug, prove an idea, existing code with a spec, or pick a plan from the list the installed engine ships), new or existing code, how much to write and ask, how many tests, and a sentence describing the work. Every option shows the flag it adds, and the command at the top is rebuilt as you pick. Choose nothing and it reads `/aidlc`, which is the right start. In the screenshot, `security-patch`, a new project, comprehensive depth and minimal tests became `/aidlc --scope security-patch --project-type greenfield --depth comprehensive --test-strategy minimal "let's make marketplace app"`, and **Open chat with this command** put exactly that in Kiro's chat input. Nothing runs until you press Enter there, and the engine still confirms the plan before anything happens. On v1 the page shows the phrase to tell your agent instead: `Using AI-DLC, build …`.
+
+Below the builder, the page explains the pieces: the ways to start, every plan as a bar of the stages it runs, the two dials (`--depth`, `--test-strategy`) with the engine's own numbers, the switches, and a command for each situation. Until the first stage is reached, the **Not started** row at the top of the tree opens this page again.
 
 ## Know where it is
 
