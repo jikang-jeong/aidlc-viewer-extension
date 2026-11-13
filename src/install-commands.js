@@ -34,6 +34,9 @@ const {
   installEngine,
   installCommand,
   pathCaveat,
+  isElevatedWindows,
+  UAC_ELEVATED_WARNING,
+  engineResolvable,
   REPO
 } = require('./aidlc/engine-install');
 
@@ -42,6 +45,18 @@ const {
 const HARNESSES = { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro' };
 const { configureProject } = require('./aidlc/engine-config');
 const { readProject } = require('./aidlc/index');
+const { kiroReadiness } = require('./aidlc/kiro-readiness');
+
+// Dialogs that carry a sentence carry it in English with a Korean line beneath. The
+// English is what the engine, the docs and the issue tracker speak; the Korean is for
+// the workshops where most of this extension's installs happen. `detail` is where the
+// second language goes, which is why these are modal dialogs: a non-modal toast never
+// renders `detail` at all (the VS Code API says so), and that is how the completion
+// message's next step and the engine's own notices went unseen for every release before
+// this one.
+function bilingual(en, ko) {
+  return `${en}\n\n${ko}`;
+}
 
 const HARNESS_LABELS = {
   'kiro-ide': 'Kiro IDE',
@@ -231,9 +246,9 @@ async function setup(folderUri, installV1, preselected) {
   if (generation === 'v1') {
     // Unchanged from what it has always done, including its own confirmation.
     await installV1();
-    return;
+    return {};
   }
-  await installV2(root, state, pre ? pre.harness : undefined);
+  return (await installV2(root, state, pre ? pre.harness : undefined)) ?? {};
 }
 
 function parsePreselection(value) {
@@ -257,6 +272,31 @@ async function installV2(root, state, preselectedHarness) {
   const harness = preselectedHarness ?? (await chooseHarness());
   if (!harness) return;
 
+  // Kiro running "as administrator" on Windows. Upstream's install.ps1 warns and asks
+  // before installing from an elevated window; the extension used to refuse outright,
+  // with wording upstream no longer uses, so a person who could have installed with the
+  // official command was turned away by this one. Same words, same choice, asked before
+  // the 80MB download rather than after.
+  let allowElevated = false;
+  if (!detectEngine().found && (await isElevatedWindows())) {
+    const installAnyway = 'Install anyway';
+    const choice = await vscode.window.showWarningMessage(
+      'Kiro is running as administrator.',
+      {
+        modal: true,
+        detail: bilingual(
+          `${UAC_ELEVATED_WARNING} The safest path is to close Kiro, open it normally, and set up AI-DLC again.`,
+          'Kiro가 관리자 권한으로 실행 중입니다. AI-DLC는 사용자 계정에만 설치되어 관리자 권한이 필요 ' +
+            '없고, 관리자로 설치하면 덜 안전합니다. 가장 안전한 방법은 Kiro를 닫고 일반 사용자로 다시 ' +
+            '열어 Set up을 다시 누르는 것입니다.'
+        )
+      },
+      installAnyway
+    );
+    if (choice !== installAnyway) return;
+    allowElevated = true;
+  }
+
   // The progress notification covers the work and nothing else.
   //
   // It used to also contain the completion message, and awaiting that message meant
@@ -276,6 +316,7 @@ async function installV2(root, state, preselectedHarness) {
     },
     async (progress) => {
       let freshInstallCaveat;
+      let freshInstall;
       // Two steps now, and they are different in kind. The engine is installed once per
       // MACHINE; the project is configured once per PROJECT. Separating them means a
       // second project costs seconds rather than a 111MB download.
@@ -290,15 +331,17 @@ async function installV2(root, state, preselectedHarness) {
         // through so a person watching a 75MB download sees which part is slow.
         progress.report({ message: 'installing the AI-DLC engine (about 80MB)…' });
         const installed = await installEngine({
+          allowElevated,
           onProgress: (message) => progress.report({ message })
         });
         if (!installed.ok) {
           return { engineFailed: installed.text ?? installed.reason };
         }
+        freshInstall = installed;
         // Only after an install this run. A machine that already had the engine has
         // whatever PATH arrangement it has been working with, and repeating the caveat
         // there would be noise.
-        freshInstallCaveat = pathCaveat(installed.binDir);
+        freshInstallCaveat = pathCaveat(installed.binDir, { pathStatus: installed.pathStatus });
         engine = detectEngine();
         if (!engine.found) {
           // The installer said it succeeded and the binary is not where it should be.
@@ -321,7 +364,7 @@ async function installV2(root, state, preselectedHarness) {
         };
       }
 
-      return { configured, engine, freshInstallCaveat };
+      return { configured, engine, freshInstallCaveat, freshInstall };
     }
   );
 
@@ -333,7 +376,7 @@ async function installV2(root, state, preselectedHarness) {
     vscode.window.showErrorMessage(outcome.failed);
     return;
   }
-  const { configured, engine, freshInstallCaveat } = outcome;
+  const { configured, engine, freshInstallCaveat, freshInstall } = outcome;
 
   // What to say, said once, after the fact.
   //
@@ -370,28 +413,55 @@ async function installV2(root, state, preselectedHarness) {
   const isWorkspaceRoot = (vscode.workspace.workspaceFolders ?? []).some(
     (folder) => folder.uri.fsPath === root
   );
-  const nextStep = isWorkspaceRoot
-    ? 'Type /aidlc to start. The agent is already available in this window.'
-    : 'Kiro reads /aidlc from .kiro/agents/ in the WORKSPACE ROOT, and this ' +
-      'folder is not the root of the current window. Open it with File > Open ' +
-      'Folder in a new window, then type /aidlc.';
 
-  const openLabel = 'Open folder in new window';
+  if (!isWorkspaceRoot) {
+    const openLabel = 'Open folder in new window';
+    const choice = await vscode.window.showInformationMessage(
+      summary,
+      {
+        modal: true,
+        detail: [
+          ...notices,
+          bilingual(
+            'Kiro reads /aidlc from .kiro/agents/ in the WORKSPACE ROOT, and this folder is not ' +
+              'the root of the current window. Open it with File > Open Folder in a new window, ' +
+              'then type /aidlc.',
+            'Kiro는 워크스페이스 루트의 .kiro/agents/에서 /aidlc를 읽는데, 이 폴더는 현재 창의 ' +
+              '루트가 아닙니다. 새 창에서 이 폴더를 열고 /aidlc를 입력하세요.'
+          )
+        ].join('\n\n')
+      },
+      openLabel
+    );
+    if (choice === openLabel) {
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(root), { forceNewWindow: true });
+    }
+    return {};
+  }
+
+  // The window that has this folder open still has to pick up what was written. The
+  // engine's own completion line says `Developer: Reload Window`; the extension used to
+  // drop that line and say the agent was "already available in this window". Which restart
+  // is needed, and why, is kiro-readiness's one decision; the dialog carries its words and
+  // one button for it. "Later" is honoured: nothing asks again, the Start page opens now,
+  // and Check setup carries the same sentence for whoever comes back to it.
+  const readiness = kiroReadiness({
+    freshEngineInstall: Boolean(freshInstall),
+    pathStatus: freshInstall ? freshInstall.pathStatus : undefined
+  });
+  const later = 'Later';
   const choice = await vscode.window.showInformationMessage(
     summary,
     {
-      modal: false,
-      detail: notices.length > 0 ? `${notices.join('\n\n')}\n\n${nextStep}` : nextStep
+      modal: true,
+      detail: [...notices, bilingual(readiness.en, readiness.ko)].join('\n\n')
     },
-    ...(isWorkspaceRoot ? [] : [openLabel])
+    readiness.label,
+    later
   );
-  if (choice === openLabel) {
-    await vscode.commands.executeCommand(
-      'vscode.openFolder',
-      vscode.Uri.file(root),
-      { forceNewWindow: true }
-    );
-  }
+  // The caller performs the restart, because the Start page that should follow it has to
+  // be scheduled in the extension's own state first.
+  return { restart: choice === readiness.label ? readiness.action : undefined };
 }
 
 // The removal command.
@@ -487,10 +557,13 @@ async function checkV2(folderUri) {
   const lines = [];
   const engine = detectEngine();
 
-  // Either spelling counts. The engine shipped `.kiro/agents/aidlc.json` and now ships
-  // `.kiro/agents/aidlc.md`; a diagnostic that only knew the old name reported MISSING on
-  // a correctly installed current project, which is worse than saying nothing.
+  // Either spelling counts. The engine shipped `.kiro/agents/aidlc.json`, then
+  // `aidlc.md`, and 2.11.3 ships `aidlc-aidlc.md`; a diagnostic that only knew the old
+  // names reported MISSING on a correctly installed current project, which is worse than
+  // saying nothing. (The third name was found while adding the PATH check below: Check
+  // setup had been wrong on every 2.11.3 project.)
   const agentCandidates = [
+    path.join(root, '.kiro', 'agents', 'aidlc-aidlc.md'),
     path.join(root, '.kiro', 'agents', 'aidlc.md'),
     path.join(root, '.kiro', 'agents', 'aidlc.json')
   ];
@@ -499,11 +572,16 @@ async function checkV2(folderUri) {
   const isWorkspace = (vscode.workspace.workspaceFolders ?? []).some(
     (folder) => folder.uri.fsPath === root
   );
+  // Whether Kiro's own PATH resolves `aidlc`: the question for the hooks, which Kiro
+  // starts with the PATH it launched with. The engine can be on disk and this still be
+  // NO -- a Windows install this session, or a Mac whose shell profile lacks
+  // ~/.local/bin -- and then /aidlc appears and nothing behind it runs.
+  const resolvable = engineResolvable();
 
   lines.push(`Folder: ${root}`);
   lines.push(`Generation detected: ${state.ok ? state.generation : 'unreadable'}`);
   lines.push(
-    `.kiro/agents/aidlc.{md,json}: ${hasAgent ? `present (${path.basename(agentFile)})` : 'MISSING'}`
+    `.kiro/agents/aidlc*.{md,json}: ${hasAgent ? `present (${path.basename(agentFile)})` : 'MISSING'}`
   );
   lines.push(`Open as a Kiro workspace: ${isWorkspace ? 'yes' : 'NO'}`);
   // The engine, which is what the project's hooks call. bun is deliberately not reported:
@@ -517,6 +595,12 @@ async function checkV2(folderUri) {
       "  The project's hooks run `aidlc engine adapter <harness>`, so without this the " +
         'workflow cannot advance. Run "Set up AI-DLC" and pick v2, which installs it.'
     );
+  }
+  lines.push(`Kiro can run \`aidlc\` from its PATH: ${resolvable ? 'yes' : 'NO'}`);
+  if (engine.found && !resolvable) {
+    const readiness = kiroReadiness({ resolvable: false });
+    lines.push(`  ${readiness.en}`);
+    lines.push(`  ${readiness.ko}`);
   }
   lines.push('');
 
@@ -547,6 +631,12 @@ async function checkV2(folderUri) {
         'run through. /aidlc will appear but its gates will not fire. Run "Set up ' +
         'AI-DLC" and pick v2 to install it.'
     );
+  } else if (!resolvable) {
+    lines.push(
+      'The engine is installed and the agent is here, but Kiro cannot find `aidlc` on its ' +
+        'PATH, so /aidlc will appear and its hooks will not run. See the line above for what ' +
+        'to do; most often it is quitting Kiro and opening it again.'
+    );
   } else {
     lines.push('Everything needed is in place. /aidlc should be available.');
   }
@@ -576,10 +666,9 @@ async function checkV2(folderUri) {
   }
 
   const copyLabel = 'Copy this report';
+  const ready = hasAgent && isWorkspace && engine.found && resolvable;
   const choice = await vscode.window.showInformationMessage(
-    hasAgent && isWorkspace && engine.found
-      ? 'AI-DLC v2 looks ready.'
-      : 'AI-DLC v2 is not ready yet.',
+    ready ? 'AI-DLC v2 looks ready.' : 'AI-DLC v2 is not ready yet.',
     { modal: true, detail: lines.join('\n') },
     copyLabel
   );

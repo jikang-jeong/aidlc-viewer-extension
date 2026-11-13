@@ -616,6 +616,70 @@ maintainer surface for that data is `npm run probe`, as the earlier rule says. P
 v1-isolation "the v2-only row never appears in a v1 tree" asserts the row's class and
 command are gone from the source; credits-page asserts the page is no longer exported.
 
+**Setup ends by saying what Kiro still has to do; a toast cannot say it, and the sentence it
+replaced was wrong.** The engine's `aidlc config` completion line reads "next: … run
+`Developer: Reload Window` …, choose the aidlc agent …" (read verbatim from a 2.11.3 run on
+2026-11-13). `parseOutstanding` collects only the "Outstanding actions:" block, so that line
+was dropped, and the completion message said "The agent is already available in this
+window", which it is not until the window reloads. Worse, nothing in that message past its
+first line was ever visible: it was a non-modal toast with a `detail`, and the VS Code API
+renders `detail` only on modal messages, so the engine's own notices and the Windows PATH
+caveat had gone unseen in every release. Now one modal completion dialog: the summary, the
+engine's notices, the readiness sentence in English with a Korean line beneath, and one
+button for the one thing to do plus Later. Which thing is `kiro-readiness.js`'s single
+decision, from one fact: can a process started with Kiro's PATH resolve `aidlc`
+(`engineResolvable`, pure over an env). Yes: Reload Window. No: quit Kiro and open it again,
+because Kiro fixes PATH at launch and a reload inherits the main process's environment
+(upstream's install guide says the same); on Windows after a fresh install that registered
+PATH the text says only that, otherwise it names the manual PATH step; on a Mac it names
+`~/.local/bin` in the shell profile. No extension API relaunches the app, so the button is
+`workbench.action.quit` and the person reopens Kiro. The Start page the person was promised
+survives either restart through `workspaceState` (`START_PAGE_AFTER_RESTART_KEY`, written
+before the command runs, consumed once in `restoreWatcher`), which outlives a reload and a
+quit alike since Kiro reopens the last folder. "Later" asks nothing again; Check setup
+carries the same sentence from the same function, plus a `Kiro can run \`aidlc\` from its
+PATH` line, and now knows 2.11.3's agent file (`aidlc-aidlc.md`), which it had reported as
+MISSING on every current project. Pins: kiro-restart.test.js (readiness states, the
+bilingual lines, the modal dialog's buttons and detail through the real `setup()`, the
+flag-before-command ordering read from the source, Check setup's lines); install-prompts
+"the progress notification ends before the completion message appears" now records the
+modal.
+
+**Windows: hand the verified directory to install.ps1, and ask about an administrator
+window instead of refusing.** Two places where this extension had kept an older upstream
+behaviour. (1) PATH. `install-apply` lays out the engine and nothing else; the registration
+of `%LOCALAPPDATA%\aidlc\bin` on the account's persistent PATH is install.ps1's
+`Set-UserPath` (registry write keeping REG_EXPAND_SZ and existing entries, a
+WM_SETTINGCHANGE broadcast, `windows-path.json` so `aidlc` uninstall removes exactly its
+own entry). The extension's `pathCaveat` comment claimed upstream "prepends to PATH for its
+own process and prints a per-session command"; the current script does not, and the README
+says "automatically registers the bin directory in User PATH". So every Windows install
+from this extension left a manual PATH step the official command does not, and that step
+was the half of "Windows is hard" this extension owned. Now the one download-and-verify
+path also fetches `install.ps1` (it is in checksums.txt) and on Windows runs it with
+`-From <dir> -Version -Quiet -Json` (`-From` implies `-Offline`; the script re-verifies
+every file itself and will not download); its JSON `path.status` says whether PATH was
+registered, and `pathCaveat` speaks only when it was not. Reimplementing Set-UserPath was
+declined: each of its details is a way to corrupt a PATH. (2) Elevation. The extension
+refused an elevated Kiro with "Refusing an Administrator install", attributed to upstream;
+upstream's `Confirm-UacElevatedInstall` instead warns ("installing as administrator is
+less safe: another program running as you could interfere with it", a TOCTOU argument,
+not the "stranded files" one the comment gave) and asks `Continue installing as
+administrator? [y/N]`, proceeds on `-Yes`, exits 2 only when it cannot ask. A workshop
+participant who had opened Kiro "as administrator" saw the refusal; the official command
+in the same window would have asked and installed. Now install-commands asks before the
+download with upstream's sentence (`UAC_ELEVATED_WARNING`, verbatim) and a Korean line,
+offers Install anyway, and passes `-Yes` on that answer; `installEngine` keeps a refusal
+floor for a caller that did not ask. `net session` cannot tell a UAC split token from a
+full-token session, so the full-token case gets one extra question upstream would not ask;
+the reverse mistake would block an install, so that trade is taken. The daily cron
+verifies the install round-trip but not the Windows installer's behaviour, which is how
+both drifted unnoticed; it now records the sha256 of `install.sh` and `install.ps1` and
+reports a change (see the cron entry). Pins: kiro-restart.test.js (`windowsInstallerArgs`,
+`parseWindowsInstallerOutput`, the admin dialog through `setup()` with Cancel installing
+nothing and Install anyway passing `allowElevated`), engine-install "Windows is warned
+about PATH only when the installer could not register it".
+
 **The release notes ship as CHANGELOG.md and are kept identical to the README's What's
 New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the
 vsix and was empty through 0.1.2 (the API's `files` had no `changelog`). The README

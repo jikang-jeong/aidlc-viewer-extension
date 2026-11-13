@@ -273,7 +273,11 @@ test('the progress notification ends before the completion message appears', asy
       progressEnded = true;
       order.push('end');
     },
-    onToast: () => {
+    // The completion message is a modal dialog now (its `detail` carries the next step
+    // and the Korean line, and a toast never renders `detail`); it is still what must
+    // not be awaited inside the progress scope.
+    onModal: (record) => {
+      if (!/set up for/.test(record.message)) return undefined;
       order.push(progressEnded ? 'toast-after-end' : 'TOAST-WHILE-RUNNING');
       // Never resolves. A test that resolved it would pass either way.
       return new Promise(() => {});

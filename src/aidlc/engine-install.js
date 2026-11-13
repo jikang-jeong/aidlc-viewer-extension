@@ -23,6 +23,15 @@
 // latter is the contract BOTH official installers consume, which makes it the least
 // likely thing upstream has to move.
 //
+// ONE EXCEPTION, ADDED LATER: on Windows the apply step is handed back to install.ps1,
+// with the directory this module downloaded and verified (`-From <dir>`). Not for the
+// apply itself -- the binary does that the same way everywhere -- but for what the script
+// does after it: registering the command directory on the account's persistent PATH.
+// install-apply does not do that, and without it every Windows install this extension
+// made left a manual PATH step that the official command does not. The download and
+// verification stay here, on the one path; the script is one more verified asset. See
+// WINDOWS_INSTALLER.
+//
 // WHAT IS MIRRORED FROM THE OFFICIAL INSTALLERS, ON PURPOSE
 //
 //   - version.json is validated the way install.sh validates it: version shape,
@@ -30,8 +39,8 @@
 //   - Every downloaded asset is verified against checksums.txt before anything runs.
 //   - checksums.txt itself is verified with `gh attestation verify` when gh is
 //     available, and skipped when it is not -- the scripts make the same choice.
-//   - An elevated Windows session is refused, as install.ps1 refuses it, because an
-//     install run as Administrator strands files the target user cannot manage.
+//   - An elevated Windows session is asked about, as install.ps1 asks, with its words;
+//     installing anyway passes the script's own -Yes.
 //   - The --from directory handed to install-apply carries exactly what the scripts
 //     put there: version.json, checksums.txt, the provenance bundle, the binary and
 //     the runtime tarball, under their published names.
@@ -307,19 +316,31 @@ function describeDownloadFailure(asset, failure) {
 // Guards
 // ---------------------------------------------------------------------------
 
-// Whether this Windows session is elevated. install.ps1 refuses an Administrator
-// install because it strands files the target user cannot manage, and dropping that
-// guard just because the script is no longer run would be a silent regression.
+// Whether this Windows session is elevated. install.ps1 warns on a UAC-elevated
+// install and asks before continuing (it used to refuse; the extension copied the
+// refusal and kept it after upstream had moved on, so a Kiro run "as administrator"
+// was turned away while the official command on the same machine would have asked
+// and installed). The caller asks the person with upstream's own words; this only
+// answers the question.
 //
 // `net session` succeeds only when elevated -- the standard probe where no API exists.
 // Every failure mode (not elevated, command missing, timeout) resolves to false, because
-// refusing a normal user by mistake blocks an install over nothing.
+// refusing a normal user by mistake blocks an install over nothing. It cannot tell a UAC
+// split token from a full-token Administrator session (which upstream lets through
+// silently); the one case that gets an extra question is acceptable, the reverse is not.
 function isElevatedWindows() {
   if (process.platform !== 'win32') return Promise.resolve(false);
   return new Promise((resolve) => {
     execFile('net', ['session'], { timeout: 10 * 1000 }, (error) => resolve(!error));
   });
 }
+
+// Upstream's own warning, verbatim from install.ps1's Confirm-UacElevatedInstall, so the
+// person sees the same sentence whichever way they install.
+const UAC_ELEVATED_WARNING =
+  'This PowerShell window is running as administrator. AI-DLC installs just for your ' +
+  "account and doesn't need admin rights, and installing as administrator is less safe: " +
+  'another program running as you could interfere with it.';
 
 // Whether `gh` can verify release provenance here. The official installers verify when
 // the tool exists and proceed when it does not; the same choice is made here for the
@@ -381,10 +402,83 @@ function firstLine(value) {
 
 // The subcommand both official installers hand the work to. What follows it is the
 // binary's own contract: it verifies the runtime against the checksums in --from and
-// lays out the machine itself.
+// lays out the machine itself. Run directly on macOS and Linux.
 const APPLY_SUBCOMMAND = ['system', 'lifecycle', 'install-apply'];
 
-async function installEngine({ workDir, env, onProgress } = {}) {
+// On Windows the apply is handed to upstream's install.ps1 instead, with the directory
+// this module downloaded and verified (`-From <dir>` implies `-Offline`; the script
+// re-verifies every file against checksums.txt and will not download). The reason is
+// PATH: the engine's hooks call `aidlc` by bare name, and on Windows the only thing
+// that puts the command directory on the account's persistent PATH is the script's
+// Set-UserPath -- registry write preserving REG_EXPAND_SZ and existing entries, a
+// WM_SETTINGCHANGE broadcast, and a windows-path.json so `aidlc` uninstall later removes
+// exactly that entry. install-apply does none of it, so the extension's own install left
+// a manual "add this folder to your PATH" step that the official command does not, and
+// that step was the half of "Windows is hard" this extension owned. Reimplementing it
+// here would mean owning each of those details; the script is the thing upstream tests
+// on Windows. The download and verification stay in the one code path above, and the
+// script is itself an asset in checksums.txt, verified like the others.
+const WINDOWS_INSTALLER = 'install.ps1';
+function windowsInstallerArgs({ base, version, yes }) {
+  return [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    path.join(base, WINDOWS_INSTALLER),
+    '-From',
+    base,
+    '-Version',
+    version,
+    '-Quiet',
+    '-Json',
+    // Upstream's answer to its own administrator question. Passed only after the person
+    // was asked that question here, with the same words.
+    ...(yes ? ['-Yes'] : [])
+  ];
+}
+
+// The script's -Json result: the last line that parses. `path.status` is `updated`,
+// `unchanged`, `failed` or `conflict`, and says whether the command directory is on the
+// account's PATH now. Anything unparseable is reported as such, never guessed at.
+function parseWindowsInstallerOutput(stdout) {
+  const lines = String(stdout ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (!lines[i].startsWith('{')) continue;
+    try {
+      return JSON.parse(lines[i]);
+    } catch {
+      // keep looking
+    }
+  }
+  return undefined;
+}
+
+// Whether a process started with this PATH would find `aidlc` -- which is the question
+// for the engine's hooks, since Kiro starts them with the PATH it had when it launched.
+// Pure: given the environment, no subprocess. On POSIX the login shell's PATH reaches
+// Kiro through its startup shell resolution, so ~/.local/bin being on PATH there is what
+// makes a fresh install resolvable at once; on Windows nothing re-reads the registry, so
+// a fresh install is not resolvable until Kiro is quit and reopened, whatever PATH says.
+function engineResolvable({ env = process.env, platform = process.platform } = {}) {
+  const value = env.PATH ?? env.Path ?? '';
+  if (!value) return false;
+  const names = platform === 'win32' ? ['aidlc.exe', 'aidlc.cmd'] : ['aidlc'];
+  for (const dir of value.split(path.delimiter)) {
+    if (!dir) continue;
+    for (const name of names) {
+      try {
+        if (fs.statSync(path.join(dir, name)).isFile()) return true;
+      } catch {
+        // not here
+      }
+    }
+  }
+  return false;
+}
+
+async function installEngine({ workDir, env, onProgress, allowElevated = false } = {}) {
   const report = typeof onProgress === 'function' ? onProgress : () => {};
 
   const binary = assetName({
@@ -402,13 +496,11 @@ async function installEngine({ workDir, env, onProgress } = {}) {
     };
   }
 
-  if (await isElevatedWindows()) {
-    // Upstream's own wording, so the condition is searchable.
-    return {
-      ok: false,
-      reason: 'elevated',
-      text: 'Refusing an Administrator install; run Kiro as the target user and set up again.'
-    };
+  const elevated = await isElevatedWindows();
+  if (elevated && !allowElevated) {
+    // The caller is expected to have asked already (install-commands does, with the
+    // same words and an "Install anyway"); this is the floor under a caller that did not.
+    return { ok: false, reason: 'elevated', text: UAC_ELEVATED_WARNING };
   }
 
   const base = workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-provision-'));
@@ -460,7 +552,10 @@ async function installEngine({ workDir, env, onProgress } = {}) {
     }
 
     const runtime = `aidlc-runtime-${release.version}.tar.gz`;
-    for (const asset of [binary, runtime]) {
+    // Windows also needs the script that will do the apply; it is in checksums.txt and
+    // is verified below with the rest.
+    const assets = process.platform === 'win32' ? [binary, runtime, WINDOWS_INSTALLER] : [binary, runtime];
+    for (const asset of assets) {
       report(`downloading ${asset}…`);
       const fetched = await download(`${RELEASE_BASE}/${asset}`, path.join(base, asset));
       if (!fetched.ok) {
@@ -478,10 +573,43 @@ async function installEngine({ workDir, env, onProgress } = {}) {
       fs.chmodSync(binaryPath, 0o755);
     }
 
+    report(`installing AI-DLC ${release.version}…`);
+    if (process.platform === 'win32') {
+      // See WINDOWS_INSTALLER. The script's own JSON result is read for the PATH outcome
+      // and its own message is the failure text.
+      const run = await new Promise((resolve) => {
+        execFile(
+          'powershell.exe',
+          windowsInstallerArgs({ base, version: release.version, yes: elevated }),
+          { timeout: APPLY_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, ...(env ?? {}) }, windowsHide: true },
+          (error, stdout, stderr) => resolve({ error, stdout, stderr })
+        );
+      });
+      const result = parseWindowsInstallerOutput(run.stdout);
+      if (run.error || (result && result.ok === false)) {
+        return {
+          ok: false,
+          reason: result?.status === 'usage' && /administrator/i.test(result?.message ?? '') ? 'elevated' : 'apply-failed',
+          text:
+            result?.message ??
+            firstLine(run.stderr) ??
+            firstLine(run.stdout) ??
+            `The engine's installer exited without saying why (${run.error?.message ?? 'unknown'}).`
+        };
+      }
+      const pathStatus = result?.path?.status;
+      return {
+        ok: true,
+        version: release.version,
+        binDir: defaultBinDir(),
+        pathStatus,
+        pathRegistered: pathStatus === 'updated' || pathStatus === 'unchanged'
+      };
+    }
+
     // The binary lays out the machine. Its own first line of output is the failure
     // message when there is one -- upstream's words, which name conditions this
     // extension has no business paraphrasing (Alpine's missing libstdc++, for one).
-    report(`installing AI-DLC ${release.version}…`);
     const applied = await new Promise((resolve) => {
       execFile(
         binaryPath,
@@ -507,7 +635,7 @@ async function installEngine({ workDir, env, onProgress } = {}) {
       return { ok: false, reason: 'apply-failed', text: applied.text };
     }
 
-    return { ok: true, version: release.version, binDir: defaultBinDir() };
+    return { ok: true, version: release.version, binDir: defaultBinDir(), pathRegistered: undefined };
   } finally {
     if (!workDir) {
       fs.rmSync(base, { recursive: true, force: true });
@@ -515,23 +643,24 @@ async function installEngine({ workDir, env, onProgress } = {}) {
   }
 }
 
-// What the installer leaves for the user to do, which differs by platform in a way that
-// decides whether the workflow runs at all.
+// What the installer leaves for the user to do about PATH, when it left anything.
 //
 // The project's hooks call `aidlc` by bare name, so the binary has to be resolvable from
 // the environment the harness runs hooks in -- not from an interactive shell. On POSIX
-// `aidlc doctor` reports "interactive-only" when that is the gap. On Windows nothing
-// persists PATH at all: upstream's own installer prepends to PATH for its own process
-// and prints a per-session command, so a successful install can leave a project that
-// looks complete and whose hooks cannot find the engine. Named here rather than
-// discovered later.
-function pathCaveat(binDir) {
+// `aidlc doctor` reports "interactive-only" when that is the gap. On Windows install.ps1
+// registers the command directory on the account's PATH itself (see WINDOWS_INSTALLER),
+// and its result says whether that worked; only when it did not is there something for
+// the person to do by hand. Whether Kiro has to be quit and reopened to see the change is
+// a separate question, answered by kiro-readiness.
+function pathCaveat(binDir, { pathStatus } = {}) {
   const location = binDir ?? defaultBinDir();
-  if (process.platform === 'win32') {
+  if (process.platform === 'win32' && pathStatus !== 'updated' && pathStatus !== 'unchanged') {
     return (
-      `The install did not change your PATH: the engine's command directory is ${location}. ` +
+      `The installer could not add the engine's command directory to your PATH` +
+      (pathStatus ? ` (${pathStatus})` : '') +
+      `: it is ${location}. ` +
       'Add that folder to your user PATH (Settings > Edit environment variables for your ' +
-      "account), then restart Kiro, or the workflow's hooks will not find the engine."
+      "account), then quit Kiro and reopen it, or the workflow's hooks will not find the engine."
     );
   }
   return undefined;
@@ -558,6 +687,11 @@ module.exports = {
   download,
   describeDownloadFailure,
   isElevatedWindows,
+  UAC_ELEVATED_WARNING,
+  WINDOWS_INSTALLER,
+  windowsInstallerArgs,
+  parseWindowsInstallerOutput,
+  engineResolvable,
   provenanceVerifierAvailable,
   installEngine,
   pathCaveat

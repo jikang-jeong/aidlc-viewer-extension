@@ -11,7 +11,7 @@ Works in **Kiro** and in VS Code and its forks, with both generations of AI-DLC.
 
 ![One toast asks which generation](media/setup_aidlc.png)
 
-Pick the folder, press one button, answer one question. **v1** is the rule files your agent reads; **v2** is an engine that drives the workflow itself, and the extension installs it for you from the official release and configures the project with it. For v2 a second prompt in the same place asks Kiro IDE or Kiro CLI. Nothing you already have is overwritten.
+Pick the folder, press one button, answer one question. **v1** is the rule files your agent reads; **v2** is an engine that drives the workflow itself, and the extension installs it for you from the official release and configures the project with it. For v2 a second prompt in the same place asks Kiro IDE or Kiro CLI. Nothing you already have is overwritten. Setup ends with one dialog that says what Kiro still has to do, in English with a Korean line beneath: usually **Reload Window**; on Windows, the first time the engine is installed, **Quit Kiro** and open it again. Press the button and the start page is waiting when Kiro is back.
 
 ## Start it
 
@@ -66,6 +66,19 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 ### 0.1.4
 
+- **Setup ends by saying what Kiro still has to do, and does it on request.** The engine's
+  own completion message asks for `Developer: Reload Window` so Kiro loads the new agent and
+  hooks; the extension used to drop that line and say the agent was already available,
+  which it was not. The completion dialog now offers **Reload Window**, or on Windows after
+  a first engine install **Quit Kiro** (Kiro reads PATH only when it starts, and a reload
+  does not help), opens the start page when Kiro is back, and carries a Korean line under
+  the English. **Check setup** reports whether Kiro can run `aidlc` from its PATH and
+  knows 2.11.3's agent file name, which it had been reporting as missing.
+- **Windows installs register PATH, and an administrator window is asked, not refused.**
+  The verified release directory is handed to upstream's own `install.ps1 -From`, which
+  adds the engine to your account's PATH the way the official command does, so the manual
+  "add this folder to PATH" step is gone. Kiro run as administrator gets upstream's own
+  warning with **Install anyway** or Cancel instead of a refusal upstream no longer makes.
 - **The viewer renders like Kiro's own Markdown preview.** It now uses the same engine
   (markdown-it) and follows the same typography. The hand-written renderer it replaces
   could not nest: on 423 real AI-DLC artifacts, half came out with broken structure, every

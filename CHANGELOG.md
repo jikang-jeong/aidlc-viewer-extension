@@ -5,6 +5,19 @@ The same notes as the README's What's New section, kept identical by a test
 
 ## 0.1.4
 
+- **Setup ends by saying what Kiro still has to do, and does it on request.** The engine's
+  own completion message asks for `Developer: Reload Window` so Kiro loads the new agent and
+  hooks; the extension used to drop that line and say the agent was already available,
+  which it was not. The completion dialog now offers **Reload Window**, or on Windows after
+  a first engine install **Quit Kiro** (Kiro reads PATH only when it starts, and a reload
+  does not help), opens the start page when Kiro is back, and carries a Korean line under
+  the English. **Check setup** reports whether Kiro can run `aidlc` from its PATH and
+  knows 2.11.3's agent file name, which it had been reporting as missing.
+- **Windows installs register PATH, and an administrator window is asked, not refused.**
+  The verified release directory is handed to upstream's own `install.ps1 -From`, which
+  adds the engine to your account's PATH the way the official command does, so the manual
+  "add this folder to PATH" step is gone. Kiro run as administrator gets upstream's own
+  warning with **Install anyway** or Cancel instead of a refusal upstream no longer makes.
 - **The viewer renders like Kiro's own Markdown preview.** It now uses the same engine
   (markdown-it) and follows the same typography. The hand-written renderer it replaces
   could not nest: on 423 real AI-DLC artifacts, half came out with broken structure, every

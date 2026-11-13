@@ -82,6 +82,16 @@ const SETUP_NOTICE_KEY = 'markdownWatchViewer.aidlcSetupNoticeVersion';
 // A folder picked from a window with no folder open, carried across the reload that
 // opens it. globalState because the window that reads it is a different workspace.
 const PENDING_SETUP_OFFER_KEY = 'markdownWatchViewer.pendingSetupOffer';
+// The generation whose Start page should open when this workspace next activates, set
+// right before the restart the completion dialog offered (see runSetup). Consumed once.
+const START_PAGE_AFTER_RESTART_KEY = 'markdownWatchViewer.startPageAfterRestart';
+// What kiro-readiness's `action` runs. The reload is a window reload; the quit is the
+// most an extension can do toward "quit Kiro and open it again" (there is no relaunch
+// API), and the person reopens Kiro themselves.
+const RESTART_COMMANDS = {
+  reload: 'workbench.action.reloadWindow',
+  quit: 'workbench.action.quit'
+};
 
 function activate(context) {
   const controller = new WatchController(context);
@@ -327,6 +337,7 @@ class WatchController {
       }
       this.autoWatched = true;
       await this.setWatchedFolder(workspaceFolder, { showMessage: false });
+      await this.openStartPageScheduledBeforeRestart(workspaceFolder);
       // A folder picked from a folder-less window reaches here after Kiro reloads
       // with it open. The setup question that pick would have asked is asked now,
       // once, so the two-step toast is not lost to the reload.
@@ -342,12 +353,22 @@ class WatchController {
     try {
       await vscode.workspace.fs.stat(uri);
       await this.setWatchedFolder(uri, { showMessage: false });
+      await this.openStartPageScheduledBeforeRestart(uri);
     } catch {
       // Stored folder is gone — reset to the welcome view without a popup.
       this.context.workspaceState.update(STATE_KEY, undefined);
       this.treeDataProvider.setRootUri(undefined);
       this.refreshSupervision();
     }
+  }
+
+  // The Start page the completion dialog promised across a restart (see runSetup).
+  // Consumed once: a second activation of the same workspace opens nothing.
+  async openStartPageScheduledBeforeRestart(folderUri) {
+    const generation = this.context.workspaceState.get(START_PAGE_AFTER_RESTART_KEY);
+    if (!generation) return;
+    await this.context.workspaceState.update(START_PAGE_AFTER_RESTART_KEY, undefined);
+    this.showStartPage(folderUri, generation);
   }
 
   async promptForFolder(message) {
@@ -500,12 +521,22 @@ class WatchController {
     // The installers report through their own toasts and return nothing, so whether
     // setup happened is read from the folder: a generation present after that was not
     // present before.
-    await installCommands.setup(target, () => this.installV1(target), preselected);
+    const result = await installCommands.setup(target, () => this.installV1(target), preselected);
     this.refresh();
     this.refreshSupervision();
     const after = target ? safeGeneration(target.fsPath) : 'none';
     const added = newlyInstalled(before, after);
-    if (added) this.showStartPage(target, added);
+    if (!added) return;
+    // The person chose the restart the completion dialog offered. The Start page has to
+    // survive it, so it is scheduled in workspaceState -- which outlives both a window
+    // reload and a full quit of Kiro, since Kiro reopens the last folder -- and opened
+    // once by restoreWatcher when the extension comes back. Then the restart.
+    if (result && result.restart) {
+      await this.context.workspaceState.update(START_PAGE_AFTER_RESTART_KEY, added);
+      await vscode.commands.executeCommand(RESTART_COMMANDS[result.restart]);
+      return;
+    }
+    this.showStartPage(target, added);
   }
 
   // Opens once, after setup, in the editor area: the one thing to type to start. See
@@ -3685,7 +3716,7 @@ function getHelpHtml() {
 <ol>
   <li>Open your project folder in Kiro. The VIEWER panel follows the workspace folder; <strong>Open Workspace</strong> (folder icon) watches it again if needed, opens one when none is open, or chooses among several.</li>
   <li>Optionally click <strong>Set up AI-DLC</strong> (cloud icon). It <strong>asks which generation</strong> you want, <strong>v1</strong> or <strong>v2</strong>; for v2 a second prompt in the same place asks <strong>Kiro IDE</strong> or <strong>Kiro CLI</strong>, unless the project already recorded one. v1 is copied from a snapshot bundled with this extension, so it needs no network. v2 installs an engine onto your machine and then configures the project with it, because that is what v2 now is: the project's hooks call the engine by name rather than carrying it. The first v2 setup downloads about 110MB; every project after that is seconds. It runs the installer AWS publishes, which verifies what it downloads and needs no administrator rights, and the version you got is recorded in the project. If that installer cannot run where you are, setup hands you the same command rather than leaving you a project whose gates never fire.</li>
-  <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Right after setup a page opens in the editor with this command large and a button that opens Kiro\u2019s chat with it already typed. Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with the same command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
+  <li>Start the workflow. <strong>On v1</strong>, tell your agent <code>"Using AI-DLC, build ..."</code>. <strong>On v2</strong>, type <code>/aidlc</code> — setup installs a conductor agent plus a set of role agents, so <code>/aidlc</code> starts or resumes a workflow and the others are there when you want a specific one. Setup ends with one dialog that says what Kiro still has to do: usually <strong>Reload Window</strong>, so Kiro loads the new agent and hooks; on Windows, the first time the engine is installed, <strong>Quit Kiro</strong> and open it again, because Kiro reads PATH only when it starts. Press the button, and when Kiro is back a page opens in the editor with this command large and a button that opens Kiro\u2019s chat with it already typed. Until the first stage is reached, the row at the top of the tree reads <strong>Not started</strong> with the same command beside it, and so does the strip above an open file. Then new artifacts appear in the tree as they are generated.</li>
 </ol>
 
 <h2>Key Features</h2>
@@ -3779,7 +3810,7 @@ function getHelpHtml() {
 <ol>
   <li>Kiro에서 프로젝트 폴더를 엽니다. VIEWER 패널은 워크스페이스 폴더를 그대로 따라갑니다. <strong>Open Workspace</strong>(폴더 아이콘)는 그 폴더를 다시 맞추거나, 폴더를 아직 열지 않았을 때 열거나, 여러 개 중 하나를 고를 때 씁니다.</li>
   <li>필요하면 <strong>Set up AI-DLC</strong>(클라우드 아이콘)를 누릅니다. <strong>어느 세대를 설치할지 물어봅니다.</strong> <strong>v1</strong>인지 <strong>v2</strong>인지 먼저, v2라면 같은 자리에 두 번째 알림으로 <strong>Kiro IDE</strong>인지 <strong>Kiro CLI</strong>인지 묻습니다. 이미 기록된 프로젝트는 두 번째를 건너뜁니다. v1은 익스텐션에 번들된 스냅샷에서 복사하므로 네트워크가 필요 없습니다. v2는 엔진을 이 컴퓨터에 설치한 다음 그 엔진으로 프로젝트를 설정합니다. 이제 v2가 그런 형태이기 때문입니다. 프로젝트의 훅이 엔진을 이름으로 호출하고 엔진 자체를 품고 있지 않습니다. 첫 v2 설치는 110MB 정도를 내려받고 그 뒤 프로젝트는 몇 초면 끝납니다. AWS가 발행하는 설치기를 실행하므로 내려받은 것을 검증하고 관리자 권한이 필요하지 않으며, 받은 버전이 프로젝트에 기록됩니다. 그 설치기를 이 환경에서 실행할 수 없으면 같은 명령을 건네줍니다. 게이트가 발화하지 않는 프로젝트를 만들어 두는 것보다 낫기 때문입니다.</li>
-  <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 설치 직후 에디터에 이 명령을 크게 보여주는 페이지가 열리고, 그 명령이 입력된 상태로 Kiro 채팅을 여는 버튼이 함께 있습니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 같은 명령을 보여줍니다.</li>
+  <li>워크플로우를 시작합니다. <strong>v1에서는</strong> 에이전트에게 <code>"Using AI-DLC, ..."</code>라고 말합니다. <strong>v2에서는</strong> <code>/aidlc</code>를 입력합니다. 설치할 때 지휘 에이전트와 역할별 에이전트가 함께 깔리므로, <code>/aidlc</code>로 워크플로우를 시작하거나 이어가고 특정 역할이 필요하면 그 에이전트를 직접 부를 수 있습니다. 어느 쪽이든 생성되는 산출물이 트리에 나타납니다. 설치는 Kiro가 아직 해야 할 일을 말하는 대화상자 하나로 끝납니다. 보통은 <strong>Reload Window</strong>로, 새 에이전트와 훅을 Kiro가 불러오게 합니다. Windows에서 엔진을 처음 설치한 경우에는 <strong>Quit Kiro</strong> 뒤 다시 여는 것인데, Kiro가 시작할 때의 PATH만 읽기 때문입니다. 버튼을 누르고 Kiro가 돌아오면 에디터에 이 명령을 크게 보여주는 페이지가 열리고, 그 명령이 입력된 상태로 Kiro 채팅을 여는 버튼이 함께 있습니다. 첫 단계에 도달하기 전까지는 트리 맨 위 행과 열린 파일 위의 스트립이 <strong>Not started</strong>와 함께 같은 명령을 보여줍니다.</li>
 </ol>
 
 <h2>주요 기능</h2>

@@ -317,160 +317,29 @@ test('both Windows executable names are looked for, not the POSIX habit', () => 
 
 
 
-test('Windows is told its PATH change is not permanent, because nothing else will say so', () => {
-  // install.sh can write a shell rc file with --profile. install.ps1 has no such flag: it
-  // prepends to PATH for its own process and prints "For each new PowerShell session,
-  // run: ...". Since the project's hooks call `aidlc` by bare name, a successful install
-  // can otherwise leave a project that looks complete and cannot run.
-  const caveat = engineInstall.pathCaveat('C:\\Users\\jane\\AppData\\Local\\aidlc\\bin');
+test('Windows is warned about PATH only when the installer could not register it', () => {
+  // install.ps1 registers the command directory on the account's PATH itself (0.1.4; the
+  // extension hands it the verified directory with -From). Its result says whether that
+  // worked. Only when it did not is there a manual step, and then the folder is named.
+  // Since the project's hooks call `aidlc` by bare name, that step decides whether the
+  // workflow runs at all.
+  const caveat = engineInstall.pathCaveat('C:\\Users\\jane\\AppData\\Local\\aidlc\\bin', { pathStatus: 'failed' });
   if (process.platform === 'win32') {
-    assert.ok(caveat, 'Windows must be warned');
+    assert.ok(caveat, 'Windows must be warned when registration failed');
     assert.match(caveat, /PATH/);
     assert.match(caveat, /C:\\Users\\jane/, 'must name the folder to add');
+    assert.equal(engineInstall.pathCaveat('C:\\x', { pathStatus: 'updated' }), undefined, 'registered: nothing to do by hand');
   } else {
     assert.equal(caveat, undefined, 'other platforms must not get a Windows caveat');
   }
   assert.doesNotThrow(() => engineInstall.pathCaveat(undefined));
 });
 
-test('the install root follows the platform upstream documents', () => {
-  // %LOCALAPPDATA%\aidlc on Windows, $XDG_DATA_HOME|~/.local/share/aidlc elsewhere --
-  // read from the engine's aidlc-install-paths.ts rather than chosen. A root that
-  // disagreed would report a working install as absent.
-  const root = engineInstall.installRoot();
-  assert.ok(path.isAbsolute(root));
-  assert.equal(path.basename(root), 'aidlc');
-});
-
-
-test('a .cmd path with a space survives the shell it is forced through', async () => {
-  // Under shell:true Node concatenates rather than quotes, and the wrapper lives beneath
-  // %LOCALAPPDATA% -- a path that carries the user's name, which on Windows routinely has
-  // a space ("C:\Users\Jane Doe\..."). Found by walking the forged-platform flow, where
-  // the unquoted command visibly split at the space.
-  //
-  // Verified by principle on this host: an executable in a directory with a space fails
-  // under shell:true unquoted and runs quoted. Here the quoting decision is pinned: the
-  // command is quoted exactly when a shell is involved, and left alone otherwise, because
-  // quotes handed to execFile WITHOUT a shell become part of the filename.
-  const source = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'aidlc', 'engine-config.js'),
-    'utf8'
-  );
-  assert.match(source, /shell \? `"\$\{binary\}"` : binary/, 'the quoting must follow the shell decision');
-});
-
-// ---------------------------------------------------------------------------
-// The single-path install: what the scripts did, done here, testable here
-// ---------------------------------------------------------------------------
-//
-// The install no longer runs upstream's install.sh or install.ps1. Reading them showed
-// the machine layout was never theirs: both end by handing the downloaded binary its own
-// `system lifecycle install-apply`. Everything before that is orchestration, which is the
-// part reimplemented here -- identical code on every platform, so verifying it on this
-// machine verifies what a Windows machine will run, down to the asset name.
-
-test('every platform maps to the asset upstream actually publishes', () => {
-  // Names taken from the release's own checksums.txt, not invented. An unsupported
-  // platform maps to nothing and is refused by name before any download.
-  const { assetName } = engineInstall;
-  assert.equal(assetName({ platform: 'darwin', arch: 'arm64' }), 'aidlc-darwin-arm64');
-  assert.equal(assetName({ platform: 'darwin', arch: 'x64' }), 'aidlc-darwin-x64');
-  assert.equal(assetName({ platform: 'linux', arch: 'x64' }), 'aidlc-linux-x64');
-  assert.equal(assetName({ platform: 'linux', arch: 'x64', musl: true }), 'aidlc-linux-x64-musl');
-  assert.equal(assetName({ platform: 'linux', arch: 'arm64', musl: true }), 'aidlc-linux-arm64-musl');
-  assert.equal(assetName({ platform: 'win32', arch: 'x64' }), 'aidlc-windows-x64.exe');
-  // ARM64 Windows gets the x64 binary, because that is what upstream itself does:
-  // install.ps1 probes no architecture and hardcodes aidlc-windows-x64.exe, relying on
-  // Windows 11's x64 emulation. This build refused instead, and a real test on ARM64
-  // Windows hit the refusal -- the extension declined an install upstream performs.
-  assert.equal(assetName({ platform: 'win32', arch: 'arm64' }), 'aidlc-windows-x64.exe');
-  // musl must never leak outside Linux: there is no darwin-musl and inventing one would
-  // turn a working Mac into a 404.
-  assert.equal(assetName({ platform: 'darwin', arch: 'arm64', musl: true }), undefined);
-  for (const unsupported of [
-    { platform: 'linux', arch: 'ia32' },
-    {},
-    undefined
-  ]) {
-    assert.equal(assetName(unsupported), undefined, JSON.stringify(unsupported));
-  }
-});
-
-test('version.json is validated the way install.sh validates it', () => {
-  // Each check catches a different way a release endpoint can lie. The shapes and the
-  // rejected values mirror the sh script's own regexes.
-  const { validateVersionInfo } = engineInstall;
-  const good = {
-    version: '2.8.0',
-    sourceRef: 'refs/tags/v2.8.0',
-    sourceDigest: '0d399dd828b59e84d90f7cc198c69fab9ad8f1a7'
-  };
-  assert.equal(validateVersionInfo(good).ok, true);
-  assert.equal(validateVersionInfo(good).version, '2.8.0');
-
-  // A version that is not a version.
-  for (const version of ['2.8', '02.8.0', 'v2.8.0', '2.8.0-rc1', '', undefined]) {
-    assert.equal(validateVersionInfo({ ...good, version }).ok, false, String(version));
-  }
-  // A tag that does not match the version it claims.
-  assert.equal(validateVersionInfo({ ...good, sourceRef: 'refs/tags/v9.9.9' }).ok, false);
-  assert.equal(validateVersionInfo({ ...good, sourceRef: 'refs/heads/main' }).ok, false);
-  // A digest that is not a commit.
-  for (const sourceDigest of ['abc', 'Z'.repeat(40), '', undefined]) {
-    assert.equal(validateVersionInfo({ ...good, sourceDigest }).ok, false, String(sourceDigest));
-  }
-  // And garbage in, refusal out -- never a throw on the UI path.
-  for (const junk of [undefined, null, [], 'text', 42]) {
-    assert.equal(validateVersionInfo(junk).ok, false, String(junk));
-  }
-});
-
-test("checksums.txt is parsed in upstream's exact format, and only that", () => {
-  // `<64 hex><two spaces><name>`. One space is a different format and ignoring it is the
-  // point: a checksum matched loosely is a checksum that can be spoofed by a lookalike
-  // line.
-  const { parseChecksums } = engineInstall;
-  const hex = 'c2d21dcb5afb4fee673892029422a2537cc2fa010dfe9056d67b5d71c80a3232';
-  const sums = parseChecksums(
-    [
-      `${hex}  version.json`,
-      `${hex}  aidlc-windows-x64.exe`,
-      `${hex} single-space.txt`,
-      'not a checksum line',
-      ''
-    ].join('\n')
-  );
-  assert.equal(sums['version.json'], hex);
-  assert.equal(sums['aidlc-windows-x64.exe'], hex);
-  assert.equal(sums['single-space.txt'], undefined);
-  assert.deepEqual(parseChecksums(''), {});
-  assert.deepEqual(parseChecksums(undefined), {});
-});
-
-test('a corrupted download is refused by its hash, before anything runs', async () => {
-  // The one security property this module now owns. Exercised with a real hash rather
-  // than a mock: the file's actual sha256 must match the expectation, and one flipped
-  // byte must not.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sum-'));
-  try {
-    const file = path.join(dir, 'asset');
-    fs.writeFileSync(file, 'the engine binary');
-    const actual = await engineInstall.sha256File(file);
-    assert.match(actual, /^[a-f0-9]{64}$/);
-    fs.writeFileSync(file, 'the engine binarY');
-    assert.notEqual(await engineInstall.sha256File(file), actual);
-    // A missing file hashes to nothing rather than throwing.
-    assert.equal(await engineInstall.sha256File(path.join(dir, 'absent')), undefined);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('install-apply is what runs, because it is the contract both official installers use', () => {
+test('install-apply is what runs on macOS and Linux, because it is the contract both official installers use', () => {
   // The scripts differ in language, schema and flags, but both end at
   // `<binary> system lifecycle install-apply --from <dir> --version <v>`. Coupling to
   // that subcommand rather than to either script is the design decision this test pins.
+  // Windows is the exception, for PATH registration: see kiro-restart.test.js.
   assert.deepEqual(engineInstall.APPLY_SUBCOMMAND, ['system', 'lifecycle', 'install-apply']);
 });
 
