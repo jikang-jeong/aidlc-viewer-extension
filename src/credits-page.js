@@ -26,6 +26,7 @@
 const path = require('path');
 const { readKiroUsage, attributeTurns, summariseSessions, stageWindowsFromLedger, stageWindowsFromArtifacts } = require('./aidlc/kiro-usage');
 const auditReader = require('./aidlc/audit');
+const { renderCommandGuide } = require('./aidlc/command-guide');
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -387,6 +388,9 @@ function renderStartPage({ webview, root, project, nonce: fixedNonce, generation
   const noticeList = notices.length
     ? `<section><h2>Before you start</h2><ul class="plain">${notices.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul></section>`
     : '';
+  // v2 only: v1 has no command grammar, it is a sentence to the agent. The scope rows are
+  // read from this project's engine files, so what the page shows is the installed engine.
+  const commandGuide = isV2 ? renderCommandGuide({ root }) : '';
   return shell({ webview, root, project, nonce: fixedNonce, title: 'Ready to start' }, [
     `<section class="start">
       <h2>AI-DLC ${escapeHtml(gen ?? '')} is set up. Start it:</h2>
@@ -395,7 +399,8 @@ function renderStartPage({ webview, root, project, nonce: fixedNonce, generation
       <p class="quiet">This page opens once, after setup. The row at the top of the tree reads <strong>Not started</strong> with the same command until the first stage is reached.</p>
     </section>`,
     noticeList,
-    installedList
+    installedList,
+    commandGuide
   ]);
 }
 
@@ -484,6 +489,25 @@ function shell({ webview, root, project, nonce: fixedNonce, title }, sections) {
   .btn.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
   .btn:hover { filter: brightness(1.1); }
   ul.plain { margin: 6px 0 0 18px; padding: 0; }
+  /* The /aidlc guide on the Start page (command-guide.js). */
+  .guide h3 { font-size: 13px; margin: 22px 0 8px; color: var(--vscode-foreground); }
+  .ways .tile { display: flex; flex-direction: column; gap: 6px; }
+  .way-cmd { font-size: 15px; font-weight: 600; }
+  .way-cmd .arg { font-weight: 400; color: var(--vscode-descriptionForeground); font-style: italic; }
+  .way-what { font-size: 12.5px; }
+  .way-eg { font-family: var(--vscode-editor-font-family); font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: auto; padding-top: 6px; border-top: 1px dashed var(--vscode-panel-border); }
+  .scopes td.k, .switches td.k, .examples td.k { white-space: nowrap; width: 1%; }
+  .nowrap { white-space: nowrap; }
+  .dials { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .dial { border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 10px 12px; }
+  .dial-name { font-weight: 600; margin-bottom: 8px; }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .step { border-top: 3px solid var(--purple); padding-top: 6px; font-size: 12px; }
+  .step:nth-child(1) { opacity: .65; }
+  .step:nth-child(3) { border-top-width: 6px; margin-top: -3px; }
+  .step-name { margin-bottom: 3px; }
+  .step-what { color: var(--vscode-descriptionForeground); }
+  .switches td, .examples td { padding: 7px 10px; }
   details.records, details.history { margin-top: 26px; }
   details.history summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; list-style: none; }
   details.history summary::-webkit-details-marker { display: none; }

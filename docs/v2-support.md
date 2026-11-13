@@ -680,6 +680,28 @@ reports a change (see the cron entry). Pins: kiro-restart.test.js (`windowsInsta
 nothing and Install anyway passing `allowElevated`), engine-install "Windows is warned
 about PATH only when the installer could not register it".
 
+**The Start page explains `/aidlc`, and its scope rows are the installed engine's, not this
+build's.** Asked for after a workshop run began with `/aidlc compose --depth minimal
+--test-strategy minimal "…"` and the question was what each part did. The page already
+sat in front of a person with a configured project, so the guide went under "What was set
+up" (v2 only; v1 has a sentence, not a grammar): four tiles for the ways to start, a table
+of scopes drawn as bars, the two dials as three-step scales, a switches table, a
+by-situation table, and the footer naming `/aidlc --help`. Two decisions. (1) The scope
+rows are READ from the project: `scope-grid.json` for the stages each scope runs, and
+`.kiro/scopes/aidlc-<name>.md` frontmatter (which `aidlc config` writes into the project)
+for description, depth, test strategy and defaults. So a scope added or renamed upstream
+appears without a release, which is the same reason the position map reads the stage
+graph. The counts match `aidlc engine orchestrate help` exactly only when the three
+Initialization stages are excluded, as the help excludes them: counted that way, bugfix is
+6 of 30, not 9 of 33; verified against the live help on 2.11.3 for all eleven. (2) The
+dials, switches and examples are text, from the help and `stage-protocol.md` 2.11.3, with
+their numbers (2–4 / 5–8 / 8–12+ questions per stage; 5–15 tests at minimal); they live in
+no file the project carries, so there is nothing to read, and the footer says where the
+authoritative list is. The bars use the shell's `.wN` width classes because the page's CSP
+drops inline styles (the same lesson as the Usage bars). Pins: command-guide.test.js
+(counting without Initialization on a fixture, frontmatter parsing, no inline style, the
+page order and v1 exclusion, every class present in the stylesheet).
+
 **The release notes ship as CHANGELOG.md and are kept identical to the README's What's
 New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the
 vsix and was empty through 0.1.2 (the API's `files` had no `changelog`). The README

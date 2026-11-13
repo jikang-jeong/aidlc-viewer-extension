@@ -5,6 +5,12 @@ The same notes as the README's What's New section, kept identical by a test
 
 ## 0.1.4
 
+- **The start page explains `/aidlc`.** Under *What was set up*: the four ways to start
+  (describe it, name a scope, `compose`, or plain `/aidlc` to resume), every scope as a bar of
+  the stages it runs with its depth and purpose, the two dials (`--depth`, `--test-strategy`)
+  as three-step scales with the engine's own numbers, the switches, and a command per
+  situation. The scope rows are read from the project's installed engine, so a new scope
+  upstream shows up without a new release here.
 - **Setup ends by saying what Kiro still has to do, and does it on request.** The engine's
   own completion message asks for `Developer: Reload Window` so Kiro loads the new agent and
   hooks; the extension used to drop that line and say the agent was already available,
