@@ -60,7 +60,7 @@ test('readiness: a Mac that cannot resolve aidlc is told about ~/.local/bin in t
   assert.match(r.en, /~\/\.local\/bin/);
 });
 
-test('readiness: every English line has a Korean line', () => {
+test('readiness: every English line has a Korean line, and the dialog phrasing names the button on it', () => {
   const cases = [
     { platform: 'darwin', resolvable: true },
     { platform: 'darwin', resolvable: false },
@@ -72,6 +72,11 @@ test('readiness: every English line has a Korean line', () => {
     assert.ok(r.en.length > 20);
     assert.match(r.ko, /[가-힣]/, `Korean line for ${JSON.stringify(c)}`);
     assert.ok(Object.values(ACTIONS).some((a) => a.label === r.label));
+    // Check setup gets the standalone sentence; the completion dialog gets one that says
+    // which button to press, since the first Windows tester asked exactly that.
+    assert.doesNotMatch(r.en, /below/, 'standalone text names no button');
+    assert.match(r.dialogEn, new RegExp(`press ${r.label} below`, 'i'));
+    assert.match(r.dialogKo, new RegExp(`아래 ${r.label}를 (눌러|누르)`));
   }
 });
 
@@ -107,9 +112,18 @@ test('on Windows the apply is install.ps1 with the verified directory, offline, 
   assert.equal(engineInstall.WINDOWS_INSTALLER, 'install.ps1');
 });
 
-test("the script's JSON result is read from its last JSON line, and anything else is undefined", () => {
-  const out = 'WARNING something\n{"ok":true,"status":"installed","path":{"status":"updated"}}\n';
-  assert.deepEqual(engineInstall.parseWindowsInstallerOutput(out).path, { status: 'updated' });
+test("the script's JSON result is read from its last JSON line, and PATH status from data.path.status as the script writes it", () => {
+  // install.ps1's Write-Result: { schemaVersion, ok, code, status, message, data }, with the
+  // PATH outcome at data.path.status. The first cut read path.status at the top level and
+  // every successful Windows install reported PATH as not registered (seen 2026-11-13).
+  const real = 'WARNING something\n{"schemaVersion":1,"ok":true,"code":0,"status":"ok","message":"Installed AI-DLC 2.11.3","data":{"installed":true,"ready":true,"path":{"scope":"user","status":"updated","changed":true,"owned":true}}}\n';
+  const parsed = engineInstall.parseWindowsInstallerOutput(real);
+  assert.equal(parsed.data.path.status, 'updated');
+  assert.equal(engineInstall.windowsPathStatus(parsed), 'updated');
+  assert.equal(engineInstall.windowsPathStatus({ data: { path: { status: 'unchanged' } } }), 'unchanged');
+  assert.equal(engineInstall.windowsPathStatus({ path: { status: 'failed' } }), 'failed', 'a flattened result is still read');
+  assert.equal(engineInstall.windowsPathStatus({ ok: true }), undefined);
+  assert.equal(engineInstall.windowsPathStatus(undefined), undefined);
   assert.equal(engineInstall.parseWindowsInstallerOutput('no json here'), undefined);
   assert.equal(engineInstall.parseWindowsInstallerOutput(''), undefined);
   assert.equal(engineInstall.parseWindowsInstallerOutput('{not json'), undefined);
@@ -209,8 +223,8 @@ function freshRoot() {
   return root;
 }
 
-const RELOAD = { action: 'reload', label: 'Reload Window', command: 'workbench.action.reloadWindow', en: 'Reload the window so Kiro loads the agent.', ko: '창을 다시 로드하세요.' };
-const QUIT = { action: 'quit', label: 'Quit Kiro', command: 'workbench.action.quit', en: 'Quit Kiro and open it again.', ko: 'Kiro를 완전히 종료하고 다시 여세요.' };
+const RELOAD = { action: 'reload', label: 'Reload Window', command: 'workbench.action.reloadWindow', en: 'Reload the window so Kiro loads the agent.', ko: '창을 다시 로드하세요.', dialogEn: 'Press Reload Window below so Kiro loads the agent.', dialogKo: '아래 Reload Window를 누르세요.' };
+const QUIT = { action: 'quit', label: 'Quit Kiro', command: 'workbench.action.quit', en: 'Quit Kiro and open it again.', ko: 'Kiro를 완전히 종료하고 다시 여세요.', dialogEn: 'Press Quit Kiro below, then open Kiro again.', dialogKo: '아래 Quit Kiro를 눌러 종료한 뒤 다시 Kiro를 여세요.' };
 
 test('the completion dialog is modal, carries the engine notice, the English and the Korean, and offers the readiness action and Later', async () => {
   const root = freshRoot();
@@ -221,8 +235,8 @@ test('the completion dialog is modal, carries the engine notice, the English and
   assert.equal(done.modal, true, 'modal: a toast never renders detail');
   assert.deepEqual(done.actions, ['Reload Window', 'Later']);
   assert.match(done.options.detail, /engine notice line/);
-  assert.match(done.options.detail, /Reload the window so Kiro loads the agent\./);
-  assert.match(done.options.detail, /창을 다시 로드하세요\./);
+  assert.match(done.options.detail, /Press Reload Window below so Kiro loads the agent\./, 'the dialog phrasing names the button');
+  assert.match(done.options.detail, /아래 Reload Window를 누르세요\./);
   assert.doesNotMatch(done.options.detail, /already available in this window/);
   assert.deepEqual(result, { restart: undefined }, 'Later: no restart requested');
 });

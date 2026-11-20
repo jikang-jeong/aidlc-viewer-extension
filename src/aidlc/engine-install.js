@@ -439,9 +439,11 @@ function windowsInstallerArgs({ base, version, yes }) {
   ];
 }
 
-// The script's -Json result: the last line that parses. `path.status` is `updated`,
-// `unchanged`, `failed` or `conflict`, and says whether the command directory is on the
-// account's PATH now. Anything unparseable is reported as such, never guessed at.
+// The script's -Json result: the last line that parses. Its shape, from Write-Result in
+// install.ps1 2.11.3: `{ schemaVersion, ok, code, status, message, remediation?, data }`,
+// and the PATH outcome is `data.path.status`: `updated`, `unchanged`, `failed`,
+// `conflict`, or `skipped` (-NoModifyPath). Anything unparseable is reported as such,
+// never guessed at.
 function parseWindowsInstallerOutput(stdout) {
   const lines = String(stdout ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -453,6 +455,17 @@ function parseWindowsInstallerOutput(stdout) {
     }
   }
   return undefined;
+}
+
+// `data.path.status` from the parsed result. The first Windows run of this path read
+// `path.status` at the top level, where the script puts nothing, so every successful
+// install reported "the installer could not add the engine's command directory to your
+// PATH" and sent the person to edit PATH by hand after the script had registered it.
+// Seen on the first real Windows test, 2026-11-13. The old top-level spelling is still
+// accepted, in case a future script flattens the result.
+function windowsPathStatus(result) {
+  const status = result?.data?.path?.status ?? result?.path?.status;
+  return typeof status === 'string' ? status : undefined;
 }
 
 // Whether a process started with this PATH would find `aidlc` -- which is the question
@@ -597,7 +610,7 @@ async function installEngine({ workDir, env, onProgress, allowElevated = false }
             `The engine's installer exited without saying why (${run.error?.message ?? 'unknown'}).`
         };
       }
-      const pathStatus = result?.path?.status;
+      const pathStatus = windowsPathStatus(result);
       return {
         ok: true,
         version: release.version,
@@ -691,6 +704,7 @@ module.exports = {
   WINDOWS_INSTALLER,
   windowsInstallerArgs,
   parseWindowsInstallerOutput,
+  windowsPathStatus,
   engineResolvable,
   provenanceVerifierAvailable,
   installEngine,

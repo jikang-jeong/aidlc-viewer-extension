@@ -755,6 +755,23 @@ not a silent one. Pins: engine-install "the extension's harness ids are translat
 renamed, and the legacy CLI follows the installed engine"; install-prompts and setup-gate
 assert the new labels.
 
+**Read the installer's JSON where the installer puts it; the first Windows run proved the
+guess wrong.** install.ps1's `-Json` result is `{ schemaVersion, ok, code, status, message,
+remediation?, data }` and the PATH outcome is `data.path.status` (`updated`, `unchanged`,
+`failed`, `conflict`, `skipped`). The first cut read `path.status` at the top level, which is
+never there, so `pathStatus` was undefined, `pathCaveat` fired ("the installer could not add
+the engine's command directory to your PATH"), and `kiroReadiness` chose the manual-PATH
+wording, all on a machine where the script had just registered PATH correctly: after
+quitting and reopening Kiro, `aidlc` resolved and the project ran. Seen on the first real
+Windows test, 2026-11-13, the same afternoon the path shipped; nothing here could have
+caught it, because no test ran the script and the fixture JSON was written from memory of
+the script rather than from it. The fix reads `data.path.status` (and still accepts the
+flat spelling), and the pin uses the script's real `Write-Result` shape copied from the
+source. The lesson is the standing one about samples: a fixture of an external program's
+output is a guess until it is pasted from that program. Pin: kiro-restart "the script's
+JSON result is read from its last JSON line, and PATH status from data.path.status as the
+script writes it".
+
 **The release notes ship as CHANGELOG.md and are kept identical to the README's What's
 New by a test, not a build step.** open-vsx's Changes tab reads `CHANGELOG.md` from the
 vsix and was empty through 0.1.2 (the API's `files` had no `changelog`). The README
@@ -763,6 +780,28 @@ changelog.test.js checks same versions, same order, same text under each, newest
 `package.json`'s version, and the file is not in `.vscodeignore`. A generator was the
 alternative and was not taken: the repo has no build step and the test is enough to make
 editing one without the other fail the suite.
+
+**CI was red on both of its runs while the suite was green on every developer machine,
+for two reasons the local run could not show.** The `verify` job runs `npm test` on Node
+20 and 22. On 20 it printed `Could not find 'tests/*.test.js'`: npm hands the quoted glob
+to node unexpanded, and Node 20 does not expand globs itself (that arrived in 21). On 22
+the glob worked and two v1-isolation tests failed with `fatal: invalid object name
+'e17e4ad'`: they `git show` the 0.0.19 source to compare the strip's tag and tooltip
+phrase against it, and `actions/checkout` clones one commit deep. Locally Node 26 expands
+the glob and the clone is complete, so every release from 0.0.19 to 0.1.6 passed here
+while the badge on GitHub said failing; found on 2026-11-20 when the badge was read. Two
+fixes. The script is bare `node --test`: every supported Node finds `tests/*.test.js` by
+the runner's default patterns, nothing else in the repo matches them, and there is no
+shell or glob in between. The directory form `node --test tests/` was tried and is the
+mirror image (Node 20 searches it, Node 22 runs it as a module), so a form that works on
+one of the two is not evidence it works on the other. The verify job checks out with
+`fetch-depth: 0`, and `releasedExtensionSource` says what a missing object means instead
+of "invalid object name", which reads as a typo in the pinned hash. The lesson is the
+standing one about samples, pointed at CI: a gate that has never been green is not a gate,
+and the first thing to read when a job fails is its own log. Pins: ci-contract "the test
+script is bare node --test", "only tests/*.test.js matches the default patterns", "the
+verify job checks out the full history"; the behaviour is pinned by the matrix itself,
+since only a real Node 20 and Node 22 can show the two failures.
 
 ## Units of work
 
