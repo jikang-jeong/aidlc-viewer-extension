@@ -384,11 +384,21 @@ module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, S
 
 function releasedExtensionSource() {
   const { execFileSync } = require('child_process');
-  return execFileSync('git', ['show', `${RELEASED}:src/extension.js`], {
-    cwd: path.join(__dirname, '..'),
-    encoding: 'utf8',
-    maxBuffer: 32 * 1024 * 1024
-  });
+  try {
+    return execFileSync('git', ['show', `${RELEASED}:src/extension.js`], {
+      cwd: path.join(__dirname, '..'),
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024
+    });
+  } catch (error) {
+    // A one-commit clone (actions/checkout's default) has no object to show, and git
+    // says "invalid object name", which reads as a typo in RELEASED. It is not: the
+    // comparison needs the history, and CI's verify job checks it out in full.
+    throw new Error(
+      `git cannot show ${RELEASED} (v0.0.19) in this clone; the comparison needs the full ` +
+        `history (in CI: actions/checkout with fetch-depth: 0). ${String(error.message).trim()}`
+    );
+  }
 }
 
 function currentExtensionSource() {

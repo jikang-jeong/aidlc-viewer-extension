@@ -781,6 +781,28 @@ changelog.test.js checks same versions, same order, same text under each, newest
 alternative and was not taken: the repo has no build step and the test is enough to make
 editing one without the other fail the suite.
 
+**CI was red on both of its runs while the suite was green on every developer machine,
+for two reasons the local run could not show.** The `verify` job runs `npm test` on Node
+20 and 22. On 20 it printed `Could not find 'tests/*.test.js'`: npm hands the quoted glob
+to node unexpanded, and Node 20 does not expand globs itself (that arrived in 21). On 22
+the glob worked and two v1-isolation tests failed with `fatal: invalid object name
+'e17e4ad'`: they `git show` the 0.0.19 source to compare the strip's tag and tooltip
+phrase against it, and `actions/checkout` clones one commit deep. Locally Node 26 expands
+the glob and the clone is complete, so every release from 0.0.19 to 0.1.6 passed here
+while the badge on GitHub said failing; found on 2026-11-20 when the badge was read. Two
+fixes. The script is bare `node --test`: every supported Node finds `tests/*.test.js` by
+the runner's default patterns, nothing else in the repo matches them, and there is no
+shell or glob in between. The directory form `node --test tests/` was tried and is the
+mirror image (Node 20 searches it, Node 22 runs it as a module), so a form that works on
+one of the two is not evidence it works on the other. The verify job checks out with
+`fetch-depth: 0`, and `releasedExtensionSource` says what a missing object means instead
+of "invalid object name", which reads as a typo in the pinned hash. The lesson is the
+standing one about samples, pointed at CI: a gate that has never been green is not a gate,
+and the first thing to read when a job fails is its own log. Pins: ci-contract "the test
+script is bare node --test", "only tests/*.test.js matches the default patterns", "the
+verify job checks out the full history"; the behaviour is pinned by the matrix itself,
+since only a real Node 20 and Node 22 can show the two failures.
+
 ## Units of work
 
 `stage-graph.json` declares `for_each: "unit-of-work"` on five stages. The unit

@@ -20,6 +20,12 @@ jobs:
         node: ['20', '22']
     steps:
       - uses: actions/checkout@v4
+        with:
+          # tests/v1-isolation.test.js runs `git show e17e4ad:src/extension.js` to
+          # compare the strip's tag and tooltip phrase against the 0.0.19 release.
+          # The default one-commit checkout has no such object, and the job failed
+          # with "fatal: invalid object name" on every run until this was set.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
@@ -27,6 +33,9 @@ jobs:
       # node:test. Nothing to install, so nothing to cache.
       - name: Syntax check extension entry point
         run: npm run check
+      # `npm test` is bare `node --test`: Node 20 does not expand a quoted glob
+      # ("Could not find 'tests/*.test.js'") and Node 22 runs a directory argument
+      # as a module. Both find tests/*.test.js by the runner's default patterns.
       - name: Run tests
         run: npm test
 
