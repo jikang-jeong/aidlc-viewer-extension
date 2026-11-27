@@ -2,7 +2,7 @@
   "name": "aidlc-viewer",
   "displayName": "AIDLC-VIEWER",
   "description": "Companion tool for AWS AI-DLC. Sets the workflow up in one click, and shows where it has got to.",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "publisher": "jikjeong",
   "license": "MIT",
   "repository": {
@@ -36,6 +36,7 @@
     "onCommand:markdownWatchViewer.selectFolder",
     "onCommand:markdownWatchViewer.showHelp",
     "onCommand:markdownWatchViewer.setupRules",
+    "onCommand:markdownWatchViewer.showTraceExplorer",
     "onView:markdownWatchViewer.tree"
   ],
   "main": "./src/extension.js",
@@ -90,6 +91,12 @@
       {
         "command": "markdownWatchViewer.showWaiting",
         "title": "AI-DLC: Waiting for you"
+      },
+      {
+        "command": "markdownWatchViewer.showTraceExplorer",
+        "title": "Trace Explorer",
+        "category": "AI-DLC",
+        "icon": "$(type-hierarchy)"
       },
       {
         "command": "markdownWatchViewer.openChatToStart",
@@ -182,6 +189,10 @@
         },
         {
           "command": "markdownWatchViewer.showWaiting",
+          "when": "aidlcViewer.v2Detected"
+        },
+        {
+          "command": "markdownWatchViewer.showTraceExplorer",
           "when": "aidlcViewer.v2Detected"
         },
         {

@@ -72,6 +72,8 @@ const { readProject } = require('./aidlc/index');
 const { checkpointIndexForPath } = require('./aidlc/journey-v2');
 const { detectGeneration } = require('./aidlc/detect');
 const installCommands = require('./install-commands');
+// The Trace Explorer panel (read-only webview). Requires vscode only inside its functions.
+const traceExplorer = require('./trace-explorer-panel');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
 const OPENED_KEY = 'markdownWatchViewer.openedFiles';
@@ -122,7 +124,7 @@ function activate(context) {
     vscode.window.registerFileDecorationProvider(stageDecorationProvider),
     vscode.commands.registerCommand('markdownWatchViewer.selectFolder', () => controller.selectFolder()),
     vscode.commands.registerCommand('markdownWatchViewer.refresh', () => controller.refresh()),
-    vscode.commands.registerCommand('markdownWatchViewer.openFile', (item) => controller.openFile(item)),
+    vscode.commands.registerCommand('markdownWatchViewer.openFile', (item, options) => controller.openFile(item, options)),
     vscode.commands.registerCommand('markdownWatchViewer.openInTextEditor', (item) => controller.openInTextEditor(item)),
     vscode.commands.registerCommand('markdownWatchViewer.showHelp', () => controller.showHelp()),
     // The Credits page: what Kiro spent on this project and, on v2, what the engine is
@@ -132,6 +134,9 @@ function activate(context) {
     vscode.commands.registerCommand('markdownWatchViewer.showWaiting', () => controller.showWaiting()),
     vscode.commands.registerCommand('markdownWatchViewer.openChatToStart', (generation) => controller.openChatToStart(generation)),
     vscode.commands.registerCommand('markdownWatchViewer.showStartPage', () => controller.showStartPageForWatched()),
+    // The Trace Explorer: lineage, coverage and reviews read from the v2 project's
+    // traceability records. Read-only; the panel is a singleton and is revealed if open.
+    vscode.commands.registerCommand('markdownWatchViewer.showTraceExplorer', () => controller.showTraceExplorer()),
     // One setup button. It asks which generation, because it used to install v1
     // unconditionally and a second button for v2 beside it did not help: pressing
     // "Set up AI-DLC" still did what it had always done, and nothing said the
@@ -155,6 +160,9 @@ function activate(context) {
     vscode.window.onDidChangeWindowState((state) => {
       if (state.focused) {
         controller.scheduleRefresh();
+        // Catches edits the watchers missed (git checkout, another tool). A no-op unless
+        // the Trace Explorer is open; the panel debounces its own re-read.
+        controller.reloadTraceExplorer();
       }
     })
   );
@@ -163,7 +171,13 @@ function activate(context) {
 }
 
 function deactivate() {
-  // VS Code handles disposables registered via context.subscriptions
+  // VS Code handles disposables registered via context.subscriptions. The Trace
+  // Explorer panel is module state, not a subscription, so it is closed here.
+  try {
+    traceExplorer.dispose();
+  } catch {
+    // Already gone.
+  }
 }
 
 class WatchController {
@@ -315,6 +329,39 @@ class WatchController {
 
   showWaiting() {
     this.showPage('waiting');
+  }
+
+  // Opens (or reveals) the Trace Explorer on the watched folder. It reads v2 records
+  // only, so a folder without v2 gets the same kind of gentle message as setup does.
+  async showTraceExplorer() {
+    const root = this.treeDataProvider.rootUri;
+    if (!root) {
+      await this.promptForFolder('Open an AI-DLC project folder first, then open the Trace Explorer.');
+      return;
+    }
+    const generation = safeGeneration(root.fsPath);
+    if (generation !== 'v2' && generation !== 'both') {
+      vscode.window.showInformationMessage(
+        'The Trace Explorer reads an AI-DLC v2 project, and this folder has none yet. Set up AI-DLC v2 and run /aidlc, then open it again.'
+      );
+      return;
+    }
+    this.traceExplorerRoot = root.fsPath;
+    traceExplorer.createOrShow(this.context, { projectRoot: root.fsPath });
+  }
+
+  // A debounced re-read of the open Trace Explorer. With a uri, only events on a path
+  // the trace data is read from count; without one (window focus), any open panel
+  // re-reads. Never touches the tree: its own refresh is decided by the callers.
+  reloadTraceExplorer(uri) {
+    try {
+      if (!traceExplorer.isOpen()) return;
+      const root = this.treeDataProvider.rootUri;
+      if (uri && !(root && isTraceInputPath(root, uri))) return;
+      traceExplorer.scheduleReload('file-change');
+    } catch {
+      // The panel is optional; nothing about the tree may depend on it.
+    }
   }
 
   async restoreWatcher() {
@@ -635,6 +682,8 @@ class WatchController {
     const mdPattern = new vscode.RelativePattern(folderUri, '**/*.md');
     this.fileWatcher = vscode.workspace.createFileSystemWatcher(mdPattern);
     this.fileWatcher.onDidCreate((uri) => {
+      // Before the ignore filter: the engine keeps reviews under dot-folders in aidlc/.
+      this.reloadTraceExplorer(uri);
       if (isIgnoredEventPath(folderUri, uri)) return;
       // Track only what the tree can show. Events under `.kiro/` and friends pass the
       // filter above so the v2 reader refreshes, but marking their files NEW puts the
@@ -644,10 +693,12 @@ class WatchController {
       this.scheduleRefresh();
     });
     this.fileWatcher.onDidDelete((uri) => {
+      this.reloadTraceExplorer(uri);
       if (isIgnoredEventPath(folderUri, uri)) return;
       this.scheduleRefresh();
     });
     this.fileWatcher.onDidChange((uri) => {
+      this.reloadTraceExplorer(uri);
       if (isIgnoredEventPath(folderUri, uri)) return;
       this.scheduleRefresh();
       this.notifyOpenPreview(uri);
@@ -657,13 +708,34 @@ class WatchController {
     const dirPattern = new vscode.RelativePattern(folderUri, '**');
     this.dirWatcher = vscode.workspace.createFileSystemWatcher(dirPattern, false, true, false);
     this.dirWatcher.onDidCreate((uri) => {
+      this.reloadTraceExplorer(uri);
       if (isIgnoredEventPath(folderUri, uri)) return;
       this.scheduleRefresh();
     });
     this.dirWatcher.onDidDelete((uri) => {
+      this.reloadTraceExplorer(uri);
       if (isIgnoredEventPath(folderUri, uri)) return;
       this.scheduleRefresh();
     });
+
+    // The Trace Explorer also reads JSON (traceability.json, runtime-graph.json, engine
+    // review records), whose edits the .md watcher does not see; create/delete already
+    // arrive through dirWatcher. Changes only, under aidlc/ only, and they re-read the
+    // panel alone: the tree does not show JSON, so its refresh rate is unchanged.
+    const traceJsonPattern = new vscode.RelativePattern(folderUri, 'aidlc/**/*.json');
+    this.traceJsonWatcher = vscode.workspace.createFileSystemWatcher(traceJsonPattern, true, false, true);
+    this.traceJsonWatcher.onDidChange((uri) => this.reloadTraceExplorer(uri));
+
+    // An open Trace Explorer follows the watched folder: a different folder closes it
+    // rather than leaving it showing a project the viewer no longer watches.
+    if (this.traceExplorerRoot && !samePath(this.traceExplorerRoot, folderUri.fsPath)) {
+      this.traceExplorerRoot = undefined;
+      try {
+        traceExplorer.dispose();
+      } catch {
+        // Already gone.
+      }
+    }
 
     // Polling fallback: catches external changes (Finder, git, CLI scripts) even if native watchers miss events
     if (this.pollTimer) clearInterval(this.pollTimer);
@@ -778,10 +850,17 @@ class WatchController {
     this.treeDataProvider.refresh();
   }
 
-  async openFile(item) {
+  // options is optional and only the Trace Explorer passes it: { viewColumn: 'beside'
+  // (or vscode.ViewColumn.Beside), line: 1-based source line }. Tree clicks pass none and
+  // keep ViewColumn.One, exactly as before.
+  async openFile(item, options) {
     if (!item || item.type !== 'file') {
       return;
     }
+    const opts = options && typeof options === 'object' ? options : {};
+    const beside = opts.viewColumn === 'beside' || opts.viewColumn === vscode.ViewColumn.Beside;
+    const column = beside ? vscode.ViewColumn.Beside : vscode.ViewColumn.One;
+    const line = Number.isInteger(opts.line) && opts.line >= 1 ? opts.line : undefined;
 
     await this.markFileOpened(item.resourceUri);
 
@@ -794,7 +873,9 @@ class WatchController {
     let panel = this.previewPanels.get(key);
 
     if (panel) {
-      panel.reveal(vscode.ViewColumn.One);
+      if (beside) panel.reveal(column, false);
+      else panel.reveal(vscode.ViewColumn.One);
+      if (line) panel.webview.postMessage({ type: 'scrollToLine', line });
       return;
     }
 
@@ -802,7 +883,7 @@ class WatchController {
     panel = vscode.window.createWebviewPanel(
       'markdownWatchViewer.editor',
       path.basename(item.resourceUri.fsPath),
-      vscode.ViewColumn.One,
+      beside ? { viewColumn: column, preserveFocus: false } : vscode.ViewColumn.One,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
@@ -826,7 +907,7 @@ class WatchController {
       }
     });
 
-    await this.updatePreview(panel, item.resourceUri);
+    await this.updatePreview(panel, item.resourceUri, line);
   }
 
   // Context-menu alternative to the custom split viewer: open the file in a
@@ -856,13 +937,14 @@ class WatchController {
     });
   }
 
-  async updatePreview(panel, fileUri) {
+  // line: only for a panel being created, which scrolls to it once rendered.
+  async updatePreview(panel, fileUri, line) {
     const bytes = await vscode.workspace.fs.readFile(fileUri);
     const content = Buffer.from(bytes).toString('utf8');
     const journey = await this.getJourneyPayload(fileUri);
     panel.title = path.basename(fileUri.fsPath);
     if (!panel.webview.html) {
-      panel.webview.html = getWebviewHtml(panel.webview, fileUri, content, this.context.extensionUri, journey);
+      panel.webview.html = getWebviewHtml(panel.webview, fileUri, content, this.context.extensionUri, journey, line);
     } else {
       panel.webview.postMessage({ type: 'setContent', content, path: fileUri.fsPath });
       panel.webview.postMessage({ type: 'setJourney', journey });
@@ -988,6 +1070,10 @@ class WatchController {
     if (this.dirWatcher) {
       this.dirWatcher.dispose();
       this.dirWatcher = undefined;
+    }
+    if (this.traceJsonWatcher) {
+      this.traceJsonWatcher.dispose();
+      this.traceJsonWatcher = undefined;
     }
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
@@ -1179,6 +1265,7 @@ class MarkdownTreeDataProvider {
         new ProgressItem(stageSummary),
         ...(isV2 ? [new WaitingItem(waiting)] : []),
         new CreditsItem(),
+        ...(isV2 ? [new TraceExplorerItem()] : []),
         ...entries
       ];
     }
@@ -1600,6 +1687,18 @@ class CreditsItem extends vscode.TreeItem {
     this.command = { command: 'markdownWatchViewer.showCredits', title: `Open the ${PAGE_TITLE.credits} page` };
     this.description = 'credits Kiro spent, by stage and session';
     this.tooltip = 'What Kiro spent on this project: total, the share that bought nothing, by stage, by session, and every turn.';
+  }
+}
+
+// v2 only: the Trace Explorer reads the engine's traceability records, which v1 has not.
+class TraceExplorerItem extends vscode.TreeItem {
+  constructor() {
+    super('Trace Explorer', vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'traceExplorer';
+    this.iconPath = new vscode.ThemeIcon('type-hierarchy', new vscode.ThemeColor('charts.blue'));
+    this.command = { command: 'markdownWatchViewer.showTraceExplorer', title: 'Open the Trace Explorer' };
+    this.description = 'requirements to code, coverage, reviews';
+    this.tooltip = 'Follow each requirement through stories, design, code and tests; see what is covered, and every review verdict and rework.';
   }
 }
 
@@ -2412,6 +2511,17 @@ function isVisibleInTree(rootUri, uri) {
   );
 }
 
+// Whether a watcher event is on a path the Trace Explorer reads: under aidlc/ (the
+// intent's records, including its .aidlc-engine/ reviews) or .kiro/ (stage specs),
+// and never inside node_modules or .git.
+function isTraceInputPath(rootUri, uri) {
+  const rel = path.relative(rootUri.fsPath, uri.fsPath);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  const segments = rel.split(path.sep);
+  if (segments[0] !== 'aidlc' && segments[0] !== '.kiro') return false;
+  return !segments.some((segment) => segment === 'node_modules' || segment === '.git');
+}
+
 // Watcher events under skipped directories (.git, node_modules, ...) would only
 // trigger refreshes for paths the tree never shows, so drop them early. Uses the
 // same shouldSkipDirectory() rules as tree rendering to stay consistent.
@@ -2466,7 +2576,7 @@ function getNonce() {
   return text;
 }
 
-function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
+function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey, initialLine) {
   // JSON.stringify leaves "</script>" intact, and inside an inline <script> that ends
   // the script wherever the document happens to mention one -- the rest of the file
   // renders as text and the viewer never starts. Found by a test fixture, not by a
@@ -2475,6 +2585,7 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
   // the HTML tokenizer.
   const safeInitialValue = JSON.stringify(markdown).replace(/</g, '\\u003c');
   const safeJourney = JSON.stringify(journey || null).replace(/</g, '\\u003c');
+  const safeInitialLine = Number.isInteger(initialLine) && initialLine >= 1 ? initialLine : 0;
   const title = escapeHtml(fileUri.fsPath);
   const mermaidUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
   const markdownItUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'markdown-it.min.js'));
@@ -3057,6 +3168,10 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         renderMarkdown(initialValue);
       }
       syncActionVisibility();
+      // Opened at a line (a Trace Explorer link). Scrolled now, and once more after the
+      // mermaid pass below, since rendered diagrams change the height above the line.
+      let pendingSourceLine = ${safeInitialLine};
+      if (pendingSourceLine) { const first = pendingSourceLine; requestAnimationFrame(() => scrollToSourceLine(first)); }
 
       let renderTimer;
       function scheduleRender(text) {
@@ -3317,6 +3432,10 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
           renderJourney();
           return;
         }
+        if (msg.type === 'scrollToLine') {
+          if (Number.isInteger(msg.line) && msg.line >= 1) scrollToSourceLine(msg.line);
+          return;
+        }
         if (msg.type === 'setContent') {
           const incoming = msg.content || '';
           if (incoming === editor.value) return;
@@ -3542,7 +3661,22 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       // what put Edit on different text. setMode keeps the place by text instead.
 
       function renderMarkdown(source) {
-        preview.innerHTML = markdownToHtml(source);
+        preview.innerHTML = markdownToHtml(source, { sourceLines: true });
+      }
+
+      // The last block that starts at or before the line: blocks carry
+      // data-source-line in document order, which is source order. Read mode only;
+      // a person editing keeps their place.
+      function scrollToSourceLine(line) {
+        if (!(line >= 1) || document.body.classList.contains('editing')) return;
+        let target = null;
+        for (const el of preview.querySelectorAll('[data-source-line]')) {
+          if (Number(el.getAttribute('data-source-line')) <= line) target = el;
+          else break;
+        }
+        if (!target) return;
+        const top = target.getBoundingClientRect().top - previewScroll.getBoundingClientRect().top;
+        previewScroll.scrollTop = Math.max(0, previewScroll.scrollTop + top - 16);
       }
 
       function isDirty() {
@@ -3584,6 +3718,20 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
           }
           return defaultFence(tokens, idx, options, env, self);
         };
+        // Source-line markers, for opening at a line. Only when asked (env.sourceLines),
+        // so every other render is unchanged. lineMap undoes the lines liftComments
+        // folded into one, so the numbers are the file's.
+        md.core.ruler.push('source_lines', (state) => {
+          const env = state.env || {};
+          if (!env.sourceLines) return;
+          for (const token of state.tokens) {
+            if (!token.map || !token.block || token.nesting < 0 || token.type === 'inline') continue;
+            // Rows and cells stay bare: the table itself is the target.
+            if (/^(thead|tbody|tr|th|td)_/.test(token.type)) continue;
+            const mapped = env.lineMap ? env.lineMap[token.map[0]] : undefined;
+            token.attrSet('data-source-line', String((mapped === undefined ? token.map[0] : mapped) + 1));
+          }
+        });
         markdownRenderer.md = md;
         return md;
       }
@@ -3603,7 +3751,11 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
         // A comment that opened on an earlier line and has not closed: its lines are
         // appended to it, so a multi-line comment is one dimmed span.
         let open = -1;
-        for (const line of source.split('\\n')) {
+        // lineMap[i]: the source line that output line i starts on.
+        const lineMap = [];
+        const sourceLines = source.split('\\n');
+        for (let lineNo = 0; lineNo < sourceLines.length; lineNo += 1) {
+          const line = sourceLines[lineNo];
           if (open >= 0) {
             const close = line.indexOf('-->');
             if (close < 0) { comments[open] += '\\n' + line; continue; }
@@ -3611,10 +3763,11 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
             const rest = line.slice(close + 3);
             open = -1;
             out.push(COMMENT_MARK + 'c' + (comments.length - 1) + COMMENT_MARK + rest);
+            lineMap.push(lineNo);
             continue;
           }
           if (/^\\s{0,3}(\`\`\`|~~~)/.test(line)) inFence = !inFence;
-          if (inFence) { out.push(line); continue; }
+          if (inFence) { out.push(line); lineMap.push(lineNo); continue; }
           // Protect code spans on the line, then lift comments from what is left.
           const spans = [];
           let text = line.replace(/\`[^\`\\n]+\`/g, (m) => { spans.push(m); return COMMENT_MARK + 's' + (spans.length - 1) + COMMENT_MARK; });
@@ -3627,14 +3780,17 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
           }
           text = text.replace(new RegExp(COMMENT_MARK + 's(\\\\d+)' + COMMENT_MARK, 'g'), (_, i) => spans[+i]);
           out.push(text);
+          lineMap.push(lineNo);
         }
-        return { text: out.join('\\n'), comments };
+        return { text: out.join('\\n'), comments, lineMap };
       }
 
-      function markdownToHtml(source) {
+      // options.sourceLines: mark block elements with data-source-line (1-based).
+      function markdownToHtml(source, options) {
         const COMMENT_MARK = '\\uE000';
-        const { text, comments } = liftComments(source);
-        let html = markdownRenderer().render(text);
+        const { text, comments, lineMap } = liftComments(source);
+        const env = options && options.sourceLines ? { sourceLines: true, lineMap } : {};
+        let html = markdownRenderer().render(text, env);
         html = html.replace(new RegExp(COMMENT_MARK + 'c(\\\\d+)' + COMMENT_MARK, 'g'), (_, i) => {
           return '<span class="md-comment">&lt;!--' + escapeHtml(comments[+i]) + '--&gt;</span>';
         });
@@ -3656,13 +3812,21 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey) {
       // encode those tags and visibly change existing diagrams.
       mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'antiscript' });
       function renderMermaidBlocks() {
-        document.querySelectorAll('pre.mermaid').forEach(async (el, idx) => {
+        const done = Array.from(document.querySelectorAll('pre.mermaid')).map(async (el, idx) => {
           const code = el.textContent;
           try {
             const { svg } = await mermaid.render('mermaid-' + Date.now() + '-' + idx, code);
             el.outerHTML = '<div class="mermaid-rendered">' + svg + '</div>';
           } catch (e) {
             el.classList.add('mermaid-error');
+          }
+        });
+        // The opening line is scrolled to once more when the diagrams have their size.
+        Promise.all(done).then(() => {
+          if (pendingSourceLine) {
+            const line = pendingSourceLine;
+            pendingSourceLine = 0;
+            if (done.length) scrollToSourceLine(line);
           }
         });
       }

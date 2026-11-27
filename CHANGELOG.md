@@ -3,6 +3,22 @@
 The same notes as the README's What's New section, kept identical by a test
 (tests/changelog.test.js). Edit both, or the suite fails. Newest first.
 
+## 0.2.0
+
+- **Trace Explorer (v2): follow every requirement to the code and tests that answer it.**
+  A new **Trace Explorer** row in the tree, next to Usage, and the command
+  `AI-DLC: Trace Explorer`, open one panel with four tabs. **Trace** picks any item
+  (requirement, story, acceptance criterion, business rule, component, unit, code file or
+  test) and draws its lineage upstream and downstream, with the record each link came from.
+  **Coverage** is the traceability matrix: which requirements reach code and tests, and
+  which stop short. **Reviews & rework** lists every review verdict the engine recorded, in
+  order, the open findings at approval, and, when the engine jumped back for rework, which
+  files it invalidated. **About** says where the data was read from and
+  what was left out because no record supports it. Everything is read from the engine's
+  own files (`traceability.json`, `runtime-graph.json`, its review records) and nothing is
+  guessed; the source paths it shows open in the editor. The panel follows the project
+  as the engine writes, and never writes anything itself.
+
 ## 0.1.6
 
 - **Windows: the completion dialog no longer claims PATH was not registered.** On the first

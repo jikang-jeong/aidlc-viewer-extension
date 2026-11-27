@@ -1,0 +1,4420 @@
+{
+ "meta": {
+  "intent": "260825-inventory-api",
+  "generated": "2026-11-17",
+  "generator": "",
+  "sources": [
+   "aidlc/spaces/default/intents/260825-inventory-api/**/traceability.json (8 files)",
+   "user-stories/stories.md",
+   "functional-design/rules.md",
+   "nfr-requirements/*-requirements.md",
+   "build-and-test/test-results.md (verdicts)",
+   "repo file listing (test files)"
+  ],
+  "derived_edge_rules": [
+   "US -> AC from the ID convention ACx.y.z belongs to USx.y",
+   "code -> test from the file-name convention x.ts -> x.test.ts / x.int.test.ts"
+  ]
+ },
+ "repo": "",
+ "nodes": [
+  {
+   "id": "FR1.1",
+   "type": "functional_requirement",
+   "label": "The system shall create an inventory item from a request carrying a client-supplied SKU, name, description, and initial quantity.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q1",
+     "stage": "requirements-analysis",
+     "q": "Item data model: what fields define an inventory item?",
+     "a": "B. Minimal + description - SKU, name, description, quantity. (Simplest shape that still supports useful CRUD for a very simple API; price/category/reorder metadata deferred.)"
+    },
+    {
+     "ref": "Q2",
+     "stage": "requirements-analysis",
+     "q": "SKU ownership: who assigns the item's unique identifier?",
+     "a": "A. Client-supplied SKU is the unique identifier; the API rejects duplicates on create. (Keeps the model simple - one identifier, no separate generated id.)"
+    }
+   ],
+   "text": "The system shall create an inventory item from a request carrying a client-supplied SKU, name, description, and initial quantity.",
+   "rework": false
+  },
+  {
+   "id": "FR1.2",
+   "type": "functional_requirement",
+   "label": "The system shall reject creation when the SKU already exists, returning a conflict domain error (4xx) and creating no item.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q2",
+     "stage": "requirements-analysis",
+     "q": "SKU ownership: who assigns the item's unique identifier?",
+     "a": "A. Client-supplied SKU is the unique identifier; the API rejects duplicates on create. (Keeps the model simple - one identifier, no separate generated id.)"
+    }
+   ],
+   "text": "The system shall reject creation when the SKU already exists, returning a conflict domain error (4xx) and creating no item.",
+   "rework": false
+  },
+  {
+   "id": "FR1.3",
+   "type": "functional_requirement",
+   "label": "The system shall retrieve a single item by its SKU, returning the item's current fields; a request for an unknown SKU returns a not-found domain error (4xx).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q1",
+     "stage": "requirements-analysis",
+     "q": "Item data model: what fields define an inventory item?",
+     "a": "B. Minimal + description - SKU, name, description, quantity. (Simplest shape that still supports useful CRUD for a very simple API; price/category/reorder metadata deferred.)"
+    },
+    {
+     "ref": "Q6",
+     "stage": "requirements-analysis",
+     "q": "Listing items: what does the \"read\" side of CRUD need beyond fetch-by-id?",
+     "a": "A. Get-by-id plus a list-all endpoint with pagination; no filtering/sorting in the MVP. (Pagination is the completeness-checklist default for list views; filtering deferred to keep it simple.)"
+    }
+   ],
+   "text": "The system shall retrieve a single item by its SKU, returning the item's current fields; a request for an unknown SKU returns a not-found domain error (4xx).",
+   "rework": false
+  },
+  {
+   "id": "FR1.4",
+   "type": "functional_requirement",
+   "label": "The system shall list items with pagination (page/limit or cursor-style), returning a bounded page plus the information needed to request the next page.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q6",
+     "stage": "requirements-analysis",
+     "q": "Listing items: what does the \"read\" side of CRUD need beyond fetch-by-id?",
+     "a": "A. Get-by-id plus a list-all endpoint with pagination; no filtering/sorting in the MVP. (Pagination is the completeness-checklist default for list views; filtering deferred to keep it simple.)"
+    }
+   ],
+   "text": "The system shall list items with pagination (page/limit or cursor-style), returning a bounded page plus the information needed to request the next page.",
+   "rework": false
+  },
+  {
+   "id": "FR1.5",
+   "type": "functional_requirement",
+   "label": "The system shall update an existing item's mutable descriptive fields (name, description) by SKU; an update to an unknown SKU returns a not-found domain error (4xx).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q1",
+     "stage": "requirements-analysis",
+     "q": "Item data model: what fields define an inventory item?",
+     "a": "B. Minimal + description - SKU, name, description, quantity. (Simplest shape that still supports useful CRUD for a very simple API; price/category/reorder metadata deferred.)"
+    },
+    {
+     "ref": "Q6",
+     "stage": "requirements-analysis",
+     "q": "Listing items: what does the \"read\" side of CRUD need beyond fetch-by-id?",
+     "a": "A. Get-by-id plus a list-all endpoint with pagination; no filtering/sorting in the MVP. (Pagination is the completeness-checklist default for list views; filtering deferred to keep it simple.)"
+    }
+   ],
+   "text": "The system shall update an existing item's mutable descriptive fields (name, description) by SKU; an update to an unknown SKU returns a not-found domain error (4xx).",
+   "rework": false
+  },
+  {
+   "id": "FR1.6",
+   "type": "functional_requirement",
+   "label": "The system shall hard-delete an item by SKU; after deletion a read of that SKU returns a not-found domain error (4xx).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q7",
+     "stage": "requirements-analysis",
+     "q": "Delete semantics for items",
+     "a": "A. Hard delete - the item record is removed and subsequent reads return not-found. (Simplest delete semantics; soft-delete/archival and movement history are explicitly out of scope.)"
+    }
+   ],
+   "text": "The system shall hard-delete an item by SKU; after deletion a read of that SKU returns a not-found domain error (4xx).",
+   "rework": false
+  },
+  {
+   "id": "FR2.1",
+   "type": "functional_requirement",
+   "label": "The system shall apply a stock adjustment expressed as a signed relative delta (e.g. +10, -3) to an item identified by SKU, updating the item's quantity atomically.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q3",
+     "stage": "requirements-analysis",
+     "q": "Stock adjustment semantics: how do callers change quantity?",
+     "a": "A. Relative delta only - callers send a signed delta (+/-) applied atomically; no direct absolute-set path. (Matches the concurrency-safe adjustment Must and keeps the surface minimal.)"
+    },
+    {
+     "ref": "scope-document",
+     "stage": "upstream artifact"
+    }
+   ],
+   "text": "The system shall apply a stock adjustment expressed as a signed relative delta (e.g. +10, -3) to an item identified by SKU, updating the item's quantity atomically.",
+   "rework": false
+  },
+  {
+   "id": "FR2.2",
+   "type": "functional_requirement",
+   "label": "The system shall apply concurrent adjustments to the same item without lost updates: given N concurrent adjustments, the resulting quantity equals the initial quantity plus the sum of all successfully applied deltas.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q3",
+     "stage": "requirements-analysis",
+     "q": "Stock adjustment semantics: how do callers change quantity?",
+     "a": "A. Relative delta only - callers send a signed delta (+/-) applied atomically; no direct absolute-set path. (Matches the concurrency-safe adjustment Must and keeps the surface minimal.)"
+    },
+    {
+     "ref": "team-practices",
+     "stage": "upstream artifact"
+    }
+   ],
+   "text": "The system shall apply concurrent adjustments to the same item without lost updates: given N concurrent adjustments, the resulting quantity equals the initial quantity plus the sum of all successfully applied deltas.",
+   "rework": false
+  },
+  {
+   "id": "FR2.3",
+   "type": "functional_requirement",
+   "label": "The system shall reject an adjustment that would drive quantity below zero, returning an InsufficientStock domain error (4xx) and leaving the stored quantity unchanged.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q4",
+     "stage": "requirements-analysis",
+     "q": "Negative stock: what happens when a decrement would drop quantity below zero?",
+     "a": "A. Reject - a decrement that would drop below zero fails with an InsufficientStock domain error (4xx) and leaves quantity unchanged. (Aligns with the typed-error envelope in team code-style practices; no backorders in the MVP.)"
+    }
+   ],
+   "text": "The system shall reject an adjustment that would drive quantity below zero, returning an InsufficientStock domain error (4xx) and leaving the stored quantity unchanged.",
+   "rework": false
+  },
+  {
+   "id": "FR2.4",
+   "type": "functional_requirement",
+   "label": "The system shall reject an adjustment targeting an unknown SKU with a not-found domain error (4xx).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q3",
+     "stage": "requirements-analysis",
+     "q": "Stock adjustment semantics: how do callers change quantity?",
+     "a": "A. Relative delta only - callers send a signed delta (+/-) applied atomically; no direct absolute-set path. (Matches the concurrency-safe adjustment Must and keeps the surface minimal.)"
+    },
+    {
+     "ref": "Q6",
+     "stage": "requirements-analysis",
+     "q": "Listing items: what does the \"read\" side of CRUD need beyond fetch-by-id?",
+     "a": "A. Get-by-id plus a list-all endpoint with pagination; no filtering/sorting in the MVP. (Pagination is the completeness-checklist default for list views; filtering deferred to keep it simple.)"
+    }
+   ],
+   "text": "The system shall reject an adjustment targeting an unknown SKU with a not-found domain error (4xx).",
+   "rework": false
+  },
+  {
+   "id": "FR2.5",
+   "type": "functional_requirement",
+   "label": "After a successful adjustment, any subsequent read of that item shall reflect the new quantity (read-after-write consistency).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "Q5",
+     "stage": "requirements-analysis",
+     "q": "\"Accurate, real-time stock levels\": what measurable target makes this testable?",
+     "a": "A. Strict read-after-write consistency - any read after a successful adjustment reflects it immediately; correctness is the pass/fail bar, no separate latency target. Performance/load testing stays deferred per team practice."
+    }
+   ],
+   "text": "After a successful adjustment, any subsequent read of that item shall reflect the new quantity (read-after-write consistency).",
+   "rework": false
+  },
+  {
+   "id": "FR3.1",
+   "type": "functional_requirement",
+   "label": "The system shall return a single consistent JSON error envelope for all failures - a machine-readable code, a human-readable message, optional field detail, and a request id.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "team-practices",
+     "stage": "upstream artifact"
+    }
+   ],
+   "text": "The system shall return a single consistent JSON error envelope for all failures - a machine-readable code, a human-readable message, optional field detail, and a request id.",
+   "rework": false
+  },
+  {
+   "id": "FR3.2",
+   "type": "functional_requirement",
+   "label": "The system shall map typed domain errors to HTTP status: expected domain failures (ItemNotFound, InsufficientStock, duplicate-SKU conflict) to 4xx; unexpected failures to 5xx, logged.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "Covered",
+   "why": [
+    {
+     "ref": "team-practices",
+     "stage": "upstream artifact"
+    }
+   ],
+   "text": "The system shall map typed domain errors to HTTP status: expected domain failures (ItemNotFound, InsufficientStock, duplicate-SKU conflict) to 4xx; unexpected failures to 5xx, logged.",
+   "rework": false
+  },
+  {
+   "id": "NFR1",
+   "type": "nfr",
+   "label": "Correctness/consistency",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "See sub-NFRs",
+   "why": [
+    {
+     "ref": "Q5",
+     "stage": "requirements-analysis",
+     "q": "\"Accurate, real-time stock levels\": what measurable target makes this testable?",
+     "a": "A. Strict read-after-write consistency - any read after a successful adjustment reflects it immediately; correctness is the pass/fail bar, no separate latency target. Performance/load testing stays deferred per team practice."
+    },
+    {
+     "ref": "team-practices",
+     "stage": "upstream artifact"
+    }
+   ],
+   "text": "Correctness/consistency",
+   "rework": false
+  },
+  {
+   "id": "NFR2",
+   "type": "nfr",
+   "label": "Input validation",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "See sub-NFRs",
+   "why": [
+    {
+     "ref": "Q9",
+     "stage": "requirements-analysis",
+     "q": "Beyond correctness, which non-functional concerns should carry a stated requirement in the MVP?",
+     "a": "B. Observability (structured logging + health-check endpoint) plus input validation/sanitization at the API boundary stated as a verifiable NFR. (Low-cost, aligns with the project boundary-validation mandate; OpenAPI contract and broader NFRs deferred to the NFR stages.)"
+    },
+    {
+     "ref": "team-practices",
+     "stage": "upstream artifact"
+    }
+   ],
+   "text": "Input validation",
+   "rework": false
+  },
+  {
+   "id": "NFR3",
+   "type": "nfr",
+   "label": "Observability",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "See sub-NFRs",
+   "why": [
+    {
+     "ref": "Q9",
+     "stage": "requirements-analysis",
+     "q": "Beyond correctness, which non-functional concerns should carry a stated requirement in the MVP?",
+     "a": "B. Observability (structured logging + health-check endpoint) plus input validation/sanitization at the API boundary stated as a verifiable NFR. (Low-cost, aligns with the project boundary-validation mandate; OpenAPI contract and broader NFRs deferred to the NFR stages.)"
+    }
+   ],
+   "text": "Observability",
+   "rework": false
+  },
+  {
+   "id": "NFR4",
+   "type": "nfr",
+   "label": "No hardcoded secrets",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md",
+   "verdict": "See sub-NFRs",
+   "why": [
+    {
+     "ref": "team-practices",
+     "stage": "upstream artifact"
+    }
+   ],
+   "text": "No hardcoded secrets",
+   "rework": false
+  },
+  {
+   "id": "NFR3.2",
+   "type": "nfr_detail",
+   "label": "Every request emits exactly one structured (JSON) log entry on completion.",
+   "category": "observability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/observability-requirements.md",
+   "text": "Every request emits exactly one structured (JSON) log entry on completion.",
+   "rework": false
+  },
+  {
+   "id": "NFR3.3",
+   "type": "nfr_detail",
+   "label": "requestId correlates the log entry with the response error envelope.",
+   "category": "observability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/observability-requirements.md",
+   "text": "requestId correlates the log entry with the response error envelope.",
+   "rework": false
+  },
+  {
+   "id": "NFR3.4",
+   "type": "nfr_detail",
+   "label": "No sensitive data in logs.",
+   "category": "observability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/observability-requirements.md",
+   "text": "No sensitive data in logs.",
+   "rework": false
+  },
+  {
+   "id": "NFR3.5",
+   "type": "nfr_detail",
+   "label": "Health-check endpoint for observability/probes.",
+   "category": "observability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/observability-requirements.md",
+   "text": "Health-check endpoint for observability/probes.",
+   "rework": false
+  },
+  {
+   "id": "NFR3.6",
+   "type": "nfr_detail",
+   "label": "Basic error-rate alerting.",
+   "category": "observability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/observability-requirements.md",
+   "text": "Basic error-rate alerting.",
+   "rework": false
+  },
+  {
+   "id": "NFR3.7",
+   "type": "nfr_detail",
+   "label": "Logs shipped to centralized, queryable storage.",
+   "category": "observability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/observability-requirements.md",
+   "text": "Logs shipped to centralized, queryable storage.",
+   "rework": false
+  },
+  {
+   "id": "NFR3.8",
+   "type": "nfr_detail",
+   "label": "Metrics baseline (request count, error rate, p95 latency as emitted metrics).",
+   "category": "observability",
+   "verdict": "Deferred",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/observability-requirements.md",
+   "text": "Metrics baseline (request count, error rate, p95 latency as emitted metrics).",
+   "rework": false
+  },
+  {
+   "id": "NFR3.9",
+   "type": "nfr_detail",
+   "label": "Distributed tracing (W3C trace context propagation).",
+   "category": "observability",
+   "verdict": "Deferred",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/observability-requirements.md",
+   "text": "Distributed tracing (W3C trace context propagation).",
+   "rework": false
+  },
+  {
+   "id": "NFR1.1",
+   "type": "nfr_detail",
+   "label": "Read-after-write timing: after a successful adjustment (WF6) or create/update, a subsequent read of the same SKU reflects the change with no staleness window.",
+   "category": "performance",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/performance-requirements.md",
+   "text": "Read-after-write timing: after a successful adjustment (WF6) or create/update, a subsequent read of the same SKU reflects the change with no staleness window.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.2",
+   "type": "nfr_detail",
+   "label": "Adjustment path is logically atomic (single-item conditional update + bounded internal retry); the retry budget must not materially inflate perceived latency under normal (non-pathological) contention.",
+   "category": "performance",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/performance-requirements.md",
+   "text": "Adjustment path is logically atomic (single-item conditional update + bounded internal retry); the retry budget must not materially inflate perceived latency under normal (non-pathological) contention.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.3",
+   "type": "nfr_detail",
+   "label": "Per-request latency is measured and logged (latencyMs on every structured log entry, BR5.1) even though no latency SLO is set - so a target can be derived from real data later.",
+   "category": "performance",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/performance-requirements.md",
+   "text": "Per-request latency is measured and logged (latencyMs on every structured log entry, BR5.1) even though no latency SLO is set - so a target can be derived from real data later.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.4",
+   "type": "nfr_detail",
+   "label": "List endpoint cost is bounded by pagination (limit <= 100, default 20); no unbounded scans.",
+   "category": "performance",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/performance-requirements.md",
+   "text": "List endpoint cost is bounded by pagination (limit <= 100, default 20); no unbounded scans.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.5",
+   "type": "nfr_detail",
+   "label": "Response-time / throughput SLO (e.g. p95/p99 latency, target RPS).",
+   "category": "performance",
+   "verdict": "Deferred",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/performance-requirements.md",
+   "text": "Response-time / throughput SLO (e.g. p95/p99 latency, target RPS).",
+   "rework": false
+  },
+  {
+   "id": "NFR1.11",
+   "type": "nfr_detail",
+   "label": "Service availability SLO.",
+   "category": "reliability",
+   "verdict": "Unverified (needs production traffic)",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/reliability-requirements.md",
+   "text": "Service availability SLO.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.12",
+   "type": "nfr_detail",
+   "label": "Correctness under failure takes precedence over availability.",
+   "category": "reliability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/reliability-requirements.md",
+   "text": "Correctness under failure takes precedence over availability.",
+   "rework": false
+  },
+  {
+   "id": "NFR3.1",
+   "type": "nfr_detail",
+   "label": "Health-check endpoint for readiness/liveness probes.",
+   "category": "reliability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/reliability-requirements.md",
+   "text": "Health-check endpoint for readiness/liveness probes.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.13",
+   "type": "nfr_detail",
+   "label": "Fault tolerance via stateless auto-restart.",
+   "category": "reliability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/reliability-requirements.md",
+   "text": "Fault tolerance via stateless auto-restart.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.14",
+   "type": "nfr_detail",
+   "label": "Data durability.",
+   "category": "reliability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/reliability-requirements.md",
+   "text": "Data durability.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.15",
+   "type": "nfr_detail",
+   "label": "Graceful failure.",
+   "category": "reliability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/reliability-requirements.md",
+   "text": "Graceful failure.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.16",
+   "type": "nfr_detail",
+   "label": "Recovery objectives (RTO/RPO/MTTR as numeric targets).",
+   "category": "reliability",
+   "verdict": "Deferred",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/reliability-requirements.md",
+   "text": "Recovery objectives (RTO/RPO/MTTR as numeric targets).",
+   "rework": false
+  },
+  {
+   "id": "NFR1.6",
+   "type": "nfr_detail",
+   "label": "The service is stateless and scales horizontally.",
+   "category": "scalability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/scalability-requirements.md",
+   "text": "The service is stateless and scales horizontally.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.7",
+   "type": "nfr_detail",
+   "label": "Per-item concurrency is handled at the datastore, not by application coordination.",
+   "category": "scalability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/scalability-requirements.md",
+   "text": "Per-item concurrency is handled at the datastore, not by application coordination.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.8",
+   "type": "nfr_detail",
+   "label": "No hot-partition / data-skew concern at MVP scale.",
+   "category": "scalability",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/scalability-requirements.md",
+   "text": "No hot-partition / data-skew concern at MVP scale.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.9",
+   "type": "nfr_detail",
+   "label": "List operations are bounded and do not scale cost with total item count per request.",
+   "category": "scalability",
+   "verdict": "Not met (accepted)",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/scalability-requirements.md",
+   "text": "List operations are bounded and do not scale cost with total item count per request.",
+   "rework": false
+  },
+  {
+   "id": "NFR1.10",
+   "type": "nfr_detail",
+   "label": "Concrete capacity targets (RPS, item-count projections, growth model, cost-at-scale).",
+   "category": "scalability",
+   "verdict": "Deferred",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/scalability-requirements.md",
+   "text": "Concrete capacity targets (RPS, item-count projections, growth model, cost-at-scale).",
+   "rework": false
+  },
+  {
+   "id": "NFR2.1",
+   "type": "nfr_detail",
+   "label": "Validate and sanitize ALL inputs at the API boundary before any domain or datastore logic.",
+   "category": "security",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "text": "Validate and sanitize ALL inputs at the API boundary before any domain or datastore logic.",
+   "rework": false
+  },
+  {
+   "id": "NFR2.2",
+   "type": "nfr_detail",
+   "label": "Error responses leak no internal detail.",
+   "category": "security",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "text": "Error responses leak no internal detail.",
+   "rework": false
+  },
+  {
+   "id": "NFR4.1",
+   "type": "nfr_detail",
+   "label": "No configuration secret is hardcoded.",
+   "category": "security",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "text": "No configuration secret is hardcoded.",
+   "rework": false
+  },
+  {
+   "id": "NFR4.2",
+   "type": "nfr_detail",
+   "label": "Secret scanning and dependency scanning enforced in CI.",
+   "category": "security",
+   "verdict": "Met (first GitLab pipeline run, 2026-11-16)",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "text": "Secret scanning and dependency scanning enforced in CI.",
+   "rework": false
+  },
+  {
+   "id": "NFR2.3",
+   "type": "nfr_detail",
+   "label": "Authentication/authorization at MVP.",
+   "category": "security",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "text": "Authentication/authorization at MVP.",
+   "rework": false
+  },
+  {
+   "id": "NFR2.4",
+   "type": "nfr_detail",
+   "label": "Future auth is an additive change.",
+   "category": "security",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "text": "Future auth is an additive change.",
+   "rework": false
+  },
+  {
+   "id": "NFR2.5",
+   "type": "nfr_detail",
+   "label": "Transport security.",
+   "category": "security",
+   "verdict": "Met",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "text": "Transport security.",
+   "rework": false
+  },
+  {
+   "id": "US1.1",
+   "type": "user_story",
+   "label": "Create an item",
+   "priority": "Must",
+   "text": "As Alex the Integrating Developer, I want to create an inventory item with a SKU, name, description, and initial quantity, so that it exists as a programmatic record I can read and adjust.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US1.2",
+   "type": "user_story",
+   "label": "Get an item by SKU",
+   "priority": "Must",
+   "text": "As Alex, I want to retrieve a single item by its SKU, so that my application can read its current data.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US1.3",
+   "type": "user_story",
+   "label": "List items with pagination",
+   "priority": "Must",
+   "text": "As Alex, I want to list items in bounded pages, so that I can enumerate inventory without unbounded responses.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US1.4",
+   "type": "user_story",
+   "label": "Update an item's descriptive fields",
+   "priority": "Must",
+   "text": "As Alex, I want to update an item's name and description by SKU, so that item metadata stays correct.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US1.5",
+   "type": "user_story",
+   "label": "Delete an item",
+   "priority": "Must",
+   "text": "As Alex, I want to hard-delete an item by SKU, so that obsolete items are removed.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US2.1",
+   "type": "user_story",
+   "label": "Adjust stock by a relative delta",
+   "priority": "Must",
+   "text": "As Alex, I want to adjust an item's quantity by a signed delta, so that stock levels stay accurate as goods move.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US2.2",
+   "type": "user_story",
+   "label": "Concurrent adjustments do not lose updates",
+   "priority": "Must",
+   "text": "As Alex, I want concurrent adjustments to the same item to be applied atomically, so that no update is silently lost under load.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US3.1",
+   "type": "user_story",
+   "label": "Consistent, machine-readable errors",
+   "priority": "Should",
+   "text": "As Alex, I want every failure to return one consistent error shape, so that my application can handle errors programmatically.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US4.1",
+   "type": "user_story",
+   "label": "Input validation at the boundary",
+   "priority": "Must",
+   "text": "As Alex, I want all inputs validated at the API boundary, so that malformed data never reaches the datastore and I get a clear error.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "US4.2",
+   "type": "user_story",
+   "label": "Health check and structured logging",
+   "priority": "Should",
+   "text": "As Sam the Operator, I want a health-check endpoint and structured request logs, so that I can gate deploys and diagnose issues.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "rework": false
+  },
+  {
+   "id": "AC1.1.1",
+   "type": "acceptance_criterion",
+   "label": "Given a valid new item payload, When I POST it, Then the item is created and returned with its fields and the initial quantity.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a valid new item payload, When I POST it, Then the item is created and returned with its fields and the initial quantity.",
+   "rework": false
+  },
+  {
+   "id": "AC1.1.2",
+   "type": "acceptance_criterion",
+   "label": "Given a SKU that already exists, When I POST an item with that SKU, Then the request is rejected with a duplicate-conflict error (4xx) and no item is created.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a SKU that already exists, When I POST an item with that SKU, Then the request is rejected with a duplicate-conflict error (4xx) and no item is created.",
+   "rework": false
+  },
+  {
+   "id": "AC1.1.3",
+   "type": "acceptance_criterion",
+   "label": "Given a payload missing a required field or with an invalid quantity, When I POST it, Then the request is rejected with a validation error (4xx) and no item is created.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a payload missing a required field or with an invalid quantity, When I POST it, Then the request is rejected with a validation error (4xx) and no item is created.",
+   "rework": false
+  },
+  {
+   "id": "AC1.1.4",
+   "type": "acceptance_criterion",
+   "label": "Given a payload whose initial quantity is negative, When I POST it, Then it is rejected with a validation error (4xx); an initial quantity of zero is accepted.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a payload whose initial quantity is negative, When I POST it, Then it is rejected with a validation error (4xx); an initial quantity of zero is accepted.",
+   "rework": false
+  },
+  {
+   "id": "AC1.1.5",
+   "type": "acceptance_criterion",
+   "label": "Given a malformed, empty, or over-length SKU, When I POST it, Then it is rejected with a validation error (4xx) and no item is created.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a malformed, empty, or over-length SKU, When I POST it, Then it is rejected with a validation error (4xx) and no item is created.",
+   "rework": false
+  },
+  {
+   "id": "AC1.2.1",
+   "type": "acceptance_criterion",
+   "label": "Given an existing SKU, When I GET it, Then the item's current fields and quantity are returned.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an existing SKU, When I GET it, Then the item's current fields and quantity are returned.",
+   "rework": false
+  },
+  {
+   "id": "AC1.2.2",
+   "type": "acceptance_criterion",
+   "label": "Given an unknown SKU, When I GET it, Then a not-found error (4xx) is returned.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an unknown SKU, When I GET it, Then a not-found error (4xx) is returned.",
+   "rework": false
+  },
+  {
+   "id": "AC1.3.1",
+   "type": "acceptance_criterion",
+   "label": "Given more items than one page holds, When I request the list, Then a bounded page is returned with the information needed to fetch the next page.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given more items than one page holds, When I request the list, Then a bounded page is returned with the information needed to fetch the next page.",
+   "rework": false
+  },
+  {
+   "id": "AC1.3.2",
+   "type": "acceptance_criterion",
+   "label": "Given an invalid pagination parameter, When I request the list, Then a validation error (4xx) is returned.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an invalid pagination parameter, When I request the list, Then a validation error (4xx) is returned.",
+   "rework": false
+  },
+  {
+   "id": "AC1.3.3",
+   "type": "acceptance_criterion",
+   "label": "Given no items (or the final page), When I request that page, Then an empty-or-final page is returned with no next-page token, and a page-size above the maximum is clamped or rejected consistently.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given no items (or the final page), When I request that page, Then an empty-or-final page is returned with no next-page token, and a page-size above the maximum is clamped or rejected consistently.",
+   "rework": false
+  },
+  {
+   "id": "AC1.4.1",
+   "type": "acceptance_criterion",
+   "label": "Given an existing SKU, When I update its name/description, Then the changes are persisted and returned.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an existing SKU, When I update its name/description, Then the changes are persisted and returned.",
+   "rework": false
+  },
+  {
+   "id": "AC1.4.2",
+   "type": "acceptance_criterion",
+   "label": "Given an unknown SKU, When I update it, Then a not-found error (4xx) is returned.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an unknown SKU, When I update it, Then a not-found error (4xx) is returned.",
+   "rework": false
+  },
+  {
+   "id": "AC1.4.3",
+   "type": "acceptance_criterion",
+   "label": "Given an update payload that attempts to set quantity directly, When I submit it, Then quantity is not changed via this path and the error guides the caller to the stock-adjustment endpoint (US2.1) as the way to change quantity.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an update payload that attempts to set quantity directly, When I submit it, Then quantity is not changed via this path and the error guides the caller to the stock-adjustment endpoint (US2.1) as the way to change quantity.",
+   "rework": false
+  },
+  {
+   "id": "AC1.5.1",
+   "type": "acceptance_criterion",
+   "label": "Given an existing SKU, When I delete it, Then the item is removed and a subsequent GET returns not-found (4xx).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an existing SKU, When I delete it, Then the item is removed and a subsequent GET returns not-found (4xx).",
+   "rework": false
+  },
+  {
+   "id": "AC1.5.2",
+   "type": "acceptance_criterion",
+   "label": "Given an unknown SKU, When I delete it, Then a not-found error (4xx) is returned.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an unknown SKU, When I delete it, Then a not-found error (4xx) is returned.",
+   "rework": false
+  },
+  {
+   "id": "AC2.1.1",
+   "type": "acceptance_criterion",
+   "label": "Given an existing item, When I apply a positive delta, Then the quantity increases by that amount and a subsequent read reflects it immediately.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an existing item, When I apply a positive delta, Then the quantity increases by that amount and a subsequent read reflects it immediately.",
+   "rework": false
+  },
+  {
+   "id": "AC2.1.2",
+   "type": "acceptance_criterion",
+   "label": "Given an item with sufficient stock, When I apply a negative delta within stock, Then the quantity decreases by that amount and a subsequent read reflects the decrease immediately.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an item with sufficient stock, When I apply a negative delta within stock, Then the quantity decreases by that amount and a subsequent read reflects the decrease immediately.",
+   "rework": false
+  },
+  {
+   "id": "AC2.1.3",
+   "type": "acceptance_criterion",
+   "label": "Given a negative delta that would drop quantity below zero, When I apply it, Then the request is rejected with an InsufficientStock error (4xx) and the stored quantity is unchanged.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a negative delta that would drop quantity below zero, When I apply it, Then the request is rejected with an InsufficientStock error (4xx) and the stored quantity is unchanged.",
+   "rework": false
+  },
+  {
+   "id": "AC2.1.4",
+   "type": "acceptance_criterion",
+   "label": "Given a decrement exactly equal to the current quantity, When I apply it, Then it succeeds and the quantity becomes exactly zero (the zero floor is inclusive).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a decrement exactly equal to the current quantity, When I apply it, Then it succeeds and the quantity becomes exactly zero (the zero floor is inclusive).",
+   "rework": false
+  },
+  {
+   "id": "AC2.1.5",
+   "type": "acceptance_criterion",
+   "label": "Given a zero (+0) or non-integer/missing delta, When I submit it, Then the request is rejected with a validation error (4xx) and the quantity is unchanged.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a zero (+0) or non-integer/missing delta, When I submit it, Then the request is rejected with a validation error (4xx) and the quantity is unchanged.",
+   "rework": false
+  },
+  {
+   "id": "AC2.1.6",
+   "type": "acceptance_criterion",
+   "label": "Given an unknown SKU, When I apply an adjustment, Then a not-found error (4xx) is returned.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an unknown SKU, When I apply an adjustment, Then a not-found error (4xx) is returned.",
+   "rework": false
+  },
+  {
+   "id": "AC2.2.1",
+   "type": "acceptance_criterion",
+   "label": "Given N concurrent adjustments to one item (N large, e.g. >= 50, issued with no client-side serialization), When they all stay within stock and succeed, Then for every possible interleaving the final quantity equals the initial quantity plus the sum of all applied deltas (no lost updates). This invariant must fail against a naive read-modify-write implementation.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given N concurrent adjustments to one item (N large, e.g. >= 50, issued with no client-side serialization), When they all stay within stock and succeed, Then for every possible interleaving the final quantity equals the initial quantity plus the sum of all applied deltas (no lost updates). This invariant must fail against a naive read-modify-write implementation.",
+   "rework": false
+  },
+  {
+   "id": "AC2.2.2",
+   "type": "acceptance_criterion",
+   "label": "Given concurrent adjustments where some would breach the zero floor, When they are applied, Then (regardless of ordering) the final quantity is never negative, every request resolves as either success or InsufficientStock, and the count of successes plus rejections equals N. The specific set of winners is not asserted (it is interleaving-dependent).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given concurrent adjustments where some would breach the zero floor, When they are applied, Then (regardless of ordering) the final quantity is never negative, every request resolves as either success or InsufficientStock, and the count of successes plus rejections equals N. The specific set of winners is not asserted (it is interleaving-dependent).",
+   "rework": false
+  },
+  {
+   "id": "AC3.1.1",
+   "type": "acceptance_criterion",
+   "label": "Given any failing request, When it returns an error, Then the body carries a machine-readable code (from a closed, enumerable set), a human-readable message, and a request id; validation failures additionally include field-level detail identifying each offending field.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given any failing request, When it returns an error, Then the body carries a machine-readable code (from a closed, enumerable set), a human-readable message, and a request id; validation failures additionally include field-level detail identifying each offending field.",
+   "rework": false
+  },
+  {
+   "id": "AC3.1.2",
+   "type": "acceptance_criterion",
+   "label": "Given an expected domain failure, When it occurs, Then the response uses a consistent status mapping across every endpoint: ItemNotFound -> 404, duplicate-SKU conflict -> 409, InsufficientStock -> 4xx (exact code confirmed in design, see OQ1), validation failure -> 400; an unexpected failure -> 5xx and is logged.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given an expected domain failure, When it occurs, Then the response uses a consistent status mapping across every endpoint: ItemNotFound -> 404, duplicate-SKU conflict -> 409, InsufficientStock -> 4xx (exact code confirmed in design, see OQ1), validation failure -> 400; an unexpected failure -> 5xx and is logged.",
+   "rework": false
+  },
+  {
+   "id": "AC3.1.3",
+   "type": "acceptance_criterion",
+   "label": "Given the same domain condition reached through different endpoints (e.g. an unknown SKU on get, update, delete, or adjust), When it occurs, Then the error code and body shape are identical across those endpoints.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given the same domain condition reached through different endpoints (e.g. an unknown SKU on get, update, delete, or adjust), When it occurs, Then the error code and body shape are identical across those endpoints.",
+   "rework": false
+  },
+  {
+   "id": "AC4.1.1",
+   "type": "acceptance_criterion",
+   "label": "Given a request with an invalid body or path/query parameter, When it is received, Then it is rejected with a validation-error envelope (4xx) and no item is created, updated, deleted, or adjusted (no observable state change).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given a request with an invalid body or path/query parameter, When it is received, Then it is rejected with a validation-error envelope (4xx) and no item is created, updated, deleted, or adjusted (no observable state change).",
+   "rework": false
+  },
+  {
+   "id": "AC4.2.1",
+   "type": "acceptance_criterion",
+   "label": "Given the service is running, When I call the health endpoint, Then it returns a success status suitable for a readiness/liveness probe.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given the service is running, When I call the health endpoint, Then it returns a success status suitable for a readiness/liveness probe.",
+   "rework": false
+  },
+  {
+   "id": "AC4.2.2",
+   "type": "acceptance_criterion",
+   "label": "Given any request, When it is processed, Then a structured log entry is emitted carrying at minimum the request id (from AC3.1.1), the method and route, and the outcome status.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/stories.md",
+   "verdict": "Covered",
+   "text": "Given any request, When it is processed, Then a structured log entry is emitted carrying at minimum the request id (from AC3.1.1), the method and route, and the outcome status.",
+   "rework": false
+  },
+  {
+   "id": "BR1.1",
+   "type": "business_rule",
+   "label": "Unique, well-formed SKU on create; duplicate rejected",
+   "kind": "constraint",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Unique, well-formed SKU on create; duplicate rejected",
+   "rework": true
+  },
+  {
+   "id": "BR1.2",
+   "type": "business_rule",
+   "label": "Operate by SKU; unknown SKU -> not found",
+   "kind": "constraint",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Operate by SKU; unknown SKU -> not found",
+   "rework": true
+  },
+  {
+   "id": "BR1.3",
+   "type": "business_rule",
+   "label": "Update changes only name/description; never quantity",
+   "kind": "constraint",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Update changes only name/description; never quantity",
+   "rework": true
+  },
+  {
+   "id": "BR1.4",
+   "type": "business_rule",
+   "label": "List uses offset/limit (limit default 20, max 100; offset max 10000)",
+   "kind": "policy",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "why": [
+    {
+     "ref": "Q11",
+     "stage": "contract-design",
+     "q": "[Architect] Maximum offset on GET /items (review finding R-05)",
+     "a": "A. offset maximum 10000; above that is rejected with 400 ValidationError."
+    },
+    {
+     "ref": "OQ1",
+     "stage": "open question from requirements"
+    }
+   ],
+   "text": "List uses offset/limit (limit default 20, max 100; offset max 10000)",
+   "rework": true
+  },
+  {
+   "id": "BR1.5",
+   "type": "business_rule",
+   "label": "Hard delete; later read is not-found",
+   "kind": "policy",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Hard delete; later read is not-found",
+   "rework": true
+  },
+  {
+   "id": "BR2.1",
+   "type": "business_rule",
+   "label": "Adjustment delta is a signed non-zero integer; result above the largest safe integer rejected",
+   "kind": "validation",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "why": [
+    {
+     "ref": "Q10",
+     "stage": "contract-design",
+     "q": "[Architect] Stock increase that would overflow the stored quantity (review finding R-01)",
+     "a": "A. 400 ValidationError on POST /items/{sku}/adjustments, quantity unchanged. No new error code."
+    }
+   ],
+   "text": "Adjustment delta is a signed non-zero integer; result above the largest safe integer rejected",
+   "rework": true
+  },
+  {
+   "id": "BR2.2",
+   "type": "business_rule",
+   "label": "Below-zero adjustment rejected, quantity unchanged",
+   "kind": "constraint",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Below-zero adjustment rejected, quantity unchanged",
+   "rework": true
+  },
+  {
+   "id": "BR2.3",
+   "type": "business_rule",
+   "label": "Concurrent adjustments lossless; conflict never surfaced",
+   "kind": "constraint",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "why": [
+    {
+     "ref": "OQ2",
+     "stage": "open question from requirements"
+    }
+   ],
+   "text": "Concurrent adjustments lossless; conflict never surfaced",
+   "rework": true
+  },
+  {
+   "id": "BR2.4",
+   "type": "business_rule",
+   "label": "Read-after-write consistency after adjustment",
+   "kind": "constraint",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Read-after-write consistency after adjustment",
+   "rework": true
+  },
+  {
+   "id": "BR3.1",
+   "type": "business_rule",
+   "label": "Single consistent error envelope (401 excepted: gateway body)",
+   "kind": "policy",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "why": [
+    {
+     "ref": "Q8",
+     "stage": "contract-design",
+     "q": "[Architect] Shape of the 401 response body",
+     "a": "A. Document the gateway's own body for 401 (Recommended) - the contract states that 401 responses use {\"message\":\"Unauthorized\"}; every other error keeps the standard envelope. No extra code."
+    }
+   ],
+   "text": "Single consistent error envelope (401 excepted: gateway body)",
+   "rework": true
+  },
+  {
+   "id": "BR3.2",
+   "type": "business_rule",
+   "label": "Typed-error -> HTTP status mapping; unexpected -> 500",
+   "kind": "policy",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Typed-error -> HTTP status mapping; unexpected -> 500",
+   "rework": true
+  },
+  {
+   "id": "BR4.1",
+   "type": "business_rule",
+   "label": "Validate/sanitize all inputs at the boundary",
+   "kind": "validation",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Validate/sanitize all inputs at the boundary",
+   "rework": true
+  },
+  {
+   "id": "BR4.2",
+   "type": "business_rule",
+   "label": "No hardcoded secrets",
+   "kind": "constraint",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "No hardcoded secrets",
+   "rework": true
+  },
+  {
+   "id": "BR5.1",
+   "type": "business_rule",
+   "label": "Structured per-request log with fixed field set",
+   "kind": "policy",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Structured per-request log with fixed field set",
+   "rework": true
+  },
+  {
+   "id": "BR5.2",
+   "type": "business_rule",
+   "label": "Health-check endpoint (open)",
+   "kind": "policy",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "text": "Health-check endpoint (open)",
+   "rework": true
+  },
+  {
+   "id": "BR6.1",
+   "type": "business_rule",
+   "label": "Cognito JWT required on every item route; 401 from the gateway",
+   "kind": "authorization",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "why": [
+    {
+     "ref": "Q7",
+     "stage": "contract-design",
+     "q": "[Product owner] Authentication on the public API (revisits Q5)",
+     "a": "A. Cognito User Pool JWT bearer token - every /v1 route requires Authorization: Bearer <token> from one Cognito user pool (self sign-up off, users created by an admin, one app client with no secret). /health stays open. A missing or invalid token gets 401 before the request reaches the API."
+    }
+   ],
+   "text": "Cognito JWT required on every item route; 401 from the gateway",
+   "rework": true
+  },
+  {
+   "id": "src/items/item-handlers.ts",
+   "type": "code",
+   "label": "item-handlers.ts",
+   "path": "src/items/item-handlers.ts",
+   "text": "src/items/item-handlers.ts",
+   "rework": false
+  },
+  {
+   "id": "src/items/item-repository.ts",
+   "type": "code",
+   "label": "item-repository.ts",
+   "path": "src/items/item-repository.ts",
+   "text": "src/items/item-repository.ts",
+   "rework": false
+  },
+  {
+   "id": "src/items/item-validation.ts",
+   "type": "code",
+   "label": "item-validation.ts",
+   "path": "src/items/item-validation.ts",
+   "text": "src/items/item-validation.ts",
+   "rework": false
+  },
+  {
+   "id": "src/items/item-service.ts",
+   "type": "code",
+   "label": "item-service.ts",
+   "path": "src/items/item-service.ts",
+   "text": "src/items/item-service.ts",
+   "rework": false
+  },
+  {
+   "id": "src/items/item-repository.int.test.ts",
+   "type": "test",
+   "label": "item-repository.int.test.ts",
+   "path": "src/items/item-repository.int.test.ts",
+   "text": "src/items/item-repository.int.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/items/items-api.int.test.ts",
+   "type": "test",
+   "label": "items-api.int.test.ts",
+   "path": "src/items/items-api.int.test.ts",
+   "text": "src/items/items-api.int.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/stock/stock-repository.ts",
+   "type": "code",
+   "label": "stock-repository.ts",
+   "path": "src/stock/stock-repository.ts",
+   "text": "src/stock/stock-repository.ts",
+   "rework": false
+  },
+  {
+   "id": "src/stock/stock-validation.ts",
+   "type": "code",
+   "label": "stock-validation.ts",
+   "path": "src/stock/stock-validation.ts",
+   "text": "src/stock/stock-validation.ts",
+   "rework": false
+  },
+  {
+   "id": "src/stock/stock-api.int.test.ts",
+   "type": "test",
+   "label": "stock-api.int.test.ts",
+   "path": "src/stock/stock-api.int.test.ts",
+   "text": "src/stock/stock-api.int.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/stock/stock-adjustment.race.int.test.ts",
+   "type": "test",
+   "label": "stock-adjustment.race.int.test.ts",
+   "path": "src/stock/stock-adjustment.race.int.test.ts",
+   "text": "src/stock/stock-adjustment.race.int.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/http/error-envelope.ts",
+   "type": "code",
+   "label": "error-envelope.ts",
+   "path": "src/shared/http/error-envelope.ts",
+   "text": "src/shared/http/error-envelope.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/http/error-envelope.test.ts",
+   "type": "test",
+   "label": "error-envelope.test.ts",
+   "path": "src/shared/http/error-envelope.test.ts",
+   "text": "src/shared/http/error-envelope.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/validation.ts",
+   "type": "code",
+   "label": "validation.ts",
+   "path": "src/shared/validation.ts",
+   "text": "src/shared/validation.ts",
+   "rework": false
+  },
+  {
+   "id": "src/health/health-handler.ts",
+   "type": "code",
+   "label": "health-handler.ts",
+   "path": "src/health/health-handler.ts",
+   "text": "src/health/health-handler.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/logging/request-logger.ts",
+   "type": "code",
+   "label": "request-logger.ts",
+   "path": "src/shared/logging/request-logger.ts",
+   "text": "src/shared/logging/request-logger.ts",
+   "rework": false
+  },
+  {
+   "id": "note:NFR1.5:code-generation",
+   "type": "note",
+   "label": "Performance/throughput SLO deferred at MVP (team practice); latency is captured in logs (NFR1.3) for a future target.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/traceability.json",
+   "text": "Performance/throughput SLO deferred at MVP (team practice); latency is captured in logs (NFR1.3) for a future target.",
+   "rework": false
+  },
+  {
+   "id": "infra/lib/compute-stack.ts",
+   "type": "code",
+   "label": "compute-stack.ts",
+   "path": "infra/lib/compute-stack.ts",
+   "text": "infra/lib/compute-stack.ts",
+   "rework": false
+  },
+  {
+   "id": "infra/lib/data-stack.ts",
+   "type": "code",
+   "label": "data-stack.ts",
+   "path": "infra/lib/data-stack.ts",
+   "text": "infra/lib/data-stack.ts",
+   "rework": false
+  },
+  {
+   "id": "note:NFR1.10:code-generation",
+   "type": "note",
+   "label": "Concrete scalability capacity numbers deferred with performance; the scaling mechanism (on-demand table, Lambda concurrency cap) is fixed in infra.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/traceability.json",
+   "text": "Concrete scalability capacity numbers deferred with performance; the scaling mechanism (on-demand table, Lambda concurrency cap) is fixed in infra.",
+   "rework": false
+  },
+  {
+   "id": "src/shared/dynamodb-client.ts",
+   "type": "code",
+   "label": "dynamodb-client.ts",
+   "path": "src/shared/dynamodb-client.ts",
+   "text": "src/shared/dynamodb-client.ts",
+   "rework": false
+  },
+  {
+   "id": "note:NFR1.16:code-generation",
+   "type": "note",
+   "label": "Numeric RTO/RPO/MTTR deferred at MVP; stated qualitatively (PITR enabled on the table).",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/traceability.json",
+   "text": "Numeric RTO/RPO/MTTR deferred at MVP; stated qualitatively (PITR enabled on the table).",
+   "rework": false
+  },
+  {
+   "id": "src/shared/http/request-context.ts",
+   "type": "code",
+   "label": "request-context.ts",
+   "path": "src/shared/http/request-context.ts",
+   "text": "src/shared/http/request-context.ts",
+   "rework": false
+  },
+  {
+   "id": "src/health/health-handler.test.ts",
+   "type": "test",
+   "label": "health-handler.test.ts",
+   "path": "src/health/health-handler.test.ts",
+   "text": "src/health/health-handler.test.ts",
+   "rework": false
+  },
+  {
+   "id": "note:NFR3.8:code-generation",
+   "type": "note",
+   "label": "Dedicated metrics baseline deferred; request and 5xx metrics come from the API Gateway built-in Count and 5xx metrics used by the elevated-5xx alarm.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/traceability.json",
+   "text": "Dedicated metrics baseline deferred; request and 5xx metrics come from the API Gateway built-in Count and 5xx metrics used by the elevated-5xx alarm.",
+   "rework": false
+  },
+  {
+   "id": "note:NFR3.9:code-generation",
+   "type": "note",
+   "label": "Distributed tracing deferred; single service with no inter-unit calls at MVP.",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/traceability.json",
+   "text": "Distributed tracing deferred; single service with no inter-unit calls at MVP.",
+   "rework": false
+  },
+  {
+   "id": "src/shared/config.ts",
+   "type": "code",
+   "label": "config.ts",
+   "path": "src/shared/config.ts",
+   "text": "src/shared/config.ts",
+   "rework": false
+  },
+  {
+   "id": ".github/dependabot.yml",
+   "type": "code",
+   "label": "dependabot.yml",
+   "path": ".github/dependabot.yml",
+   "text": ".github/dependabot.yml",
+   "rework": false,
+   "gitref": "be24363"
+  },
+  {
+   "id": "src/stock/stock-repository.int.test.ts",
+   "type": "test",
+   "label": "stock-repository.int.test.ts",
+   "path": "src/stock/stock-repository.int.test.ts",
+   "text": "src/stock/stock-repository.int.test.ts",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.1",
+   "type": "design_decision",
+   "label": "DynamoDB strongly-consistent single-item ops + conditional UpdateItem ReturnValues:ALL_NEW (read-after-write, no extra read)",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "DynamoDB strongly-consistent single-item ops + conditional UpdateItem ReturnValues:ALL_NEW (read-after-write, no extra read)",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.2",
+   "type": "design_decision",
+   "label": "Lambda runtime runs the bounded <=3 jittered retry for transient SDK errors only (throttling, 5xx, timeouts); a failed update condition is classified from ReturnValuesOnConditionCheckFailure ALL_OLD and never retried; 10s timeout sized above the retry budget",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "Lambda runtime runs the bounded <=3 jittered retry for transient SDK errors only (throttling, 5xx, timeouts); a failed update condition is classified from ReturnValuesOnConditionCheckFailure ALL_OLD and never retried; 10s timeout sized above the retry budget",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.3",
+   "type": "design_decision",
+   "label": "latencyMs capture is application logging code (observability), not an infra resource; surfaced via the CloudWatch latency metric filter",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "latencyMs capture is application logging code (observability), not an infra resource; surfaced via the CloudWatch latency metric filter",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.4",
+   "type": "design_decision",
+   "label": "DynamoDB Scan with Limit and ExclusiveStartKey serving offset/limit pages; the 10000 offset cap bounds one request to at most 10100 items read; IAM grants dynamodb:Scan",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "DynamoDB Scan with Limit and ExclusiveStartKey serving offset/limit pages; the 10000 offset cap bounds one request to at most 10100 items read; IAM grants dynamodb:Scan",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.5",
+   "type": "design_decision",
+   "label": "numeric latency/throughput SLO deferred at MVP; CloudWatch captures latencyMs for a future target",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "numeric latency/throughput SLO deferred at MVP; CloudWatch captures latencyMs for a future target",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.6",
+   "type": "design_decision",
+   "label": "AWS Lambda (stateless, per-request concurrency); all state in DynamoDB",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "AWS Lambda (stateless, per-request concurrency); all state in DynamoDB",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.7",
+   "type": "design_decision",
+   "label": "DynamoDB atomic conditional UpdateItem with precomputed minCurrent/maxCurrent bounds (per-item concurrency at the datastore; no app locks)",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "DynamoDB atomic conditional UpdateItem with precomputed minCurrent/maxCurrent bounds (per-item concurrency at the datastore; no app locks)",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.8",
+   "type": "design_decision",
+   "label": "DynamoDB partition key = sku (load spreads across SKUs); write-sharding noted as future, not built",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "DynamoDB partition key = sku (load spreads across SKUs); write-sharding noted as future, not built",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.9",
+   "type": "design_decision",
+   "label": "Per-request list work is bounded by the offset cap (at most 10100 items read), but the total count Scan grows with table size; accepted for the MVP catalogue, with a maintained count item and cursor paging as the upgrade path",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "Per-request list work is bounded by the offset cap (at most 10100 items read), but the total count Scan grows with table size; accepted for the MVP catalogue, with a maintained count item and cursor paging as the upgrade path",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.10",
+   "type": "design_decision",
+   "label": "DynamoDB on-demand billing + Lambda scale-to-zero with reserved concurrency 50 as the hard cap",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "DynamoDB on-demand billing + Lambda scale-to-zero with reserved concurrency 50 as the hard cap",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.11",
+   "type": "design_decision",
+   "label": "API Gateway + Lambda managed multi-AZ availability; availability SLI from API Gateway 5xx/Count (99.9%/30-day) in monitoring-design",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "API Gateway + Lambda managed multi-AZ availability; availability SLI from API Gateway 5xx/Count (99.9%/30-day) in monitoring-design",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.12",
+   "type": "design_decision",
+   "label": "correctness-under-failure is application logic (atomic update + fail-500-no-stale); infra contributes PITR durability (NFR1.14) only",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "correctness-under-failure is application logic (atomic update + fail-500-no-stale); infra contributes PITR durability (NFR1.14) only",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.13",
+   "type": "design_decision",
+   "label": "Lambda replaces failed execution environments automatically; a Synthetics canary on GET /v1/health detects an unhealthy service (API Gateway does no health checks on a Lambda integration)",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "Lambda replaces failed execution environments automatically; a Synthetics canary on GET /v1/health detects an unhealthy service (API Gateway does no health checks on a Lambda integration)",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.14",
+   "type": "design_decision",
+   "label": "DynamoDB managed multi-AZ durability + point-in-time recovery + encryption at rest + deletion protection",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "DynamoDB managed multi-AZ durability + point-in-time recovery + encryption at rest + deletion protection",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.15",
+   "type": "design_decision",
+   "label": "graceful failure / SIGTERM drain is application runtime behaviour; Lambda shutdown hook is the platform touchpoint, no dedicated resource",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "graceful failure / SIGTERM drain is application runtime behaviour; Lambda shutdown hook is the platform touchpoint, no dedicated resource",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR1.16",
+   "type": "design_decision",
+   "label": "numeric RTO/MTTR deferred; mechanisms (auto-replace, managed durability) are NFR1.13/1.14",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "numeric RTO/MTTR deferred; mechanisms (auto-replace, managed durability) are NFR1.13/1.14",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR2.1",
+   "type": "design_decision",
+   "label": "boundary input validation is application handler code, not infrastructure",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "boundary input validation is application handler code, not infrastructure",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR2.2",
+   "type": "design_decision",
+   "label": "error-envelope / no-leakage is application middleware code, not infrastructure",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "error-envelope / no-leakage is application middleware code, not infrastructure",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR2.3",
+   "type": "design_decision",
+   "label": "Superseded by the Contract Design auth decision (Q7): API Gateway HTTP API JWT authorizer on every /v1 item route, issuer = Cognito user pool inventory-api-users, audience = its no-secret app client; GET /v1/health open; Lambda holds no inbound surface",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "Superseded by the Contract Design auth decision (Q7): API Gateway HTTP API JWT authorizer on every /v1 item route, issuer = Cognito user pool inventory-api-users, audience = its no-secret app client; GET /v1/health open; Lambda holds no inbound surface",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR2.4",
+   "type": "design_decision",
+   "label": "The reserved auth seam is now used: HTTP API JWT authorizer returns 401 with the gateway body before the Lambda runs (no handler change), replacing the planned X-Api-Key",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "The reserved auth seam is now used: HTTP API JWT authorizer returns 401 with the gateway body before the Lambda runs (no handler change), replacing the planned X-Api-Key",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR2.5",
+   "type": "design_decision",
+   "label": "TLS 1.2+ terminated at API Gateway HTTP API; no plaintext listener",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "TLS 1.2+ terminated at API Gateway HTTP API; no plaintext listener",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.1",
+   "type": "design_decision",
+   "label": "GET /v1/health route (no authorizer) on API Gateway -> Lambda live alias; probed every 5 minutes by a CloudWatch Synthetics canary and by the CI smoke test",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "GET /v1/health route (no authorizer) on API Gateway -> Lambda live alias; probed every 5 minutes by a CloudWatch Synthetics canary and by the CI smoke test",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.2",
+   "type": "design_decision",
+   "label": "structured-log field set is application logger code; infra provides the CloudWatch Logs sink (NFR3.7)",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "structured-log field set is application logger code; infra provides the CloudWatch Logs sink (NFR3.7)",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.3",
+   "type": "design_decision",
+   "label": "requestId generation/correlation is application middleware code; infra provides log queryability (NFR3.7)",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "requestId generation/correlation is application middleware code; infra provides log queryability (NFR3.7)",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.4",
+   "type": "design_decision",
+   "label": "no-sensitive-data log allow-list is application logger code, not infrastructure",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "no-sensitive-data log allow-list is application logger code, not infrastructure",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.5",
+   "type": "design_decision",
+   "label": "GET /v1/health -> 200 {status:ok}; target of the Synthetics canary that drives the Health failing alert",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "GET /v1/health -> 200 {status:ok}; target of the Synthetics canary that drives the Health failing alert",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.6",
+   "type": "design_decision",
+   "label": "CloudWatch alarm on API Gateway 5xx/Count > ~1% over 5 min with a low floor -> SNS (ticket, page if sustained); counts Lambda timeouts, crashes and throttles too",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "CloudWatch alarm on API Gateway 5xx/Count > ~1% over 5 min with a low floor -> SNS (ticket, page if sustained); counts Lambda timeouts, crashes and throttles too",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.7",
+   "type": "design_decision",
+   "label": "CloudWatch Logs group per environment, 30-day retention; structured JSON lines + JSON API Gateway access logs (covers 401s rejected by the JWT authorizer)",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "CloudWatch Logs group per environment, 30-day retention; structured JSON lines + JSON API Gateway access logs (covers 401s rejected by the JWT authorizer)",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.8",
+   "type": "design_decision",
+   "label": "dedicated emitted metrics deferred; service metrics derived from logs via CloudWatch metric filters, error rate from API Gateway metrics (monitoring-design)",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "dedicated emitted metrics deferred; service metrics derived from logs via CloudWatch metric filters, error rate from API Gateway metrics (monitoring-design)",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR3.9",
+   "type": "design_decision",
+   "label": "distributed tracing deferred (single service); X-Ray enablement path noted in monitoring-design for a future multi-service topology",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "distributed tracing deferred (single service); X-Ray enablement path noted in monitoring-design for a future multi-service topology",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR4.1",
+   "type": "design_decision",
+   "label": "Secrets Manager / SSM Parameter Store injected at deploy time; CI OIDC role (no long-lived keys); smoke-test user password in Secrets Manager; no secrets in source/artifact",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "Secrets Manager / SSM Parameter Store injected at deploy time; CI OIDC role (no long-lived keys); smoke-test user password in Secrets Manager; no secrets in source/artifact",
+   "rework": false
+  },
+  {
+   "id": "design:infrastructure-design:NFR4.2",
+   "type": "design_decision",
+   "label": "CI pipeline: gitleaks (secret scan) + Dependabot/npm audit (dependency scan) as merge-blocking gates; cdk-nag Errors gate with in-code justified suppressions",
+   "stage": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json",
+   "text": "CI pipeline: gitleaks (secret scan) + Dependabot/npm audit (dependency scan) as merge-blocking gates; cdk-nag Errors gate with in-code justified suppressions",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.1",
+   "type": "design_decision",
+   "label": "performance-design: conditional UpdateItem ReturnValues=ALL_NEW (read-after-write, no extra read)",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "performance-design: conditional UpdateItem ReturnValues=ALL_NEW (read-after-write, no extra read)",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.2",
+   "type": "design_decision",
+   "label": "performance-design/reliability-design: bounded SDK retry (<=3, jittered) for transient errors only; failed condition classified from ALL_OLD, never retried",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "performance-design/reliability-design: bounded SDK retry (<=3, jittered) for transient errors only; failed condition classified from ALL_OLD, never retried",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.3",
+   "type": "design_decision",
+   "label": "observability-design: latencyMs on every structured log line",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "observability-design: latencyMs on every structured log line",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.4",
+   "type": "design_decision",
+   "label": "performance-design: returned page bounded (limit <=100), offset capped at 10000, Scan with Limit and ExclusiveStartKey",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "performance-design: returned page bounded (limit <=100), offset capped at 10000, Scan with Limit and ExclusiveStartKey",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.5",
+   "type": "design_decision",
+   "label": "performance SLO deferred at MVP; design commits only to bounded work + measured latency",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "performance SLO deferred at MVP; design commits only to bounded work + measured latency",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.6",
+   "type": "design_decision",
+   "label": "scalability-design: stateless replicas behind LB / managed concurrency",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "scalability-design: stateless replicas behind LB / managed concurrency",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.7",
+   "type": "design_decision",
+   "label": "scalability-design: per-item concurrency pushed to datastore atomic conditional update",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "scalability-design: per-item concurrency pushed to datastore atomic conditional update",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.8",
+   "type": "design_decision",
+   "label": "scalability-design: sku partition key spreads load; write-sharding noted for future hotspot",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "scalability-design: sku partition key spreads load; write-sharding noted for future hotspot",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.9",
+   "type": "design_decision",
+   "label": "per-request list reads bounded by the offset cap (at most 10100 items) but the total COUNT scan grows with table size; accepted at MVP, maintained count item and cursor paging as the upgrade path",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "per-request list reads bounded by the offset cap (at most 10100 items) but the total COUNT scan grows with table size; accepted at MVP, maintained count item and cursor paging as the upgrade path",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.10",
+   "type": "design_decision",
+   "label": "scalability capacity numbers deferred; mechanism fixed (stateless horizontal + DynamoDB on-demand)",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "scalability capacity numbers deferred; mechanism fixed (stateless horizontal + DynamoDB on-demand)",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.11",
+   "type": "design_decision",
+   "label": "reliability-design: health-checked stateless replicas behind LB targeting 99.9%/30-day",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "reliability-design: health-checked stateless replicas behind LB targeting 99.9%/30-day",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.12",
+   "type": "design_decision",
+   "label": "reliability-design: atomic all-or-nothing update, retry transient-only, fail-closed over stale data",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "reliability-design: atomic all-or-nothing update, retry transient-only, fail-closed over stale data",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.13",
+   "type": "design_decision",
+   "label": "reliability-design: health-check-driven auto-restart/replace of stateless instances",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "reliability-design: health-check-driven auto-restart/replace of stateless instances",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.14",
+   "type": "design_decision",
+   "label": "reliability-design/logical-components: DynamoDB managed multi-AZ durability + PITR",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "reliability-design/logical-components: DynamoDB managed multi-AZ durability + PITR",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.15",
+   "type": "design_decision",
+   "label": "reliability-design/security-design: InternalError 500 envelope, graceful SIGTERM drain",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "reliability-design/security-design: InternalError 500 envelope, graceful SIGTERM drain",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR1.16",
+   "type": "design_decision",
+   "label": "numeric RTO/MTTR deferred; mechanisms (auto-restart, managed durability) designed",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "numeric RTO/MTTR deferred; mechanisms (auto-restart, managed durability) designed",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR2.1",
+   "type": "design_decision",
+   "label": "security-design: centralized boundary validation to typed domain values",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "security-design: centralized boundary validation to typed domain values",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR2.2",
+   "type": "design_decision",
+   "label": "security-design: single error-envelope middleware, no internal detail leakage",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "security-design: single error-envelope middleware, no internal detail leakage",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR2.3",
+   "type": "design_decision",
+   "label": "security-design: superseded by contract 1.1.0 (Q7) - Cognito JWT checked by API Gateway on every /v1/items route, /v1/health open",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "security-design: superseded by contract 1.1.0 (Q7) - Cognito JWT checked by API Gateway on every /v1/items route, /v1/health open",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR2.4",
+   "type": "design_decision",
+   "label": "security-design: auth seam filled at the edge by the JWT authorizer (401 gateway body) instead of an X-Api-Key middleware",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "security-design: auth seam filled at the edge by the JWT authorizer (401 gateway body) instead of an X-Api-Key middleware",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR2.5",
+   "type": "design_decision",
+   "label": "security-design: TLS 1.2+ terminated at LB/API gateway",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "security-design: TLS 1.2+ terminated at LB/API gateway",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.1",
+   "type": "design_decision",
+   "label": "observability-design/reliability-design: GET /health 200 {status:ok} probe",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "observability-design/reliability-design: GET /health 200 {status:ok} probe",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.2",
+   "type": "design_decision",
+   "label": "observability-design: single logging middleware, locked JSON field set",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "observability-design: single logging middleware, locked JSON field set",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.3",
+   "type": "design_decision",
+   "label": "observability-design: requestId generated at entry, on context, in log + envelope",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "observability-design: requestId generated at entry, on context, in log + envelope",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.4",
+   "type": "design_decision",
+   "label": "observability-design: allow-list logger, no bodies/secrets",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "observability-design: allow-list logger, no bodies/secrets",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.5",
+   "type": "design_decision",
+   "label": "observability-design: /health readiness/liveness endpoint",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "observability-design: /health readiness/liveness endpoint",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.6",
+   "type": "design_decision",
+   "label": "observability-design: 5xx log-metric filter + alarm",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "observability-design: 5xx log-metric filter + alarm",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.7",
+   "type": "design_decision",
+   "label": "observability-design: JSON to stdout shipped to CloudWatch Logs, queryable",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "observability-design: JSON to stdout shipped to CloudWatch Logs, queryable",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.8",
+   "type": "design_decision",
+   "label": "metrics baseline deferred; derivable from log-metric filters at MVP",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "metrics baseline deferred; derivable from log-metric filters at MVP",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR3.9",
+   "type": "design_decision",
+   "label": "distributed tracing deferred; single service, no inter-unit calls at MVP",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "distributed tracing deferred; single service, no inter-unit calls at MVP",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR4.1",
+   "type": "design_decision",
+   "label": "security-design/logical-components: config/secrets module injects from env/Secrets Manager",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "security-design/logical-components: config/secrets module injects from env/Secrets Manager",
+   "rework": false
+  },
+  {
+   "id": "design:nfr-design:NFR4.2",
+   "type": "design_decision",
+   "label": "security-design: gitleaks + Dependabot merge-blocking CI gates",
+   "stage": "nfr-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-design/traceability.json",
+   "text": "security-design: gitleaks + Dependabot merge-blocking CI gates",
+   "rework": false
+  },
+  {
+   "id": "InventoryItem",
+   "type": "component",
+   "label": "InventoryItem",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/domain-design/components.md",
+   "text": "InventoryItem",
+   "rework": false
+  },
+  {
+   "id": "ApiEdge",
+   "type": "component",
+   "label": "ApiEdge",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/domain-design/components.md",
+   "text": "ApiEdge",
+   "rework": false
+  },
+  {
+   "id": "U1",
+   "type": "unit",
+   "label": "inventory-api (single unit)",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/units-generation/unit-of-work.md",
+   "text": "inventory-api (single unit)",
+   "rework": false
+  },
+  {
+   "id": "stage:infrastructure-design",
+   "type": "stage",
+   "label": "infrastructure-design",
+   "path": "aidlc/spaces/default/intents/260825-inventory-api/inception/user-stories/traceability.json",
+   "text": "infrastructure-design",
+   "rework": false
+  },
+  {
+   "id": "src/items/item-handlers.test.ts",
+   "type": "test",
+   "label": "item-handlers.test.ts",
+   "path": "src/items/item-handlers.test.ts",
+   "text": "src/items/item-handlers.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/items/item-validation.test.ts",
+   "type": "test",
+   "label": "item-validation.test.ts",
+   "path": "src/items/item-validation.test.ts",
+   "text": "src/items/item-validation.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/items/item-service.test.ts",
+   "type": "test",
+   "label": "item-service.test.ts",
+   "path": "src/items/item-service.test.ts",
+   "text": "src/items/item-service.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/stock/stock-validation.test.ts",
+   "type": "test",
+   "label": "stock-validation.test.ts",
+   "path": "src/stock/stock-validation.test.ts",
+   "text": "src/stock/stock-validation.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/logging/request-logger.test.ts",
+   "type": "test",
+   "label": "request-logger.test.ts",
+   "path": "src/shared/logging/request-logger.test.ts",
+   "text": "src/shared/logging/request-logger.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/config.test.ts",
+   "type": "test",
+   "label": "config.test.ts",
+   "path": "src/shared/config.test.ts",
+   "text": "src/shared/config.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/app.flow.int.test.ts",
+   "type": "test",
+   "label": "app.flow.int.test.ts",
+   "path": "src/app.flow.int.test.ts",
+   "text": "src/app.flow.int.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/stock/stock-service.test.ts",
+   "type": "test",
+   "label": "stock-service.test.ts",
+   "path": "src/stock/stock-service.test.ts",
+   "text": "src/stock/stock-service.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/stock/stock-handlers.test.ts",
+   "type": "test",
+   "label": "stock-handlers.test.ts",
+   "path": "src/stock/stock-handlers.test.ts",
+   "text": "src/stock/stock-handlers.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/errors.test.ts",
+   "type": "test",
+   "label": "errors.test.ts",
+   "path": "src/shared/errors.test.ts",
+   "text": "src/shared/errors.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/http/router.test.ts",
+   "type": "test",
+   "label": "router.test.ts",
+   "path": "src/shared/http/router.test.ts",
+   "text": "src/shared/http/router.test.ts",
+   "rework": false
+  },
+  {
+   "id": "src/shared/http/json-body.test.ts",
+   "type": "test",
+   "label": "json-body.test.ts",
+   "path": "src/shared/http/json-body.test.ts",
+   "text": "src/shared/http/json-body.test.ts",
+   "rework": false
+  },
+  {
+   "id": "infra/test/app.test.ts",
+   "type": "test",
+   "label": "app.test.ts",
+   "path": "infra/test/app.test.ts",
+   "text": "infra/test/app.test.ts",
+   "rework": false
+  },
+  {
+   "id": "infra/test/auth-stack.test.ts",
+   "type": "test",
+   "label": "auth-stack.test.ts",
+   "path": "infra/test/auth-stack.test.ts",
+   "text": "infra/test/auth-stack.test.ts",
+   "rework": false
+  },
+  {
+   "id": "infra/test/compute-stack.test.ts",
+   "type": "test",
+   "label": "compute-stack.test.ts",
+   "path": "infra/test/compute-stack.test.ts",
+   "text": "infra/test/compute-stack.test.ts",
+   "rework": false
+  },
+  {
+   "id": "infra/test/data-stack.test.ts",
+   "type": "test",
+   "label": "data-stack.test.ts",
+   "path": "infra/test/data-stack.test.ts",
+   "text": "infra/test/data-stack.test.ts",
+   "rework": false
+  }
+ ],
+ "edges": [
+  {
+   "source": "NFR3",
+   "target": "NFR3.2",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR3",
+   "target": "NFR3.3",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR3",
+   "target": "NFR3.4",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR3",
+   "target": "NFR3.5",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR3",
+   "target": "NFR3.6",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR3",
+   "target": "NFR3.7",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR3",
+   "target": "NFR3.8",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR3",
+   "target": "NFR3.9",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.1",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.2",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.3",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.4",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.5",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.11",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.12",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR3",
+   "target": "NFR3.1",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.13",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.14",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.15",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.16",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.6",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.7",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.8",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.9",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR1",
+   "target": "NFR1.10",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR2",
+   "target": "NFR2.1",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR2",
+   "target": "NFR2.2",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR4",
+   "target": "NFR4.1",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR4",
+   "target": "NFR4.2",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR2",
+   "target": "NFR2.3",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR2",
+   "target": "NFR2.4",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "NFR2",
+   "target": "NFR2.5",
+   "relation": "refined_by",
+   "status": "OK",
+   "origin": "nfr-requirements/traceability.json"
+  },
+  {
+   "source": "US1.1",
+   "target": "AC1.1.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.1",
+   "target": "AC1.1.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.1",
+   "target": "AC1.1.3",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.1",
+   "target": "AC1.1.4",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.1",
+   "target": "AC1.1.5",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.2",
+   "target": "AC1.2.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.2",
+   "target": "AC1.2.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.3",
+   "target": "AC1.3.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.3",
+   "target": "AC1.3.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.3",
+   "target": "AC1.3.3",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.4",
+   "target": "AC1.4.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.4",
+   "target": "AC1.4.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.4",
+   "target": "AC1.4.3",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.5",
+   "target": "AC1.5.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US1.5",
+   "target": "AC1.5.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US2.1",
+   "target": "AC2.1.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US2.1",
+   "target": "AC2.1.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US2.1",
+   "target": "AC2.1.3",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US2.1",
+   "target": "AC2.1.4",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US2.1",
+   "target": "AC2.1.5",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US2.1",
+   "target": "AC2.1.6",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US2.2",
+   "target": "AC2.2.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US2.2",
+   "target": "AC2.2.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US3.1",
+   "target": "AC3.1.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US3.1",
+   "target": "AC3.1.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US3.1",
+   "target": "AC3.1.3",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US4.1",
+   "target": "AC4.1.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US4.2",
+   "target": "AC4.2.1",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "US4.2",
+   "target": "AC4.2.2",
+   "relation": "has_acceptance_criterion",
+   "status": "OK",
+   "origin": "ID convention (derived)"
+  },
+  {
+   "source": "AC1.1.1",
+   "target": "src/items/item-handlers.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.1.2",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.1.3",
+   "target": "src/items/item-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.1.4",
+   "target": "src/items/item-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.1.5",
+   "target": "src/items/item-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.2.1",
+   "target": "src/items/item-service.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.2.2",
+   "target": "src/items/item-service.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.3.1",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.3.2",
+   "target": "src/items/item-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.3.3",
+   "target": "src/items/item-repository.int.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.4.1",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.4.2",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.4.3",
+   "target": "src/items/item-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.5.1",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.5.2",
+   "target": "src/items/items-api.int.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC2.1.1",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC2.1.2",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC2.1.3",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC2.1.4",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC2.1.5",
+   "target": "src/stock/stock-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC2.1.6",
+   "target": "src/stock/stock-api.int.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC2.2.1",
+   "target": "src/stock/stock-adjustment.race.int.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC2.2.2",
+   "target": "src/stock/stock-adjustment.race.int.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC3.1.1",
+   "target": "src/shared/http/error-envelope.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC3.1.2",
+   "target": "src/shared/http/error-envelope.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC3.1.3",
+   "target": "src/shared/http/error-envelope.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC4.1.1",
+   "target": "src/shared/validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC4.2.1",
+   "target": "src/health/health-handler.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC4.2.2",
+   "target": "src/shared/logging/request-logger.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.1",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.2",
+   "target": "src/stock/stock-adjustment.race.int.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.3",
+   "target": "src/shared/logging/request-logger.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.4",
+   "target": "src/items/item-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.5",
+   "target": "note:NFR1.5:code-generation",
+   "relation": "deferral_note",
+   "status": "Deferred",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.6",
+   "target": "infra/lib/compute-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.7",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.8",
+   "target": "infra/lib/data-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.9",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.10",
+   "target": "note:NFR1.10:code-generation",
+   "relation": "deferral_note",
+   "status": "Deferred",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.11",
+   "target": "infra/lib/compute-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.12",
+   "target": "src/shared/dynamodb-client.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.13",
+   "target": "infra/lib/data-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.14",
+   "target": "infra/lib/data-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.15",
+   "target": "src/shared/http/error-envelope.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR1.16",
+   "target": "note:NFR1.16:code-generation",
+   "relation": "deferral_note",
+   "status": "Deferred",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR2.1",
+   "target": "src/items/item-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR2.2",
+   "target": "src/shared/logging/request-logger.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR2.3",
+   "target": "infra/lib/compute-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR2.4",
+   "target": "src/shared/http/error-envelope.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR2.5",
+   "target": "infra/lib/compute-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.1",
+   "target": "src/health/health-handler.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.2",
+   "target": "src/shared/logging/request-logger.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.3",
+   "target": "src/shared/http/request-context.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.4",
+   "target": "src/shared/logging/request-logger.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.5",
+   "target": "src/health/health-handler.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.6",
+   "target": "infra/lib/compute-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.7",
+   "target": "infra/lib/compute-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.8",
+   "target": "note:NFR3.8:code-generation",
+   "relation": "deferral_note",
+   "status": "Deferred",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR3.9",
+   "target": "note:NFR3.9:code-generation",
+   "relation": "deferral_note",
+   "status": "Deferred",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR4.1",
+   "target": "src/shared/config.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "NFR4.2",
+   "target": ".github/dependabot.yml",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR1.1",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR1.2",
+   "target": "src/items/item-service.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR1.3",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR1.4",
+   "target": "src/items/item-validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR1.5",
+   "target": "src/items/item-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR2.1",
+   "target": "src/stock/stock-repository.int.test.ts",
+   "relation": "verified_by_test",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR2.2",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR2.3",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR2.4",
+   "target": "src/stock/stock-repository.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR3.1",
+   "target": "src/shared/http/error-envelope.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR3.2",
+   "target": "src/shared/http/error-envelope.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR4.1",
+   "target": "src/shared/validation.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR4.2",
+   "target": "src/shared/config.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR5.1",
+   "target": "src/shared/logging/request-logger.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR5.2",
+   "target": "src/health/health-handler.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "BR6.1",
+   "target": "infra/lib/compute-stack.ts",
+   "relation": "implemented_in",
+   "status": "OK",
+   "origin": "code-generation"
+  },
+  {
+   "source": "AC1.1.1",
+   "target": "BR1.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.1.2",
+   "target": "BR1.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.1.3",
+   "target": "BR4.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.1.4",
+   "target": "BR4.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.1.5",
+   "target": "BR4.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.2.1",
+   "target": "BR1.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.2.2",
+   "target": "BR1.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.3.1",
+   "target": "BR1.4",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.3.2",
+   "target": "BR1.4",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.3.3",
+   "target": "BR1.4",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.4.1",
+   "target": "BR1.3",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.4.2",
+   "target": "BR1.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.4.3",
+   "target": "BR1.3",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.5.1",
+   "target": "BR1.5",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC1.5.2",
+   "target": "BR1.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.1.1",
+   "target": "BR2.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.1.1",
+   "target": "BR2.4",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.1.2",
+   "target": "BR2.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.1.2",
+   "target": "BR2.4",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.1.3",
+   "target": "BR2.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.1.4",
+   "target": "BR2.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.1.5",
+   "target": "BR2.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.1.6",
+   "target": "BR1.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.2.1",
+   "target": "BR2.3",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.2.2",
+   "target": "BR2.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC2.2.2",
+   "target": "BR2.3",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC3.1.1",
+   "target": "BR3.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC3.1.1",
+   "target": "BR6.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC3.1.2",
+   "target": "BR3.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC3.1.3",
+   "target": "BR3.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC3.1.3",
+   "target": "BR3.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC4.1.1",
+   "target": "BR4.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC4.2.1",
+   "target": "BR5.2",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC4.2.2",
+   "target": "BR5.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "AC4.2.2",
+   "target": "BR6.1",
+   "relation": "refined_by_rule",
+   "status": "OK",
+   "origin": "functional-design"
+  },
+  {
+   "source": "NFR1.1",
+   "target": "design:infrastructure-design:NFR1.1",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.2",
+   "target": "design:infrastructure-design:NFR1.2",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.3",
+   "target": "design:infrastructure-design:NFR1.3",
+   "relation": "designed_as",
+   "status": "N/A",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.4",
+   "target": "design:infrastructure-design:NFR1.4",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.5",
+   "target": "design:infrastructure-design:NFR1.5",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.6",
+   "target": "design:infrastructure-design:NFR1.6",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.7",
+   "target": "design:infrastructure-design:NFR1.7",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.8",
+   "target": "design:infrastructure-design:NFR1.8",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.9",
+   "target": "design:infrastructure-design:NFR1.9",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.10",
+   "target": "design:infrastructure-design:NFR1.10",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.11",
+   "target": "design:infrastructure-design:NFR1.11",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.12",
+   "target": "design:infrastructure-design:NFR1.12",
+   "relation": "designed_as",
+   "status": "N/A",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.13",
+   "target": "design:infrastructure-design:NFR1.13",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.14",
+   "target": "design:infrastructure-design:NFR1.14",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.15",
+   "target": "design:infrastructure-design:NFR1.15",
+   "relation": "designed_as",
+   "status": "N/A",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.16",
+   "target": "design:infrastructure-design:NFR1.16",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR2.1",
+   "target": "design:infrastructure-design:NFR2.1",
+   "relation": "designed_as",
+   "status": "N/A",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR2.2",
+   "target": "design:infrastructure-design:NFR2.2",
+   "relation": "designed_as",
+   "status": "N/A",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR2.3",
+   "target": "design:infrastructure-design:NFR2.3",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR2.4",
+   "target": "design:infrastructure-design:NFR2.4",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR2.5",
+   "target": "design:infrastructure-design:NFR2.5",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.1",
+   "target": "design:infrastructure-design:NFR3.1",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.2",
+   "target": "design:infrastructure-design:NFR3.2",
+   "relation": "designed_as",
+   "status": "N/A",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.3",
+   "target": "design:infrastructure-design:NFR3.3",
+   "relation": "designed_as",
+   "status": "N/A",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.4",
+   "target": "design:infrastructure-design:NFR3.4",
+   "relation": "designed_as",
+   "status": "N/A",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.5",
+   "target": "design:infrastructure-design:NFR3.5",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.6",
+   "target": "design:infrastructure-design:NFR3.6",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.7",
+   "target": "design:infrastructure-design:NFR3.7",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.8",
+   "target": "design:infrastructure-design:NFR3.8",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR3.9",
+   "target": "design:infrastructure-design:NFR3.9",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR4.1",
+   "target": "design:infrastructure-design:NFR4.1",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR4.2",
+   "target": "design:infrastructure-design:NFR4.2",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "infrastructure-design"
+  },
+  {
+   "source": "NFR1.1",
+   "target": "design:nfr-design:NFR1.1",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.2",
+   "target": "design:nfr-design:NFR1.2",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.3",
+   "target": "design:nfr-design:NFR1.3",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.4",
+   "target": "design:nfr-design:NFR1.4",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.5",
+   "target": "design:nfr-design:NFR1.5",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.6",
+   "target": "design:nfr-design:NFR1.6",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.7",
+   "target": "design:nfr-design:NFR1.7",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.8",
+   "target": "design:nfr-design:NFR1.8",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.9",
+   "target": "design:nfr-design:NFR1.9",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.10",
+   "target": "design:nfr-design:NFR1.10",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.11",
+   "target": "design:nfr-design:NFR1.11",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.12",
+   "target": "design:nfr-design:NFR1.12",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.13",
+   "target": "design:nfr-design:NFR1.13",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.14",
+   "target": "design:nfr-design:NFR1.14",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.15",
+   "target": "design:nfr-design:NFR1.15",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR1.16",
+   "target": "design:nfr-design:NFR1.16",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR2.1",
+   "target": "design:nfr-design:NFR2.1",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR2.2",
+   "target": "design:nfr-design:NFR2.2",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR2.3",
+   "target": "design:nfr-design:NFR2.3",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR2.4",
+   "target": "design:nfr-design:NFR2.4",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR2.5",
+   "target": "design:nfr-design:NFR2.5",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.1",
+   "target": "design:nfr-design:NFR3.1",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.2",
+   "target": "design:nfr-design:NFR3.2",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.3",
+   "target": "design:nfr-design:NFR3.3",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.4",
+   "target": "design:nfr-design:NFR3.4",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.5",
+   "target": "design:nfr-design:NFR3.5",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.6",
+   "target": "design:nfr-design:NFR3.6",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.7",
+   "target": "design:nfr-design:NFR3.7",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.8",
+   "target": "design:nfr-design:NFR3.8",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR3.9",
+   "target": "design:nfr-design:NFR3.9",
+   "relation": "designed_as",
+   "status": "Deferred",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR4.1",
+   "target": "design:nfr-design:NFR4.1",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "NFR4.2",
+   "target": "design:nfr-design:NFR4.2",
+   "relation": "designed_as",
+   "status": "OK",
+   "origin": "nfr-design"
+  },
+  {
+   "source": "US1.1",
+   "target": "InventoryItem",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US1.2",
+   "target": "InventoryItem",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US1.3",
+   "target": "InventoryItem",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US1.4",
+   "target": "InventoryItem",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US1.5",
+   "target": "InventoryItem",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US2.1",
+   "target": "InventoryItem",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US2.2",
+   "target": "InventoryItem",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US3.1",
+   "target": "ApiEdge",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US4.1",
+   "target": "ApiEdge",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US4.2",
+   "target": "ApiEdge",
+   "relation": "owned_by_component",
+   "status": "OK",
+   "origin": "domain-design"
+  },
+  {
+   "source": "US1.1",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US1.2",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US1.3",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US1.4",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US1.5",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US2.1",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US2.2",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US3.1",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US4.1",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "US4.2",
+   "target": "U1",
+   "relation": "built_in_unit",
+   "status": "OK",
+   "origin": "units-generation"
+  },
+  {
+   "source": "FR1.1",
+   "target": "US1.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR1.2",
+   "target": "US1.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR1.3",
+   "target": "US1.2",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR1.4",
+   "target": "US1.3",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR1.5",
+   "target": "US1.4",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR1.6",
+   "target": "US1.5",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR2.1",
+   "target": "US2.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR2.2",
+   "target": "US2.2",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR2.3",
+   "target": "US2.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR2.4",
+   "target": "US2.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR2.5",
+   "target": "US2.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR3.1",
+   "target": "US3.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "FR3.2",
+   "target": "US3.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "NFR1",
+   "target": "US2.2",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "NFR2",
+   "target": "US4.1",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "NFR3",
+   "target": "US4.2",
+   "relation": "realized_by_story",
+   "status": "OK",
+   "origin": "user-stories"
+  },
+  {
+   "source": "NFR4",
+   "target": "stage:infrastructure-design",
+   "relation": "deferred_to",
+   "status": "Deferred",
+   "origin": "user-stories"
+  },
+  {
+   "source": "src/items/item-handlers.ts",
+   "target": "src/items/item-handlers.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/items/item-repository.ts",
+   "target": "src/items/item-repository.int.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/items/item-validation.ts",
+   "target": "src/items/item-validation.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/items/item-service.ts",
+   "target": "src/items/item-service.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/stock/stock-repository.ts",
+   "target": "src/stock/stock-repository.int.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/stock/stock-validation.ts",
+   "target": "src/stock/stock-validation.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/shared/http/error-envelope.ts",
+   "target": "src/shared/http/error-envelope.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/health/health-handler.ts",
+   "target": "src/health/health-handler.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/shared/logging/request-logger.ts",
+   "target": "src/shared/logging/request-logger.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "src/shared/config.ts",
+   "target": "src/shared/config.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "infra/lib/compute-stack.ts",
+   "target": "infra/test/compute-stack.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  },
+  {
+   "source": "infra/lib/data-stack.ts",
+   "target": "infra/test/data-stack.test.ts",
+   "relation": "tested_by",
+   "status": "OK",
+   "origin": "file-name convention (derived)"
+  }
+ ],
+ "reviews": [
+  {
+   "stage": "intent-capture",
+   "file": "ideation/intent-capture/intent-statement.md",
+   "verdict": "READY",
+   "date": "2026-08-28 13:40",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 3
+  },
+  {
+   "stage": "rough-mockups",
+   "file": "ideation/rough-mockups/wireframes.md",
+   "verdict": "READY",
+   "date": "2026-09-18 08:47",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 3
+  },
+  {
+   "stage": "requirements-analysis",
+   "file": "inception/requirements-analysis/requirements.md",
+   "verdict": "READY",
+   "date": "2026-10-01 13:57",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 3
+  },
+  {
+   "stage": "user-stories",
+   "file": "inception/user-stories/stories.md",
+   "verdict": "READY",
+   "date": "2026-10-01 14:30",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 4
+  },
+  {
+   "stage": "refined-mockups",
+   "file": "inception/refined-mockups/mockups.md",
+   "verdict": "READY",
+   "date": "2026-10-01 14:41",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 4
+  },
+  {
+   "stage": "domain-design",
+   "file": "inception/domain-design/components.md",
+   "verdict": "READY",
+   "date": "2026-10-01 14:51",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 3
+  },
+  {
+   "stage": "units-generation",
+   "file": "inception/units-generation/unit-of-work.md",
+   "verdict": "READY",
+   "date": "2026-10-02 10:12",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 3
+  },
+  {
+   "stage": "contract-design",
+   "file": "inception/contract-design/contract-summary.md",
+   "verdict": "READY",
+   "date": "2026-10-02 10:49",
+   "iteration": "1",
+   "critical": 0,
+   "major": 1,
+   "minor": 3
+  },
+  {
+   "stage": "functional-design",
+   "file": "construction/inventory-api/functional-design/functional-spec.md",
+   "verdict": "READY",
+   "date": "2026-10-08 09:23",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 3
+  },
+  {
+   "stage": "nfr-requirements",
+   "file": "construction/inventory-api/nfr-requirements/performance-requirements.md",
+   "verdict": "READY",
+   "date": "2026-10-13 09:46",
+   "iteration": "1",
+   "critical": 0,
+   "major": 0,
+   "minor": 2
+  },
+  {
+   "stage": "infrastructure-design",
+   "file": "construction/inventory-api/infrastructure-design/infrastructure-specification.md",
+   "verdict": "READY",
+   "date": "2026-10-21 11:18",
+   "iteration": "1",
+   "critical": 0,
+   "major": 1,
+   "minor": 2
+  },
+  {
+   "stage": "code-generation",
+   "file": "construction/inventory-api/code-generation/reviews/review-01.md",
+   "verdict": "READY",
+   "date": "2026-11-05 11:21",
+   "iteration": "1",
+   "critical": 0,
+   "major": 1,
+   "minor": 5
+  },
+  {
+   "stage": "contract-design",
+   "file": "inception/contract-design/reviews/review-01.md",
+   "verdict": "READY",
+   "date": "2026-11-10 09:27",
+   "iteration": "1",
+   "critical": 0,
+   "major": 3,
+   "minor": 5
+  },
+  {
+   "stage": "functional-design",
+   "file": "construction/inventory-api/functional-design/reviews/review-01.md",
+   "verdict": "NOT-READY",
+   "date": "2026-11-10 09:36",
+   "iteration": "1",
+   "critical": 1,
+   "major": 3,
+   "minor": 6
+  },
+  {
+   "stage": "functional-design",
+   "file": "construction/inventory-api/functional-design/reviews/review-02.md",
+   "verdict": "READY",
+   "date": "2026-11-10 09:41",
+   "iteration": "2",
+   "critical": 1,
+   "major": 3,
+   "minor": 10
+  },
+  {
+   "stage": "infrastructure-design",
+   "file": "construction/inventory-api/infrastructure-design/reviews/review-01.md",
+   "verdict": "NOT-READY",
+   "date": "2026-11-10 09:48",
+   "iteration": "1",
+   "critical": 0,
+   "major": 5,
+   "minor": 7
+  },
+  {
+   "stage": "infrastructure-design",
+   "file": "construction/inventory-api/infrastructure-design/reviews/review-02.md",
+   "verdict": "READY",
+   "date": "2026-11-10 09:54",
+   "iteration": "2",
+   "critical": 0,
+   "major": 4,
+   "minor": 14
+  },
+  {
+   "stage": "code-generation",
+   "file": "construction/inventory-api/code-generation/reviews/review-02.md",
+   "verdict": "READY",
+   "date": "2026-11-10 10:58",
+   "iteration": "1",
+   "critical": 0,
+   "major": 1,
+   "minor": 7
+  },
+  {
+   "stage": "nfr-requirements",
+   "file": "construction/inventory-api/nfr-requirements/reviews/review-01.md",
+   "verdict": "READY",
+   "date": "2026-11-10 11:08",
+   "iteration": "1",
+   "critical": 0,
+   "major": 2,
+   "minor": 3
+  },
+  {
+   "stage": "nfr-design",
+   "file": "construction/inventory-api/nfr-design/reviews/review-01.md",
+   "verdict": "NOT-READY",
+   "date": "2026-11-10 11:12",
+   "iteration": "1",
+   "critical": 0,
+   "major": 3,
+   "minor": 5
+  },
+  {
+   "stage": "nfr-design",
+   "file": "construction/inventory-api/nfr-design/reviews/review-02.md",
+   "verdict": "READY",
+   "date": "2026-11-10 11:18",
+   "iteration": "2",
+   "critical": 0,
+   "major": 2,
+   "minor": 11
+  }
+ ],
+ "jump": {
+  "ts": "2026-11-09 15:18 UTC",
+  "source": "functional-design",
+  "target": "contract-design",
+  "changed": [
+   "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md"
+  ],
+  "invalidated": [
+   "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/entities.md",
+   "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md",
+   "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md",
+   "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/traceability.json",
+   "aidlc/spaces/default/intents/260825-inventory-api/inception/delivery-planning/bolt-plan.md",
+   "aidlc/spaces/default/intents/260825-inventory-api/inception/delivery-planning/delivery-planning-questions.md",
+   "aidlc/spaces/default/intents/260825-inventory-api/inception/delivery-planning/external-dependency-map.md",
+   "aidlc/spaces/default/intents/260825-inventory-api/inception/delivery-planning/risk-and-sequencing-rationale.md",
+   "aidlc/spaces/default/intents/260825-inventory-api/inception/delivery-planning/team-allocation.md"
+  ],
+  "invalidated_reviews": [
+   "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md#Review"
+  ],
+  "reason": "Code review R-01 (Major) found unbounded increments on a public, unauthenticated API; the person decided to add Cognito auth in this release."
+ },
+ "drift": [
+  {
+   "id": "NFR2.3",
+   "file": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "note": "Still says no application-layer auth at MVP; superseded by contract 1.1.0 (Cognito JWT)."
+  },
+  {
+   "id": "NFR2.4",
+   "file": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/security-requirements.md",
+   "note": "Still reserves an X-Api-Key path; the seam was filled by the gateway JWT authorizer instead."
+  },
+  {
+   "id": "tech-stack",
+   "file": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/nfr-requirements/tech-stack-decisions.md",
+   "note": "Authentication row still says None at MVP."
+  }
+ ],
+ "gitlab": ""
+}

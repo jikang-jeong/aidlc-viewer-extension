@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "stage": "code-generation",
+  "unit": "inventory-api",
+  "workflow": null,
+  "attempt": "58cb9181c57f4edf",
+  "iteration": 1,
+  "reviewer": "aidlc-architecture-reviewer-agent",
+  "verdict": "READY",
+  "request_id": "review:3747c882605ab8ad7e5e755cd3ab51be",
+  "request_challenge": null,
+  "artifact_fingerprint": "sha256:f23aa2c4bd063e3f04b37aa9f41d339fed83cb86f14b28d0c3e5e8e8c986bfbd",
+  "source_fingerprint": "88b09c29e1147035138e0e8c01583709314e2d0208eb05ac7b9284a3aca3970c",
+  "unit_source_fingerprint": "sha256:b2421c634fadfab692b732be86b61d15ae11abb8e1a112e0f1386193c0fdea72",
+  "findings": [
+    {
+      "id": "R-01",
+      "severity": "Major",
+      "location": "src/stock/stock-repository.ts > buildAdjustment (positive-delta branch); src/stock/stock-validation.ts > adjustStockSchema; src/items/item.ts > toItem",
+      "finding": "A positive adjustment has no upper bound. `delta` may be any safe integer, and an increment checks only `attribute_exists(sku)`, so `quantity + delta` can go past Number.MAX_SAFE_INTEGER (for example an item at 1 adjusted by +9007199254740991). DynamoDB stores the bigger number and commits the write. The document client then reads it back as a BigInt (or with lost precision), `toItem` throws CorruptItemRecord, and the caller gets a 500 for a change that was already saved. From then on, every GET of that SKU, every list page that includes it, and every later adjustment returns 500 until someone fixes the record by hand. The API is public and unauthenticated (OQ-1), so any anonymous caller can do this with one request. No test covers it.",
+      "required_action": "For increments, add an upper-bound condition, `quantity <= :maxAllowed` with `:maxAllowed = Number.MAX_SAFE_INTEGER - delta`, and map its failure to a 4xx (a ValidationError, or a documented 409). Otherwise, cap `delta` and `quantity` at a documented maximum in validation. Add a repository integration test showing an overflowing increment is rejected and the stored quantity is unchanged.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-02",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/code-summary.md > Race-Test Evidence (RED to GREEN); code-generation-plan.md > Step 15",
+      "finding": "The team's main test rule says the race test must fail against a naive read-modify-write. The plan ticks Step 15 (\"Capture the failing output for code-summary.md\"), but the summary admits the RED output was not kept. Reading the test, its assertions should catch a naive version (scenario 1 expects exactly 50 after 50 concurrent +1), but no recorded run shows this.",
+      "required_action": "Run the race test once more against a temporary naive GetItem-then-PutItem body (in a scratch branch, then discard it). Record the failing assertions in code-summary.md, or say plainly that Step 15's capture was not done.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-03",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/code-summary.md > Deviations (\"Integration runs need AWS_PROFILE unset ... documented in the test instructions\"); unit-test-instructions.md > Environment for integration runs",
+      "finding": "The summary says the AWS_PROFILE requirement is documented in the test instructions. unit-test-instructions.md never mentions AWS_PROFILE. I confirmed the impact: with AWS_PROFILE set, the integration command crashed with `TypeError: code.charCodeAt is not a function` and \"No test files found\", and the real cause was hidden. With AWS_PROFILE unset, the same command passed 6 files and 37 tests.",
+      "required_action": "Add `unset AWS_PROFILE` (or `env -u AWS_PROFILE`) to the integration environment block in unit-test-instructions.md, and mention the misleading Vitest crash, so Build and Test and CI do not hit it.",
+      "status": "Unresolved"
+    },
+    {
+      "id": "R-04",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/traceability.json > NFR2.3 and NFR4.2 rows",
+      "finding": "NFR2.3 says the API relies on an internal network boundary (security group, private subnet, VPC). The build makes it a public internet API on purpose (the human's OQ-1 decision), yet the row says `OK` against compute-stack.ts with no note of the change, and code-summary.md lists no deviation for it. NFR4.2 requires gitleaks and Dependabot to run in CI. Only `.github/dependabot.yml` and `.gitleaks.toml` exist (no workflow runs gitleaks yet, as plan A-4 defers it to CI Pipeline), but the row says `OK`.",
+      "required_action": "Add a code-summary.md deviation saying NFR2.3's internal-boundary assumption was replaced by the public-API decision of 2026-11-04. Change the NFR4.2 note so CI Pipeline must add the gitleaks job, or keep the row partial until then.",
+      "status": "Unresolved"
+    },
+    {
+      "id": "R-05",
+      "severity": "Minor",
+      "location": "src/items/item-repository.ts > scanPrefix / countItems; src/items/item-validation.ts > parsePagination (offset has no maximum)",
+      "finding": "Every GET /v1/items runs a full-table `Select: COUNT` scan, and a large `offset` makes `scanPrefix` read up to the whole table. OQ-2 accepted this cost when the API was assumed internal. Now it is public and unauthenticated, so any anonymous caller can multiply read costs with repeated calls (NFR1.4 says \"no unbounded scans\").",
+      "required_action": "Note this exposure next to OQ-2 in the README or code summary for the human to weigh. Better, cap `offset` (for example at 10,000) or cache the total, until cursor paging or auth arrives.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-06",
+      "severity": "Minor",
+      "location": "Full coverage command in unit-test-instructions.md",
+      "finding": "I did not run the blocking `--coverage` command, because the review brief allows writing only the review file and the v8 coverage reporter writes into `coverage/`. So the claim of 96.34% lines and a met 80% floor is the builder's own report. My runs (unit plus infra: 16 files, 112 tests; integration: 6 files, 37 tests) match the reported 149 tests.",
+      "required_action": "None for the builder. Build and Test should run the full coverage command and confirm the floor.",
+      "status": "Unresolved"
+    },
+    {
+      "id": "R-07",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/code-summary.md > opening paragraph, Sources, Files Created table, Key Implementation Decisions",
+      "finding": "The top half of the summary still describes the earlier build. It says \"All 23 plan steps are complete\", OQ-1 is \"resolved as an intentionally public API; Cognito deferred\", the API is \"Intentionally public\" with a cdk-nag authorization suppression and \"Cognito is listed under Next release\", and the manifest has \"72 paths\". In fact the manifest lists 76 paths, the Infra row leaves out `auth-stack.ts`, and the Steps 24–26 section further down says the opposite about auth. Someone reading the gate summary from the top gets the wrong security posture.",
+      "required_action": "Update the opening, Sources, Files table and Key Implementation Decisions to the Cognito JWT build (26 steps, 76 paths, auth-stack listed, OQ-1 superseded), or mark those parts clearly as replaced by the Steps 24–26 section.",
+      "status": "New"
+    },
+    {
+      "id": "R-08",
+      "severity": "Minor",
+      "location": "src/stock/stock-repository.ts > classifyConditionFailure / readOldQuantity (about lines 50–84)",
+      "finding": "When the condition fails and the old image exists but `quantity` cannot be read (missing, or in an unexpected shape), the fallback always returns the overflow ValidationError (\"would exceed 9007199254740991\"), even for a decrement. Code-summary reports that the raw-number branch of `readOldQuantity` is not covered by any test. Today's data always has a numeric quantity, so this is a robustness gap, not a live bug.",
+      "required_action": "Return the overflow error only when `delta > 0` and the old quantity is known to be above `maxCurrent`. For any other case where the quantity cannot be read, throw an internal error (500, logged) instead of a misleading 400.",
+      "status": "New"
+    }
+  ],
+  "derived_findings": [
+    {
+      "id": "R-01",
+      "severity": "Major",
+      "location": "src/stock/stock-repository.ts > buildAdjustment (positive-delta branch); src/stock/stock-validation.ts > adjustStockSchema; src/items/item.ts > toItem",
+      "finding": "A positive adjustment has no upper bound. `delta` may be any safe integer, and an increment checks only `attribute_exists(sku)`, so `quantity + delta` can go past Number.MAX_SAFE_INTEGER (for example an item at 1 adjusted by +9007199254740991). DynamoDB stores the bigger number and commits the write. The document client then reads it back as a BigInt (or with lost precision), `toItem` throws CorruptItemRecord, and the caller gets a 500 for a change that was already saved. From then on, every GET of that SKU, every list page that includes it, and every later adjustment returns 500 until someone fixes the record by hand. The API is public and unauthenticated (OQ-1), so any anonymous caller can do this with one request. No test covers it.",
+      "required_action": "For increments, add an upper-bound condition, `quantity <= :maxAllowed` with `:maxAllowed = Number.MAX_SAFE_INTEGER - delta`, and map its failure to a 4xx (a ValidationError, or a documented 409). Otherwise, cap `delta` and `quantity` at a documented maximum in validation. Add a repository integration test showing an overflowing increment is rejected and the stored quantity is unchanged.",
+      "status": "Resolved",
+      "reviewer_note": "`adjustmentWindow` adds `quantity <= :maxCurrent` (MAX_SAFE_INTEGER minus a positive delta) to the single conditional UpdateItem; a failed condition with an old image inside the floor becomes a 400 ValidationError on `delta`. `stock-repository.int.test.ts` covers exact-max (passes) and overflow (400, quantity unchanged); `stock-api.int.test.ts` covers the HTTP 400. All pass.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-02",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/code-summary.md > Race-Test Evidence (RED to GREEN); code-generation-plan.md > Step 15",
+      "finding": "The team's main test rule says the race test must fail against a naive read-modify-write. The plan ticks Step 15 (\"Capture the failing output for code-summary.md\"), but the summary admits the RED output was not kept. Reading the test, its assertions should catch a naive version (scenario 1 expects exactly 50 after 50 concurrent +1), but no recorded run shows this.",
+      "required_action": "Run the race test once more against a temporary naive GetItem-then-PutItem body (in a scratch branch, then discard it). Record the failing assertions in code-summary.md, or say plainly that Step 15's capture was not done.",
+      "status": "Resolved",
+      "reviewer_note": "code-summary.md Race-Test Evidence now holds the RED output from the naive GetItem/PutItem body (4 of 4 scenarios failing) and says plainly that it was captured again later, not during the original Step 15 run.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-03",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/code-summary.md > Deviations (\"Integration runs need AWS_PROFILE unset ... documented in the test instructions\"); unit-test-instructions.md > Environment for integration runs",
+      "finding": "The summary says the AWS_PROFILE requirement is documented in the test instructions. unit-test-instructions.md never mentions AWS_PROFILE. I confirmed the impact: with AWS_PROFILE set, the integration command crashed with `TypeError: code.charCodeAt is not a function` and \"No test files found\", and the real cause was hidden. With AWS_PROFILE unset, the same command passed 6 files and 37 tests.",
+      "required_action": "Add `unset AWS_PROFILE` (or `env -u AWS_PROFILE`) to the integration environment block in unit-test-instructions.md, and mention the misleading Vitest crash, so Build and Test and CI do not hit it.",
+      "status": "Unresolved",
+      "reviewer_note": "unit-test-instructions.md still says nothing about `AWS_PROFILE` (the integration env block only exports DYNAMODB_ENDPOINT, AWS_REGION and the placeholder keys). code-summary.md Deviations also says the requirement \"is documented in the test instructions\", which is not true.",
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-04",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/traceability.json > NFR2.3 and NFR4.2 rows",
+      "finding": "NFR2.3 says the API relies on an internal network boundary (security group, private subnet, VPC). The build makes it a public internet API on purpose (the human's OQ-1 decision), yet the row says `OK` against compute-stack.ts with no note of the change, and code-summary.md lists no deviation for it. NFR4.2 requires gitleaks and Dependabot to run in CI. Only `.github/dependabot.yml` and `.gitleaks.toml` exist (no workflow runs gitleaks yet, as plan A-4 defers it to CI Pipeline), but the row says `OK`.",
+      "required_action": "Add a code-summary.md deviation saying NFR2.3's internal-boundary assumption was replaced by the public-API decision of 2026-11-04. Change the NFR4.2 note so CI Pipeline must add the gitleaks job, or keep the row partial until then.",
+      "status": "Unresolved",
+      "reviewer_note": "traceability.json still marks NFR2.3 `OK` on compute-stack.ts with no note on the changed boundary assumption, and NFR4.2 `OK` on `.github/dependabot.yml` while the gitleaks CI job still waits on CI Pipeline (plan A-4).",
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-05",
+      "severity": "Minor",
+      "location": "src/items/item-repository.ts > scanPrefix / countItems; src/items/item-validation.ts > parsePagination (offset has no maximum)",
+      "finding": "Every GET /v1/items runs a full-table `Select: COUNT` scan, and a large `offset` makes `scanPrefix` read up to the whole table. OQ-2 accepted this cost when the API was assumed internal. Now it is public and unauthenticated, so any anonymous caller can multiply read costs with repeated calls (NFR1.4 says \"no unbounded scans\").",
+      "required_action": "Note this exposure next to OQ-2 in the README or code summary for the human to weigh. Better, cap `offset` (for example at 10,000) or cache the total, until cursor paging or auth arrives.",
+      "status": "Resolved",
+      "reviewer_note": "`MAX_OFFSET = 10_000` is enforced in `parsePagination` (offset 10001 gets a 400, tested in items-api.int.test.ts). The full COUNT scan per list call is still there, but plan OQ-2 now records it as an accepted MVP cost.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-06",
+      "severity": "Minor",
+      "location": "Full coverage command in unit-test-instructions.md",
+      "finding": "I did not run the blocking `--coverage` command, because the review brief allows writing only the review file and the v8 coverage reporter writes into `coverage/`. So the claim of 96.34% lines and a met 80% floor is the builder's own report. My runs (unit plus infra: 16 files, 112 tests; integration: 6 files, 37 tests) match the reported 149 tests.",
+      "required_action": "None for the builder. Build and Test should run the full coverage command and confirm the floor.",
+      "status": "Unresolved",
+      "reviewer_note": "As the brief asked, I did not run the `--coverage` command. The 80% line floor and the claimed 96.12% lines are still to be checked by Build and Test.",
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-07",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/code-summary.md > opening paragraph, Sources, Files Created table, Key Implementation Decisions",
+      "finding": "The top half of the summary still describes the earlier build. It says \"All 23 plan steps are complete\", OQ-1 is \"resolved as an intentionally public API; Cognito deferred\", the API is \"Intentionally public\" with a cdk-nag authorization suppression and \"Cognito is listed under Next release\", and the manifest has \"72 paths\". In fact the manifest lists 76 paths, the Infra row leaves out `auth-stack.ts`, and the Steps 24–26 section further down says the opposite about auth. Someone reading the gate summary from the top gets the wrong security posture.",
+      "required_action": "Update the opening, Sources, Files table and Key Implementation Decisions to the Cognito JWT build (26 steps, 76 paths, auth-stack listed, OQ-1 superseded), or mark those parts clearly as replaced by the Steps 24–26 section.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-08",
+      "severity": "Minor",
+      "location": "src/stock/stock-repository.ts > classifyConditionFailure / readOldQuantity (about lines 50–84)",
+      "finding": "When the condition fails and the old image exists but `quantity` cannot be read (missing, or in an unexpected shape), the fallback always returns the overflow ValidationError (\"would exceed 9007199254740991\"), even for a decrement. Code-summary reports that the raw-number branch of `readOldQuantity` is not covered by any test. Today's data always has a numeric quantity, so this is a robustness gap, not a live bug.",
+      "required_action": "Return the overflow error only when `delta > 0` and the old quantity is known to be above `maxCurrent`. For any other case where the quantity cannot be read, throw an internal error (500, logged) instead of a misleading 400.",
+      "status": "New",
+      "introduced_in_review": true
+    }
+  ],
+  "body": "## Review\n\n**Verdict:** READY\n**Reviewer:** aidlc-architecture-reviewer-agent\n**Date:** 2026-11-10T10:58:11Z\n**Iteration:** 1\n**Verdict Dictated:** no\n\n### Findings\n\n**Prior findings**\n\n| ID | Now | Severity | Note |\n|---|---|---|---|\n| R-01 | Fixed | Major | `adjustmentWindow` adds `quantity <= :maxCurrent` (MAX_SAFE_INTEGER minus a positive delta) to the single conditional UpdateItem; a failed condition with an old image inside the floor becomes a 400 ValidationError on `delta`. `stock-repository.int.test.ts` covers exact-max (passes) and overflow (400, quantity unchanged); `stock-api.int.test.ts` covers the HTTP 400. All pass. |\n| R-02 | Fixed | Minor | code-summary.md Race-Test Evidence now holds the RED output from the naive GetItem/PutItem body (4 of 4 scenarios failing) and says plainly that it was captured again later, not during the original Step 15 run. |\n| R-03 | Still applies | Minor | unit-test-instructions.md still says nothing about `AWS_PROFILE` (the integration env block only exports DYNAMODB_ENDPOINT, AWS_REGION and the placeholder keys). code-summary.md Deviations also says the requirement \"is documented in the test instructions\", which is not true. |\n| R-04 | Still applies | Minor | traceability.json still marks NFR2.3 `OK` on compute-stack.ts with no note on the changed boundary assumption, and NFR4.2 `OK` on `.github/dependabot.yml` while the gitleaks CI job still waits on CI Pipeline (plan A-4). |\n| R-05 | Fixed | Minor | `MAX_OFFSET = 10_000` is enforced in `parsePagination` (offset 10001 gets a 400, tested in items-api.int.test.ts). The full COUNT scan per list call is still there, but plan OQ-2 now records it as an accepted MVP cost. |\n| R-06 | Still applies | Minor | As the brief asked, I did not run the `--coverage` command. The 80% line floor and the claimed 96.12% lines are still to be checked by Build and Test. |\n\n**New findings**\n\n| Severity | Location | Finding | Required action |\n|---|---|---|---|\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/code-generation/code-summary.md > opening paragraph, Sources, Files Created table, Key Implementation Decisions | The top half of the summary still describes the earlier build. It says \"All 23 plan steps are complete\", OQ-1 is \"resolved as an intentionally public API; Cognito deferred\", the API is \"Intentionally public\" with a cdk-nag authorization suppression and \"Cognito is listed under Next release\", and the manifest has \"72 paths\". In fact the manifest lists 76 paths, the Infra row leaves out `auth-stack.ts`, and the Steps 24–26 section further down says the opposite about auth. Someone reading the gate summary from the top gets the wrong security posture. | Update the opening, Sources, Files table and Key Implementation Decisions to the Cognito JWT build (26 steps, 76 paths, auth-stack listed, OQ-1 superseded), or mark those parts clearly as replaced by the Steps 24–26 section. |\n| Minor | src/stock/stock-repository.ts > classifyConditionFailure / readOldQuantity (about lines 50–84) | When the condition fails and the old image exists but `quantity` cannot be read (missing, or in an unexpected shape), the fallback always returns the overflow ValidationError (\"would exceed 9007199254740991\"), even for a decrement. Code-summary reports that the raw-number branch of `readOldQuantity` is not covered by any test. Today's data always has a numeric quantity, so this is a robustness gap, not a live bug. | Return the overflow error only when `delta > 0` and the old quantity is known to be above `maxCurrent`. For any other case where the quantity cannot be read, throw an internal error (500, logged) instead of a misleading 400. |\n\n### Validation Tool Results\n\n| Tool | Result | Interpretation |\n|---|---|---|\n| `npx vitest run --project inventory-api-unit` | PASS: 13 files, 102 tests | Matches the claimed count. |\n| `npx vitest run --project inventory-api-integration` (DynamoDB Local 3.1.0 via Finch, AWS_PROFILE unset, placeholder keys) | PASS: 6 files, 45 tests | Matches the claim. Includes the 4 race scenarios, overflow, exact-max, offset 10001, trimmed SKU and the update-racing-adjustments test. Container stopped afterwards with `finch compose ... down`. |\n| `npx vitest run --project inventory-api-infra` | PASS: 4 files, 29 tests | Matches the claim (auth-stack, compute-stack, data-stack, app). |\n| `npm run lint` | PASS: 0 errors, 3 warnings (`security/detect-object-injection` in stock-adjustment.race.int.test.ts lines 50 and 60) | Same 3 warnings as before, test file only. |\n| `npm run typecheck` | PASS | `tsc --noEmit` clean. |\n| `npm run synth` (cdk-nag) | PASS: three stacks synthesized (InventoryApiData-staging, InventoryApiAuth-staging, InventoryApiCompute-staging) | No unacknowledged cdk-nag findings. APIG4 is acknowledged only on the health route, so an item route without the authorizer would fail synth. |\n| Full `--coverage` run | Not run | Skipped as the brief asked (it writes `coverage/`). Build and Test checks the 80% floor. |\n\n### Summary\n\nI tried to break the contract 1.1.0 and Cognito changes and could not find a defect that blocks this build. All checks I ran pass with the claimed counts:\n\n- The stock adjustment is still one atomic conditional UpdateItem. It now holds both the zero floor and the safe-integer ceiling, and a failed condition is classified from the ALL_OLD item with no second read.\n- The item update writes only name and description, under `attribute_exists`.\n- Offset, delta, quantity, name and description bounds are enforced and tested. The name and description lengths are stricter than the published OpenAPI, which was accepted upstream.\n- The JWT authorizer (pool issuer, client-id audience) is on every `/v1/items*` route, and only `/v1/health` is open.\n- Integrations target the `live` alias, access logs are JSON, and the alarm uses API Gateway 5xx and Count.\n\nWhat remains is documentation and robustness: the stale top half of code-summary.md, the AWS_PROFILE note still missing from the test instructions, the traceability notes for NFR2.3 and NFR4.2, and an inexact error fallback when the old quantity cannot be read.\n",
+  "recorded_at": "2026-11-10T11:02:30Z"
+}
