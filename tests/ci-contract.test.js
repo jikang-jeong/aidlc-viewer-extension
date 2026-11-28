@@ -9,14 +9,17 @@
 //     and Node 20 does not expand globs itself (that arrived in 21), so it printed
 //     "Could not find 'tests/*.test.js'". The directory form `node --test tests/` is
 //     the mirror image: Node 20 searches it, Node 22 runs it as a module and fails.
-//     Bare `node --test` finds tests/*.test.js by the runner's default patterns on
-//     every supported Node, with no shell and no glob in between.
+//     Bare `node --test` fixed both, until the Trace Explorer brought a trimmed real
+//     project under tests/fixtures/: its 23 `*.test.ts` files match the runner's default
+//     patterns on Node 22.18+ (type stripping on by default) and run as tests there, and
+//     not on Node 20. So `npm test` is now tools/run-tests.js, which hands node --test the
+//     explicit list of tests/*.test.js: no shell, no glob, no default patterns.
 //   * tests/v1-isolation.test.js compares the strip's tag and tooltip phrase against
 //     the 0.0.19 source with `git show e17e4ad:src/extension.js`. actions/checkout
 //     clones one commit deep by default, so git had no such object.
 //
-// These pin the two settings. The behaviour itself is pinned by the CI matrix: only a
-// real Node 20 and Node 22 can show the two failures, and the matrix runs both.
+// These pin the settings. The behaviour itself is pinned by the CI matrix: only a real
+// Node 20 and Node 22 can show the failures, and the matrix runs both.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -24,46 +27,39 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const REPO_ROOT = path.join(__dirname, '..');
+const runner = require('../tools/run-tests');
 
-test('the test script is bare node --test, so Node 20 and Node 22 find the same files', () => {
+test('the test script is the explicit runner, so every Node runs the same files', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
   assert.equal(
     pkg.scripts.test,
-    'node --test',
-    'a quoted glob is not expanded on Node 20 and a directory argument is run as a module on Node 22; ' +
-      'let the runner find tests/*.test.js by its default patterns'
+    'node tools/run-tests.js',
+    'a quoted glob is not expanded on Node 20, a directory is run as a module on Node 22, and the ' +
+      'default patterns run the fixture\'s *.test.ts files on Node 22; list the files explicitly'
   );
 });
 
-test('only tests/*.test.js matches the default patterns the bare runner uses', () => {
-  // The runner's default patterns, shared by Node 20 and 22 (node_modules excluded):
-  // **/*.test.{cjs,mjs,js}, **/*-test.*, **/*_test.*, **/test-*.*, **/test.*, **/test/**/*.*
-  const matches = [];
+test('the runner lists exactly tests/*.test.js, and none of the files the default patterns would add', () => {
+  const files = runner.testFiles();
+  assert.ok(files.includes(path.join('tests', 'ci-contract.test.js')), 'this file is in the suite');
+  assert.deepEqual(files, [...files].sort(), 'a deterministic order');
+  for (const file of files) {
+    assert.equal(path.dirname(file), 'tests', `${file}: only files directly under tests/`);
+    assert.match(path.basename(file), /\.test\.js$/, `${file}: only *.test.js`);
+  }
+  // What bare `node --test` would also run on a Node with type stripping: the fixture's
+  // test files. They are a real project's names, so they stay; the runner never sees them.
+  const fixtureTests = [];
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === '.git') continue;
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (
-        /(\.test|-test|_test)\.[cm]?js$/.test(entry.name) ||
-        /^test-[^/]*\.[cm]?js$/.test(entry.name) ||
-        /^test\.[cm]?js$/.test(entry.name) ||
-        (/\.[cm]?js$/.test(entry.name) && full.split(path.sep).includes('test'))
-      ) {
-        matches.push(path.relative(REPO_ROOT, full));
-      }
+      if (entry.isDirectory()) walk(full);
+      else if (/(\.test|-test|_test)\.[cm]?[jt]s$|^test[-.]/.test(entry.name) || full.split(path.sep).includes('test')) fixtureTests.push(path.relative(REPO_ROOT, full));
     }
   };
-  walk(REPO_ROOT);
-  const outside = matches.filter((file) => !file.startsWith(`tests${path.sep}`));
-  assert.deepEqual(outside, [], 'a file outside tests/ would be run as a test by bare node --test');
-  const suite = fs.readdirSync(path.join(REPO_ROOT, 'tests')).filter((name) => name.endsWith('.test.js'));
-  assert.deepEqual(
-    matches.map((file) => path.basename(file)).sort(),
-    suite.sort(),
-    'the bare runner must pick up exactly the suite'
-  );
+  walk(path.join(REPO_ROOT, 'tests', 'fixtures'));
+  assert.ok(fixtureTests.length > 0, 'the fixture still carries test-named files (otherwise this guard is moot)');
+  for (const file of fixtureTests) assert.ok(!files.includes(file), `${file} must not be run as a test`);
 });
 
 test('the verify job checks out the full history the 0.0.19 comparison needs', () => {

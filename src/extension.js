@@ -2527,13 +2527,14 @@ function isVisibleInTree(rootUri, uri) {
 }
 
 // Whether a watcher event is on a path the Trace Explorer reads: under aidlc/ (the
-// intent's records, including its .aidlc-engine/ reviews) or .kiro/ (stage specs),
-// and never inside node_modules or .git.
+// intent's records, including its .aidlc-engine/ reviews) or a harness directory
+// (`.kiro/`, `.claude/`, ...: the stage specs, see harness-dirs.js), and never inside
+// node_modules or .git.
 function isTraceInputPath(rootUri, uri) {
   const rel = path.relative(rootUri.fsPath, uri.fsPath);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
   const segments = rel.split(path.sep);
-  if (segments[0] !== 'aidlc' && segments[0] !== '.kiro') return false;
+  if (segments[0] !== 'aidlc' && !HARNESS_DIRS.includes(segments[0])) return false;
   return !segments.some((segment) => segment === 'node_modules' || segment === '.git');
 }
 

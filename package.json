@@ -208,7 +208,7 @@
   },
   "scripts": {
     "check": "node --check src/extension.js",
-    "test": "node --test",
+    "test": "node tools/run-tests.js",
     "verify": "npm run check && npm test",
     "probe": "node tools/aidlc-probe.js",
     "package": "npx --yes @vscode/vsce@2.15.0 package --no-dependencies --githubBranch main",
