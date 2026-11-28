@@ -283,6 +283,11 @@ function makeProject(files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aidlc-trace-'));
   const intent = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-demo');
   fs.mkdirSync(intent, { recursive: true });
+  // Every intent record the engine creates holds aidlc-state.md, and that is what makes a
+  // directory under intents/ a record at all (runtime.isIntentRecord, the engine's own
+  // listIntentDirs rule; the inventory-api fixture carries one). Without it the intent is
+  // not listed, which is how two of these tests went red when #6 and #7 met on main.
+  fs.writeFileSync(path.join(intent, 'aidlc-state.md'), '# AI-DLC State\n');
   for (const [rel, contents] of Object.entries(files)) {
     const full = rel.startsWith('/') ? path.join(root, rel.slice(1)) : path.join(intent, rel);
     fs.mkdirSync(path.dirname(full), { recursive: true });

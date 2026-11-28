@@ -878,7 +878,11 @@ needed; and a manifest entry whose directory has lost its state file is now repo
 missing on disk, which is what the engine would say too. The fixtures that modelled an
 intent as runtime-graph.json alone now write the state file, as the engine does; the test
 that read "no state file" as a case is renamed, because a record without one is not a
-case this reader meets. Pins: harness-dirs.test.js ("an intent record is a directory that
+case this reader meets. The Trace Explorer (#6), written in parallel, modelled its
+synthetic intents the same way: each PR was green on its own and main went red where they
+met (CI run 9 on 6af04c7, two trace-data tests reading "no intents found"), so its
+`makeProject` writes the file too. The rule for every fixture from here: a directory that
+stands for an intent carries `aidlc-state.md`, or it is not an intent. Pins: harness-dirs.test.js ("an intent record is a directory that
 holds aidlc-state.md", the directory walk and the manifest cases, with the shard content
 pasted from the engine), v2-robustness "a record absent from the manifest is reported, not
 hidden; a bare directory is neither".
