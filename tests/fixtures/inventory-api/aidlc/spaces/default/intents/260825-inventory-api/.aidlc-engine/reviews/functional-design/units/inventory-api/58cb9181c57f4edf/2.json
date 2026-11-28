@@ -1,0 +1,285 @@
+{
+  "version": 1,
+  "stage": "functional-design",
+  "unit": "inventory-api",
+  "workflow": null,
+  "attempt": "58cb9181c57f4edf",
+  "iteration": 2,
+  "reviewer": "aidlc-architecture-reviewer-agent",
+  "verdict": "READY",
+  "request_id": "review:cbb9b0a7e5f2b6df979a06e1a69cef30",
+  "request_challenge": null,
+  "artifact_fingerprint": "sha256:e82e3ad4b3b6ffaa5fb9ecca067ac034dc4e2c0cfcb132fe190f8effff69d6fb",
+  "source_fingerprint": null,
+  "unit_source_fingerprint": null,
+  "findings": [
+    {
+      "id": "R-00",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > review findings table",
+      "finding": "The reviewer's findings table could not be read, so its rows are not listed here: aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md: findings table header declares #, Severity, Location, Finding, Recommendation. Expected columns: ID, Severity, Location, Finding, Required action, Status. Missing: ID, Required action, Status",
+      "required_action": "Address the reviewer's findings as written below this table.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-01",
+      "severity": "Critical",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > Rules (source of truth) yaml block, BR5.2 `logic` (file line 199)",
+      "finding": "The business-rules YAML, which the file declares as the source of truth, does not parse. BR5.2's `logic` is an unquoted value containing `({ status: \"ok\" })`; the colon-space inside it breaks the mapping. js-yaml fails with \"bad indentation of a mapping entry (174:57)\" and Bun's YAML parser also rejects the block. Nothing that reads rules.md mechanically (the traceability check resolving BR targets, Code Generation) can load any of the 16 rules.",
+      "required_action": "Turn BR5.2 `logic` into a folded block (`logic: >`) like the other multi-clause rules, or quote it. Then parse the block again and re-run the traceability check against rules.md.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-02",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > WF-AUTH step 2 vs rules.md > BR5.1, functional-spec.md > Cross-cutting per-request logging, traceability.json > AC4.2.2",
+      "finding": "The design contradicts itself on logging. WF-AUTH says a rejected-token request writes \"no service log entry\". BR5.1 says \"Every request emits one structured log entry\" (applies to all endpoints), and the spec says every workflow emits one. AC4.2.2 (\"Given any request ... a structured log entry is emitted\") is marked OK against BR5.1 even though the design deliberately leaves 401 requests unlogged by the service. An implementer cannot satisfy both statements, and a test written from AC4.2.2 would fail on the 401 path.",
+      "required_action": "Choose one. Either (a) state that the gateway's access log covers 401 requests, giving its field set and how it correlates with requestId, or (b) narrow BR5.1 and the spec text to requests that reach the service, and record the 401 exception against AC4.2.2 in traceability.json instead of a plain OK.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-03",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/traceability.json > AC3.1.1 row and reverse BR6.1; rules.md > BR3.1 logic",
+      "finding": "AC3.1.1 requires that \"any failing request\" returns a code, a message and a request id. It is marked OK against BR3.1, yet BR3.1 itself exempts the 401, whose gateway body `{\"message\":\"Unauthorized\"}` has no code and no requestId. Upstream still says the opposite of the design: requirements.md assumption A1 (\"No authentication/authorization in the MVP\") and the stories.md MoSCoW note (auth excluded) were never updated after contract Q7/Q8. The traceability file records BR6.1 only as a reverse N/A. The contradiction between approved stories and the design is carried forward without being raised.",
+      "required_action": "Record the 401 carve-out on the AC3.1.1 row (for example, OK with a target noting the contract Q8 exception) so it is not a silent OK. Surface the stale A1 and the stories auth exclusion to the person so they either update them or explicitly accept the deviation.",
+      "status": "Unresolved"
+    },
+    {
+      "id": "R-04",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > BR1.3 logic; functional-spec.md > WF4",
+      "finding": "The contract's UpdateItemRequest has `minProperties: 1`, so an empty PUT body must be rejected. BR1.3 and WF4 only reject extra fields and \"apply the provided name and/or description\", so as written an empty `{}` is a 200 no-op. That diverges from the contract.",
+      "required_action": "Add to BR1.3, BR4.1 and WF4 step 2 that a payload with neither name nor description is a ValidationError (400).",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-05",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > BR2.1 and BR4.1 delta range",
+      "finding": "The design rejects any delta outside -9007199254740991..9007199254740991 with 400, but the contract's AdjustStockRequest.delta has no minimum or maximum, and the contract maps \"decrement below zero\" to 409 InsufficientStock. A very large negative delta is 400 in the design and arguably 409 by the contract.",
+      "required_action": "Either add the delta bounds to the contract's AdjustStockRequest (and its 400 description), or state in BR2.1 which check wins for out-of-range negative deltas and confirm it matches the contract.",
+      "status": "Unresolved"
+    },
+    {
+      "id": "R-06",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/entities.md > Item.sku constraints; rules.md > BR4.1",
+      "finding": "SKU is \"trimmed of surrounding whitespace before validation\", but the design never says whether the stored key is the trimmed value, whether path SKUs on get/update/delete/adjust are trimmed the same way, or whether the 1-64 length applies before or after trimming. Different readings give different duplicate detection (\" A\" vs \"A\") and different not-found results.",
+      "required_action": "State that the trimmed value is what is stored and compared, that path parameters are trimmed identically, and that the length bound applies after trimming.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-07",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > WF6 steps 3-7",
+      "finding": "Step 3 says to read, compute and \"commit the new value\" atomically, and steps 4-6 then check not-found, the zero floor and the overflow \"quantity unchanged\". Read in order, it commits before it checks, which suggests the naive read-modify-write the concurrency test must defeat.",
+      "required_action": "Reorder WF6: load (404 if absent), compute current + delta, reject below zero (409) or above the maximum (400), then commit conditionally and atomically, retrying a bounded number of times on conflict.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-08",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/entities.md > Item.name and Item.description; rules.md > BR4.1",
+      "finding": "name and description have no maximum length anywhere (entity, BR4.1, contract). Boundary validation (NFR2) therefore accepts unbounded strings up to the request size limit.",
+      "required_action": "Set a maximum length for name and description (and carry it into the contract), or record the request-size limit that bounds them.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-09",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > intro and WF-AUTH; rules.md > BR6.1",
+      "finding": "The stage requires technology-agnostic artifacts and functional-spec.md claims business logic is technology-agnostic, yet WF-AUTH and BR6.1 name the API Gateway JWT check and the Cognito user pool. The contract pins these, so this is wording, not a behaviour defect.",
+      "required_action": "Describe the rule as an edge token check that runs before the service, and point to the contract and infrastructure design for the concrete mechanism, or note why naming it is accepted here.",
+      "status": "Unresolved"
+    },
+    {
+      "id": "R-10",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > WF4 steps 3-4, and rules.md > BR1.3 logic",
+      "finding": "Update is written as load the item, then apply name and description. Unlike WF6, nothing says the write changes only those two fields or happens as one step. If an update rewrites the whole stored item, an adjustment that runs at the same time is lost, because the update writes back the old quantity. That breaks the BR2.3 promise that the final quantity equals the start plus all applied deltas, and the project rule that stock changes cannot race. The same load-then-write also allows an update that runs right after a delete to bring the deleted item back.",
+      "required_action": "State in BR1.3 and WF4 that the update changes only name and description, never writes quantity, and applies only if the item still exists (otherwise ItemNotFound), as one step. Name the update and adjust overlap in the BR2.3 race-test scope or in a new rule.",
+      "status": "New"
+    },
+    {
+      "id": "R-11",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > BR1.1 logic, and functional-spec.md > WF1 step 4",
+      "finding": "Create is written as check whether the SKU exists, then create. Nothing says this is one step. Two creates of the same SKU at the same time could both pass the check, and the second would overwrite the first. That breaks ITEM-C1 and FR1.2 (duplicate rejected, nothing written).",
+      "required_action": "State that create inserts only if the SKU is absent, as one step, so exactly one of two creates at the same time succeeds and the other gets DuplicateSku 409.",
+      "status": "New"
+    },
+    {
+      "id": "R-12",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > Sources, rules.md bullet",
+      "finding": "Sources lists rules.md as BR1.1 to BR5.2, but rules.md now defines BR6.1, which WF-AUTH and the Rules Summary rely on.",
+      "required_action": "Change the range to BR1.1 to BR6.1.",
+      "status": "New"
+    },
+    {
+      "id": "R-13",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/entities.md > name constraints, and rules.md > BR4.1 logic",
+      "finding": "For name, emptiness is checked after trimming, but the design does not say whether the trimmed or the raw value is stored, or whether the 200 limit counts before or after trimming. For SKU this is now explicit.",
+      "required_action": "State whether name is stored trimmed and whether the length limit applies to the trimmed value, the same way as SKU.",
+      "status": "New"
+    }
+  ],
+  "derived_findings": [
+    {
+      "id": "R-00",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > review findings table",
+      "finding": "The reviewer's findings table could not be read, so its rows are not listed here: aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md: findings table header declares #, Severity, Location, Finding, Recommendation. Expected columns: ID, Severity, Location, Finding, Required action, Status. Missing: ID, Required action, Status",
+      "required_action": "Address the reviewer's findings as written below this table.",
+      "status": "Resolved",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-01",
+      "severity": "Critical",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > Rules (source of truth) yaml block, BR5.2 `logic` (file line 199)",
+      "finding": "The business-rules YAML, which the file declares as the source of truth, does not parse. BR5.2's `logic` is an unquoted value containing `({ status: \"ok\" })`; the colon-space inside it breaks the mapping. js-yaml fails with \"bad indentation of a mapping entry (174:57)\" and Bun's YAML parser also rejects the block. Nothing that reads rules.md mechanically (the traceability check resolving BR targets, Code Generation) can load any of the 16 rules.",
+      "required_action": "Turn BR5.2 `logic` into a folded block (`logic: >`) like the other multi-clause rules, or quote it. Then parse the block again and re-run the traceability check against rules.md.",
+      "status": "Resolved",
+      "reviewer_note": "The rules.md yaml block now parses (Bun.YAML): 16 rules BR1.1 to BR6.1, all unique, every rule has all eight required fields. BR5.2 logic is a folded block. entities.md yaml also parses.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-02",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > WF-AUTH step 2 vs rules.md > BR5.1, functional-spec.md > Cross-cutting per-request logging, traceability.json > AC4.2.2",
+      "finding": "The design contradicts itself on logging. WF-AUTH says a rejected-token request writes \"no service log entry\". BR5.1 says \"Every request emits one structured log entry\" (applies to all endpoints), and the spec says every workflow emits one. AC4.2.2 (\"Given any request ... a structured log entry is emitted\") is marked OK against BR5.1 even though the design deliberately leaves 401 requests unlogged by the service. An implementer cannot satisfy both statements, and a test written from AC4.2.2 would fail on the 401 path.",
+      "required_action": "Choose one. Either (a) state that the gateway's access log covers 401 requests, giving its field set and how it correlates with requestId, or (b) narrow BR5.1 and the spec text to requests that reach the service, and record the 401 exception against AC4.2.2 in traceability.json instead of a plain OK.",
+      "status": "Resolved",
+      "reviewer_note": "BR5.1 now covers only requests that reach the service and records the 401 path in the gateway access log with requestId, timestamp, method, route, statusCode. WF-AUTH step 2 and the per-request logging note say the same. That field set meets AC4.2.2 (request id, method, route, outcome status).",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-03",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/traceability.json > AC3.1.1 row and reverse BR6.1; rules.md > BR3.1 logic",
+      "finding": "AC3.1.1 requires that \"any failing request\" returns a code, a message and a request id. It is marked OK against BR3.1, yet BR3.1 itself exempts the 401, whose gateway body `{\"message\":\"Unauthorized\"}` has no code and no requestId. Upstream still says the opposite of the design: requirements.md assumption A1 (\"No authentication/authorization in the MVP\") and the stories.md MoSCoW note (auth excluded) were never updated after contract Q7/Q8. The traceability file records BR6.1 only as a reverse N/A. The contradiction between approved stories and the design is carried forward without being raised.",
+      "required_action": "Record the 401 carve-out on the AC3.1.1 row (for example, OK with a target noting the contract Q8 exception) so it is not a silent OK. Surface the stale A1 and the stories auth exclusion to the person so they either update them or explicitly accept the deviation.",
+      "status": "Unresolved",
+      "reviewer_note": "Downgraded. BR3.1 logic now states the 401 exception and the AC3.1.1 row targets BR3.1 and BR6.1, so the behaviour is clear. The row is still plain OK and does not say that AC3.1.1 is not met literally for a 401 (the gateway body has no code or requestId). Stale requirements A1 was accepted as a risk at the Contract Design gate, so nothing more is needed on that part.",
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-04",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > BR1.3 logic; functional-spec.md > WF4",
+      "finding": "The contract's UpdateItemRequest has `minProperties: 1`, so an empty PUT body must be rejected. BR1.3 and WF4 only reject extra fields and \"apply the provided name and/or description\", so as written an empty `{}` is a 200 no-op. That diverges from the contract.",
+      "required_action": "Add to BR1.3, BR4.1 and WF4 step 2 that a payload with neither name nor description is a ValidationError (400).",
+      "status": "Resolved",
+      "reviewer_note": "BR1.3 logic and WF4 step 2 now reject an empty payload with ValidationError, which matches UpdateItemRequest minProperties 1.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-05",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > BR2.1 and BR4.1 delta range",
+      "finding": "The design rejects any delta outside -9007199254740991..9007199254740991 with 400, but the contract's AdjustStockRequest.delta has no minimum or maximum, and the contract maps \"decrement below zero\" to 409 InsufficientStock. A very large negative delta is 400 in the design and arguably 409 by the contract.",
+      "required_action": "Either add the delta bounds to the contract's AdjustStockRequest (and its 400 description), or state in BR2.1 which check wins for out-of-range negative deltas and confirm it matches the contract.",
+      "status": "Unresolved",
+      "reviewer_note": "BR2.1 and BR4.1 still limit delta to plus or minus 9007199254740991, and the contract AdjustStockRequest.delta has no bound (accepted as a contract risk). WF6 checks the range at step 2, before the atomic step, so a very large negative delta gets 400 ValidationError. The contract text for a decrement below zero gives 409 InsufficientStock. The design never says it differs from the contract here, so a test built from the contract could expect 409.",
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-06",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/entities.md > Item.sku constraints; rules.md > BR4.1",
+      "finding": "SKU is \"trimmed of surrounding whitespace before validation\", but the design never says whether the stored key is the trimmed value, whether path SKUs on get/update/delete/adjust are trimmed the same way, or whether the 1-64 length applies before or after trimming. Different readings give different duplicate detection (\" A\" vs \"A\") and different not-found results.",
+      "required_action": "State that the trimmed value is what is stored and compared, that path parameters are trimmed identically, and that the length bound applies after trimming.",
+      "status": "Resolved",
+      "reviewer_note": "BR4.1 and entities.md sku constraints now say the SKU is trimmed in body and path alike, the trimmed value is stored and looked up, and the 1 to 64 length applies after trimming.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-07",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > WF6 steps 3-7",
+      "finding": "Step 3 says to read, compute and \"commit the new value\" atomically, and steps 4-6 then check not-found, the zero floor and the overflow \"quantity unchanged\". Read in order, it commits before it checks, which suggests the naive read-modify-write the concurrency test must defeat.",
+      "required_action": "Reorder WF6: load (404 if absent), compute current + delta, reject below zero (409) or above the maximum (400), then commit conditionally and atomically, retrying a bounded number of times on conflict.",
+      "status": "Resolved",
+      "reviewer_note": "WF6 step 3 is now one atomic operation that checks existence, then the zero floor, then the overflow, and commits only when all three pass. Nothing is written on failure.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-08",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/entities.md > Item.name and Item.description; rules.md > BR4.1",
+      "finding": "name and description have no maximum length anywhere (entity, BR4.1, contract). Boundary validation (NFR2) therefore accepts unbounded strings up to the request size limit.",
+      "required_action": "Set a maximum length for name and description (and carry it into the contract), or record the request-size limit that bounds them.",
+      "status": "Resolved",
+      "reviewer_note": "entities.md and BR4.1 now set name at most 200 characters and description at most 2000. The contract has no max length (accepted risk), and the design states its own limit.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-09",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > intro and WF-AUTH; rules.md > BR6.1",
+      "finding": "The stage requires technology-agnostic artifacts and functional-spec.md claims business logic is technology-agnostic, yet WF-AUTH and BR6.1 name the API Gateway JWT check and the Cognito user pool. The contract pins these, so this is wording, not a behaviour defect.",
+      "required_action": "Describe the rule as an edge token check that runs before the service, and point to the contract and infrastructure design for the concrete mechanism, or note why naming it is accepted here.",
+      "status": "Unresolved",
+      "reviewer_note": "BR6.1 logic now says edge token check and points to the contract. But BR6.1 statement (Cognito user pool JWT), BR3.1 logic (API Gateway JWT check), the functional-spec Layering context, WF-AUTH step 1, the BR6.1 summary rows and the entities.md closing paragraph still name AWS products. The stage definition Step 4 says no framework references.",
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-10",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > WF4 steps 3-4, and rules.md > BR1.3 logic",
+      "finding": "Update is written as load the item, then apply name and description. Unlike WF6, nothing says the write changes only those two fields or happens as one step. If an update rewrites the whole stored item, an adjustment that runs at the same time is lost, because the update writes back the old quantity. That breaks the BR2.3 promise that the final quantity equals the start plus all applied deltas, and the project rule that stock changes cannot race. The same load-then-write also allows an update that runs right after a delete to bring the deleted item back.",
+      "required_action": "State in BR1.3 and WF4 that the update changes only name and description, never writes quantity, and applies only if the item still exists (otherwise ItemNotFound), as one step. Name the update and adjust overlap in the BR2.3 race-test scope or in a new rule.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-11",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > BR1.1 logic, and functional-spec.md > WF1 step 4",
+      "finding": "Create is written as check whether the SKU exists, then create. Nothing says this is one step. Two creates of the same SKU at the same time could both pass the check, and the second would overwrite the first. That breaks ITEM-C1 and FR1.2 (duplicate rejected, nothing written).",
+      "required_action": "State that create inserts only if the SKU is absent, as one step, so exactly one of two creates at the same time succeeds and the other gets DuplicateSku 409.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-12",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > Sources, rules.md bullet",
+      "finding": "Sources lists rules.md as BR1.1 to BR5.2, but rules.md now defines BR6.1, which WF-AUTH and the Rules Summary rely on.",
+      "required_action": "Change the range to BR1.1 to BR6.1.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-13",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/entities.md > name constraints, and rules.md > BR4.1 logic",
+      "finding": "For name, emptiness is checked after trimming, but the design does not say whether the trimmed or the raw value is stored, or whether the 200 limit counts before or after trimming. For SKU this is now explicit.",
+      "required_action": "State whether name is stored trimmed and whether the length limit applies to the trimmed value, the same way as SKU.",
+      "status": "New",
+      "introduced_in_review": true
+    }
+  ],
+  "body": "## Review\n\n**Verdict:** READY\n**Reviewer:** aidlc-architecture-reviewer-agent\n**Date:** 2026-11-10T09:41:35Z\n**Iteration:** 2\n**Verdict Dictated:** no\n\n### Findings\n\n**Prior findings**\n\n| ID | Now | Severity | Note |\n|---|---|---|---|\n| R-01 | Fixed | Critical | The rules.md yaml block now parses (Bun.YAML): 16 rules BR1.1 to BR6.1, all unique, every rule has all eight required fields. BR5.2 logic is a folded block. entities.md yaml also parses. |\n| R-02 | Fixed | Major | BR5.1 now covers only requests that reach the service and records the 401 path in the gateway access log with requestId, timestamp, method, route, statusCode. WF-AUTH step 2 and the per-request logging note say the same. That field set meets AC4.2.2 (request id, method, route, outcome status). |\n| R-03 | Still applies | Minor | Downgraded. BR3.1 logic now states the 401 exception and the AC3.1.1 row targets BR3.1 and BR6.1, so the behaviour is clear. The row is still plain OK and does not say that AC3.1.1 is not met literally for a 401 (the gateway body has no code or requestId). Stale requirements A1 was accepted as a risk at the Contract Design gate, so nothing more is needed on that part. |\n| R-04 | Fixed | Minor | BR1.3 logic and WF4 step 2 now reject an empty payload with ValidationError, which matches UpdateItemRequest minProperties 1. |\n| R-05 | Still applies | Minor | BR2.1 and BR4.1 still limit delta to plus or minus 9007199254740991, and the contract AdjustStockRequest.delta has no bound (accepted as a contract risk). WF6 checks the range at step 2, before the atomic step, so a very large negative delta gets 400 ValidationError. The contract text for a decrement below zero gives 409 InsufficientStock. The design never says it differs from the contract here, so a test built from the contract could expect 409. |\n| R-06 | Fixed | Minor | BR4.1 and entities.md sku constraints now say the SKU is trimmed in body and path alike, the trimmed value is stored and looked up, and the 1 to 64 length applies after trimming. |\n| R-07 | Fixed | Minor | WF6 step 3 is now one atomic operation that checks existence, then the zero floor, then the overflow, and commits only when all three pass. Nothing is written on failure. |\n| R-08 | Fixed | Minor | entities.md and BR4.1 now set name at most 200 characters and description at most 2000. The contract has no max length (accepted risk), and the design states its own limit. |\n| R-09 | Still applies | Minor | BR6.1 logic now says edge token check and points to the contract. But BR6.1 statement (Cognito user pool JWT), BR3.1 logic (API Gateway JWT check), the functional-spec Layering context, WF-AUTH step 1, the BR6.1 summary rows and the entities.md closing paragraph still name AWS products. The stage definition Step 4 says no framework references. |\n\n**New findings**\n\n| Severity | Location | Finding | Required action |\n|---|---|---|---|\n| Major | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > WF4 steps 3-4, and rules.md > BR1.3 logic | Update is written as load the item, then apply name and description. Unlike WF6, nothing says the write changes only those two fields or happens as one step. If an update rewrites the whole stored item, an adjustment that runs at the same time is lost, because the update writes back the old quantity. That breaks the BR2.3 promise that the final quantity equals the start plus all applied deltas, and the project rule that stock changes cannot race. The same load-then-write also allows an update that runs right after a delete to bring the deleted item back. | State in BR1.3 and WF4 that the update changes only name and description, never writes quantity, and applies only if the item still exists (otherwise ItemNotFound), as one step. Name the update and adjust overlap in the BR2.3 race-test scope or in a new rule. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/rules.md > BR1.1 logic, and functional-spec.md > WF1 step 4 | Create is written as check whether the SKU exists, then create. Nothing says this is one step. Two creates of the same SKU at the same time could both pass the check, and the second would overwrite the first. That breaks ITEM-C1 and FR1.2 (duplicate rejected, nothing written). | State that create inserts only if the SKU is absent, as one step, so exactly one of two creates at the same time succeeds and the other gets DuplicateSku 409. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/functional-spec.md > Sources, rules.md bullet | Sources lists rules.md as BR1.1 to BR5.2, but rules.md now defines BR6.1, which WF-AUTH and the Rules Summary rely on. | Change the range to BR1.1 to BR6.1. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/functional-design/entities.md > name constraints, and rules.md > BR4.1 logic | For name, emptiness is checked after trimming, but the design does not say whether the trimmed or the raw value is stored, or whether the 200 limit counts before or after trimming. For SKU this is now explicit. | State whether name is stored trimmed and whether the length limit applies to the trimmed value, the same way as SKU. |\n\n### Validation Tool Results\n\n| Tool | Result | Interpretation |\n|---|---|---|\n| yaml parse (rules.md, entities.md) | PASS | Both source-of-truth blocks parse. 16 rules, unique IDs, all required fields present. Item has sku, name, description (default \"\"), quantity. The old default null on quantity is gone. |\n| traceability (shape and targets) | PASS | 29 upstream_ids and 29 coverage rows, identical sets. Every coverage target resolves to a defined BR. Every BR is either a forward target or in reverse (BR4.2 N/A with reason). |\n| upstream-coverage (AC existence) | PASS | All 29 AC IDs in stories.md (AC1.1.1 to AC4.2.2) appear in traceability.json, and none extra. Every story US1.1 to US4.2 is cited in functional-spec, US4.1 included. |\n| required-sections | PASS | All three markdown artifacts have ## Sources and at least two H2 sections. entities.md and rules.md each carry exactly one yaml block. |\n| linter (mermaid) | PASS | functional-spec has two mermaid blocks (state and ER), both closed and each with a text fallback. The state machine has no unreachable or dead state. |\n| type-check | N/A | No code at this stage. The technology-agnostic check fails as R-09 describes. |\n| contract consistency | PASS with notes | Status mapping, error enum, pagination caps, overflow rejection, 401 gateway body, and open health route all match contract-summary.md. The differences are delta bounds (R-05) and name and description limits (R-08 fixed by stating them); both were accepted contract risks. |\n\n### Summary\n\nThe iteration 1 blockers are fixed: rules.md parses, the 401 logging path is stated, and the adjustment checks happen before the atomic commit. Traceability is complete and every reference resolves. The main remaining concern is a Major gap: update (and, more mildly, create) is not stated to be a single step, so it could race with adjustments or with a delete. With zero Critical findings and one Major, the design can be built, and the person should weigh that gap at the gate.\n",
+  "recorded_at": "2026-11-10T09:44:45Z"
+}

@@ -1,0 +1,54 @@
+{
+  "stage": "nfr-requirements",
+  "unit": "inventory-api",
+  "upstream_ids": ["NFR1", "NFR2", "NFR3", "NFR4"],
+  "coverage": [
+    {
+      "id": "NFR1",
+      "status": "OK",
+      "target": "NFR1.1, NFR1.2, NFR1.3, NFR1.4, NFR1.5, NFR1.6, NFR1.7, NFR1.8, NFR1.9, NFR1.10, NFR1.11, NFR1.12, NFR1.13, NFR1.14, NFR1.15, NFR1.16"
+    },
+    {
+      "id": "NFR2",
+      "status": "OK",
+      "target": "NFR2.1, NFR2.2, NFR2.3, NFR2.4, NFR2.5"
+    },
+    {
+      "id": "NFR3",
+      "status": "OK",
+      "target": "NFR3.1, NFR3.2, NFR3.3, NFR3.4, NFR3.5, NFR3.6, NFR3.7, NFR3.8, NFR3.9"
+    },
+    {
+      "id": "NFR4",
+      "status": "OK",
+      "target": "NFR4.1, NFR4.2"
+    }
+  ],
+  "reverse": [
+    {
+      "id": "NFR1.5",
+      "status": "Deferred",
+      "target": "performance/throughput SLO deferred at MVP (team practice); latency captured in logs for a future target"
+    },
+    {
+      "id": "NFR1.10",
+      "status": "Deferred",
+      "target": "concrete scalability capacity numbers deferred with performance; scaling mechanism fixed"
+    },
+    {
+      "id": "NFR1.16",
+      "status": "Deferred",
+      "target": "numeric RTO/RPO/MTTR deferred at MVP; stated qualitatively"
+    },
+    {
+      "id": "NFR3.8",
+      "status": "Deferred",
+      "target": "metrics baseline deferred; derivable from structured logs"
+    },
+    {
+      "id": "NFR3.9",
+      "status": "Deferred",
+      "target": "distributed tracing deferred; single service with no inter-unit calls at MVP"
+    }
+  ]
+}

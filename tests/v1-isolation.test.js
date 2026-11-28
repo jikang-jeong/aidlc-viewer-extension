@@ -385,6 +385,10 @@ module.exports = { ProgressItem, StageProgressChild, CreditsItem, WaitingItem, S
 }
 
 function releasedExtensionSource() {
+  // The extension is vendored without its upstream git history, so the released
+  // file is kept as a fixture; fall back to git when run in an upstream checkout.
+  const snapshot = path.join(__dirname, 'fixtures', 'released', `extension-${RELEASED}.js`);
+  if (fs.existsSync(snapshot)) return fs.readFileSync(snapshot, 'utf8');
   const { execFileSync } = require('child_process');
   try {
     return execFileSync('git', ['show', `${RELEASED}:src/extension.js`], {

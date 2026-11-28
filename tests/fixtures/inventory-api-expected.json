@@ -1,0 +1,1626 @@
+{
+  "$comment": "Ground truth for tests/fixtures/inventory-api, computed by tests/helpers/inventory-fixture.js from raw engine files. See tests/fixtures/inventory-api/README.md.",
+  "schemaVersion": 1,
+  "intent": {
+    "id": "260825-inventory-api",
+    "path": "aidlc/spaces/default/intents/260825-inventory-api"
+  },
+  "traceability": {
+    "fileCount": 8,
+    "files": [
+      {
+        "path": "construction/inventory-api/code-generation/traceability.json",
+        "stage": "code-generation",
+        "unit": "inventory-api",
+        "topLevelKeys": [
+          "coverage",
+          "stage",
+          "unit",
+          "upstream_ids"
+        ],
+        "upstreamCount": 77,
+        "coverageCount": 77,
+        "reverseCount": 0,
+        "coverageByStatus": {
+          "OK": 72,
+          "Deferred": 5,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "reverseByStatus": {
+          "OK": 0,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "targetKinds": {
+          "ids": 0,
+          "file": 72,
+          "text": 5
+        },
+        "upstreamNotCovered": [],
+        "coveredNotUpstream": []
+      },
+      {
+        "path": "construction/inventory-api/functional-design/traceability.json",
+        "stage": "functional-design",
+        "unit": "inventory-api",
+        "topLevelKeys": [
+          "coverage",
+          "reverse",
+          "stage",
+          "unit",
+          "upstream_ids"
+        ],
+        "upstreamCount": 29,
+        "coverageCount": 29,
+        "reverseCount": 1,
+        "coverageByStatus": {
+          "OK": 29,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "reverseByStatus": {
+          "OK": 0,
+          "Deferred": 0,
+          "N/A": 1,
+          "GAP": 0
+        },
+        "targetKinds": {
+          "ids": 29,
+          "file": 0,
+          "text": 0
+        },
+        "upstreamNotCovered": [],
+        "coveredNotUpstream": []
+      },
+      {
+        "path": "construction/inventory-api/infrastructure-design/traceability.json",
+        "stage": "infrastructure-design",
+        "unit": "inventory-api",
+        "topLevelKeys": [
+          "coverage",
+          "reverse",
+          "stage",
+          "unit",
+          "upstream_ids"
+        ],
+        "upstreamCount": 32,
+        "coverageCount": 32,
+        "reverseCount": 0,
+        "coverageByStatus": {
+          "OK": 19,
+          "Deferred": 5,
+          "N/A": 8,
+          "GAP": 0
+        },
+        "reverseByStatus": {
+          "OK": 0,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "targetKinds": {
+          "ids": 0,
+          "file": 0,
+          "text": 32
+        },
+        "upstreamNotCovered": [],
+        "coveredNotUpstream": []
+      },
+      {
+        "path": "construction/inventory-api/nfr-design/traceability.json",
+        "stage": "nfr-design",
+        "unit": "inventory-api",
+        "topLevelKeys": [
+          "coverage",
+          "reverse",
+          "stage",
+          "unit",
+          "upstream_ids"
+        ],
+        "upstreamCount": 32,
+        "coverageCount": 32,
+        "reverseCount": 0,
+        "coverageByStatus": {
+          "OK": 26,
+          "Deferred": 6,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "reverseByStatus": {
+          "OK": 0,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "targetKinds": {
+          "ids": 0,
+          "file": 0,
+          "text": 32
+        },
+        "upstreamNotCovered": [],
+        "coveredNotUpstream": []
+      },
+      {
+        "path": "construction/inventory-api/nfr-requirements/traceability.json",
+        "stage": "nfr-requirements",
+        "unit": "inventory-api",
+        "topLevelKeys": [
+          "coverage",
+          "reverse",
+          "stage",
+          "unit",
+          "upstream_ids"
+        ],
+        "upstreamCount": 4,
+        "coverageCount": 4,
+        "reverseCount": 5,
+        "coverageByStatus": {
+          "OK": 4,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "reverseByStatus": {
+          "OK": 0,
+          "Deferred": 5,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "targetKinds": {
+          "ids": 4,
+          "file": 0,
+          "text": 0
+        },
+        "upstreamNotCovered": [],
+        "coveredNotUpstream": []
+      },
+      {
+        "path": "inception/domain-design/traceability.json",
+        "stage": "domain-design",
+        "unit": null,
+        "topLevelKeys": [
+          "coverage",
+          "reverse",
+          "stage",
+          "upstream_ids"
+        ],
+        "upstreamCount": 10,
+        "coverageCount": 10,
+        "reverseCount": 3,
+        "coverageByStatus": {
+          "OK": 10,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "reverseByStatus": {
+          "OK": 3,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "targetKinds": {
+          "ids": 0,
+          "file": 0,
+          "text": 10
+        },
+        "upstreamNotCovered": [],
+        "coveredNotUpstream": []
+      },
+      {
+        "path": "inception/units-generation/traceability.json",
+        "stage": "units-generation",
+        "unit": null,
+        "topLevelKeys": [
+          "coverage",
+          "stage",
+          "upstream_ids"
+        ],
+        "upstreamCount": 10,
+        "coverageCount": 10,
+        "reverseCount": 0,
+        "coverageByStatus": {
+          "OK": 10,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "reverseByStatus": {
+          "OK": 0,
+          "Deferred": 0,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "targetKinds": {
+          "ids": 10,
+          "file": 0,
+          "text": 0
+        },
+        "upstreamNotCovered": [],
+        "coveredNotUpstream": []
+      },
+      {
+        "path": "inception/user-stories/traceability.json",
+        "stage": "user-stories",
+        "unit": null,
+        "topLevelKeys": [
+          "coverage",
+          "reverse",
+          "stage",
+          "upstream_ids"
+        ],
+        "upstreamCount": 17,
+        "coverageCount": 17,
+        "reverseCount": 2,
+        "coverageByStatus": {
+          "OK": 16,
+          "Deferred": 1,
+          "N/A": 0,
+          "GAP": 0
+        },
+        "reverseByStatus": {
+          "OK": 1,
+          "Deferred": 0,
+          "N/A": 1,
+          "GAP": 0
+        },
+        "targetKinds": {
+          "ids": 16,
+          "file": 0,
+          "text": 1
+        },
+        "upstreamNotCovered": [],
+        "coveredNotUpstream": []
+      }
+    ],
+    "totals": {
+      "coverageEntries": 211,
+      "reverseEntries": 11,
+      "upstreamEntries": 211,
+      "coverageByStatus": {
+        "OK": 186,
+        "Deferred": 17,
+        "N/A": 8,
+        "GAP": 0
+      },
+      "reverseByStatus": {
+        "OK": 4,
+        "Deferred": 5,
+        "N/A": 2,
+        "GAP": 0
+      }
+    }
+  },
+  "ids": {
+    "total": 105,
+    "byPrefix": {
+      "FR": {
+        "count": 13,
+        "ids": [
+          "FR1.1",
+          "FR1.2",
+          "FR1.3",
+          "FR1.4",
+          "FR1.5",
+          "FR1.6",
+          "FR2.1",
+          "FR2.2",
+          "FR2.3",
+          "FR2.4",
+          "FR2.5",
+          "FR3.1",
+          "FR3.2"
+        ]
+      },
+      "NFR": {
+        "count": 36,
+        "ids": [
+          "NFR1",
+          "NFR1.1",
+          "NFR1.2",
+          "NFR1.3",
+          "NFR1.4",
+          "NFR1.5",
+          "NFR1.6",
+          "NFR1.7",
+          "NFR1.8",
+          "NFR1.9",
+          "NFR1.10",
+          "NFR1.11",
+          "NFR1.12",
+          "NFR1.13",
+          "NFR1.14",
+          "NFR1.15",
+          "NFR1.16",
+          "NFR2",
+          "NFR2.1",
+          "NFR2.2",
+          "NFR2.3",
+          "NFR2.4",
+          "NFR2.5",
+          "NFR3",
+          "NFR3.1",
+          "NFR3.2",
+          "NFR3.3",
+          "NFR3.4",
+          "NFR3.5",
+          "NFR3.6",
+          "NFR3.7",
+          "NFR3.8",
+          "NFR3.9",
+          "NFR4",
+          "NFR4.1",
+          "NFR4.2"
+        ]
+      },
+      "US": {
+        "count": 10,
+        "ids": [
+          "US1.1",
+          "US1.2",
+          "US1.3",
+          "US1.4",
+          "US1.5",
+          "US2.1",
+          "US2.2",
+          "US3.1",
+          "US4.1",
+          "US4.2"
+        ]
+      },
+      "AC": {
+        "count": 29,
+        "ids": [
+          "AC1.1.1",
+          "AC1.1.2",
+          "AC1.1.3",
+          "AC1.1.4",
+          "AC1.1.5",
+          "AC1.2.1",
+          "AC1.2.2",
+          "AC1.3.1",
+          "AC1.3.2",
+          "AC1.3.3",
+          "AC1.4.1",
+          "AC1.4.2",
+          "AC1.4.3",
+          "AC1.5.1",
+          "AC1.5.2",
+          "AC2.1.1",
+          "AC2.1.2",
+          "AC2.1.3",
+          "AC2.1.4",
+          "AC2.1.5",
+          "AC2.1.6",
+          "AC2.2.1",
+          "AC2.2.2",
+          "AC3.1.1",
+          "AC3.1.2",
+          "AC3.1.3",
+          "AC4.1.1",
+          "AC4.2.1",
+          "AC4.2.2"
+        ]
+      },
+      "BR": {
+        "count": 16,
+        "ids": [
+          "BR1.1",
+          "BR1.2",
+          "BR1.3",
+          "BR1.4",
+          "BR1.5",
+          "BR2.1",
+          "BR2.2",
+          "BR2.3",
+          "BR2.4",
+          "BR3.1",
+          "BR3.2",
+          "BR4.1",
+          "BR4.2",
+          "BR5.1",
+          "BR5.2",
+          "BR6.1"
+        ]
+      },
+      "U": {
+        "count": 1,
+        "ids": [
+          "U1"
+        ]
+      }
+    },
+    "nfrParents": [
+      "NFR1",
+      "NFR2",
+      "NFR3",
+      "NFR4"
+    ],
+    "nfrChildCount": 32,
+    "nonPrefixedIds": [
+      "ApiEdge",
+      "InventoryItem",
+      "Item"
+    ]
+  },
+  "links": {
+    "idToIdLinks": 93,
+    "idToFileLinks": 72,
+    "idToTextEntries": 80,
+    "multiTargetEntries": [
+      {
+        "stage": "functional-design",
+        "id": "AC2.1.1",
+        "targets": [
+          "BR2.1",
+          "BR2.4"
+        ]
+      },
+      {
+        "stage": "functional-design",
+        "id": "AC2.1.2",
+        "targets": [
+          "BR2.1",
+          "BR2.4"
+        ]
+      },
+      {
+        "stage": "functional-design",
+        "id": "AC2.2.2",
+        "targets": [
+          "BR2.2",
+          "BR2.3"
+        ]
+      },
+      {
+        "stage": "functional-design",
+        "id": "AC3.1.1",
+        "targets": [
+          "BR3.1",
+          "BR6.1"
+        ]
+      },
+      {
+        "stage": "functional-design",
+        "id": "AC3.1.3",
+        "targets": [
+          "BR3.1",
+          "BR3.2"
+        ]
+      },
+      {
+        "stage": "functional-design",
+        "id": "AC4.2.2",
+        "targets": [
+          "BR5.1",
+          "BR6.1"
+        ]
+      },
+      {
+        "stage": "nfr-requirements",
+        "id": "NFR1",
+        "targets": [
+          "NFR1.1",
+          "NFR1.2",
+          "NFR1.3",
+          "NFR1.4",
+          "NFR1.5",
+          "NFR1.6",
+          "NFR1.7",
+          "NFR1.8",
+          "NFR1.9",
+          "NFR1.10",
+          "NFR1.11",
+          "NFR1.12",
+          "NFR1.13",
+          "NFR1.14",
+          "NFR1.15",
+          "NFR1.16"
+        ]
+      },
+      {
+        "stage": "nfr-requirements",
+        "id": "NFR2",
+        "targets": [
+          "NFR2.1",
+          "NFR2.2",
+          "NFR2.3",
+          "NFR2.4",
+          "NFR2.5"
+        ]
+      },
+      {
+        "stage": "nfr-requirements",
+        "id": "NFR3",
+        "targets": [
+          "NFR3.1",
+          "NFR3.2",
+          "NFR3.3",
+          "NFR3.4",
+          "NFR3.5",
+          "NFR3.6",
+          "NFR3.7",
+          "NFR3.8",
+          "NFR3.9"
+        ]
+      },
+      {
+        "stage": "nfr-requirements",
+        "id": "NFR4",
+        "targets": [
+          "NFR4.1",
+          "NFR4.2"
+        ]
+      }
+    ],
+    "distinctTargetFiles": 23,
+    "targetFiles": [
+      {
+        "path": ".github/dependabot.yml",
+        "exists": false,
+        "ids": [
+          "NFR4.2"
+        ]
+      },
+      {
+        "path": "infra/lib/compute-stack.ts",
+        "exists": true,
+        "ids": [
+          "BR6.1",
+          "NFR1.6",
+          "NFR1.11",
+          "NFR2.3",
+          "NFR2.5",
+          "NFR3.6",
+          "NFR3.7"
+        ]
+      },
+      {
+        "path": "infra/lib/data-stack.ts",
+        "exists": true,
+        "ids": [
+          "NFR1.8",
+          "NFR1.13",
+          "NFR1.14"
+        ]
+      },
+      {
+        "path": "src/health/health-handler.test.ts",
+        "exists": true,
+        "ids": [
+          "NFR3.5"
+        ]
+      },
+      {
+        "path": "src/health/health-handler.ts",
+        "exists": true,
+        "ids": [
+          "AC4.2.1",
+          "BR5.2",
+          "NFR3.1"
+        ]
+      },
+      {
+        "path": "src/items/item-handlers.ts",
+        "exists": true,
+        "ids": [
+          "AC1.1.1"
+        ]
+      },
+      {
+        "path": "src/items/item-repository.int.test.ts",
+        "exists": true,
+        "ids": [
+          "AC1.3.3"
+        ]
+      },
+      {
+        "path": "src/items/item-repository.ts",
+        "exists": true,
+        "ids": [
+          "AC1.1.2",
+          "AC1.3.1",
+          "AC1.4.1",
+          "AC1.4.2",
+          "AC1.5.1",
+          "BR1.1",
+          "BR1.3",
+          "BR1.5",
+          "NFR1.9"
+        ]
+      },
+      {
+        "path": "src/items/item-service.ts",
+        "exists": true,
+        "ids": [
+          "AC1.2.1",
+          "AC1.2.2",
+          "BR1.2"
+        ]
+      },
+      {
+        "path": "src/items/item-validation.ts",
+        "exists": true,
+        "ids": [
+          "AC1.1.3",
+          "AC1.1.4",
+          "AC1.1.5",
+          "AC1.3.2",
+          "AC1.4.3",
+          "BR1.4",
+          "NFR1.4",
+          "NFR2.1"
+        ]
+      },
+      {
+        "path": "src/items/items-api.int.test.ts",
+        "exists": true,
+        "ids": [
+          "AC1.5.2"
+        ]
+      },
+      {
+        "path": "src/shared/config.ts",
+        "exists": true,
+        "ids": [
+          "BR4.2",
+          "NFR4.1"
+        ]
+      },
+      {
+        "path": "src/shared/dynamodb-client.ts",
+        "exists": true,
+        "ids": [
+          "NFR1.12"
+        ]
+      },
+      {
+        "path": "src/shared/http/error-envelope.test.ts",
+        "exists": true,
+        "ids": [
+          "AC3.1.3"
+        ]
+      },
+      {
+        "path": "src/shared/http/error-envelope.ts",
+        "exists": true,
+        "ids": [
+          "AC3.1.1",
+          "AC3.1.2",
+          "BR3.1",
+          "BR3.2",
+          "NFR1.15",
+          "NFR2.4"
+        ]
+      },
+      {
+        "path": "src/shared/http/request-context.ts",
+        "exists": true,
+        "ids": [
+          "NFR3.3"
+        ]
+      },
+      {
+        "path": "src/shared/logging/request-logger.ts",
+        "exists": true,
+        "ids": [
+          "AC4.2.2",
+          "BR5.1",
+          "NFR1.3",
+          "NFR2.2",
+          "NFR3.2",
+          "NFR3.4"
+        ]
+      },
+      {
+        "path": "src/shared/validation.ts",
+        "exists": true,
+        "ids": [
+          "AC4.1.1",
+          "BR4.1"
+        ]
+      },
+      {
+        "path": "src/stock/stock-adjustment.race.int.test.ts",
+        "exists": true,
+        "ids": [
+          "AC2.2.1",
+          "AC2.2.2",
+          "NFR1.2"
+        ]
+      },
+      {
+        "path": "src/stock/stock-api.int.test.ts",
+        "exists": true,
+        "ids": [
+          "AC2.1.6"
+        ]
+      },
+      {
+        "path": "src/stock/stock-repository.int.test.ts",
+        "exists": true,
+        "ids": [
+          "BR2.1"
+        ]
+      },
+      {
+        "path": "src/stock/stock-repository.ts",
+        "exists": true,
+        "ids": [
+          "AC2.1.1",
+          "AC2.1.2",
+          "AC2.1.3",
+          "AC2.1.4",
+          "BR2.2",
+          "BR2.3",
+          "BR2.4",
+          "NFR1.1",
+          "NFR1.7"
+        ]
+      },
+      {
+        "path": "src/stock/stock-validation.ts",
+        "exists": true,
+        "ids": [
+          "AC2.1.5"
+        ]
+      }
+    ],
+    "missingTargetFiles": [
+      ".github/dependabot.yml"
+    ]
+  },
+  "statusConflicts": [
+    {
+      "id": "NFR1.3",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "N/A",
+        "nfr-design": "OK"
+      }
+    },
+    {
+      "id": "NFR1.9",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "Deferred",
+        "nfr-design": "Deferred"
+      }
+    },
+    {
+      "id": "NFR1.10",
+      "statusByStage": {
+        "code-generation": "Deferred",
+        "infrastructure-design": "OK",
+        "nfr-design": "Deferred"
+      }
+    },
+    {
+      "id": "NFR1.12",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "N/A",
+        "nfr-design": "OK"
+      }
+    },
+    {
+      "id": "NFR1.15",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "N/A",
+        "nfr-design": "OK"
+      }
+    },
+    {
+      "id": "NFR2.1",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "N/A",
+        "nfr-design": "OK"
+      }
+    },
+    {
+      "id": "NFR2.2",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "N/A",
+        "nfr-design": "OK"
+      }
+    },
+    {
+      "id": "NFR3.2",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "N/A",
+        "nfr-design": "OK"
+      }
+    },
+    {
+      "id": "NFR3.3",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "N/A",
+        "nfr-design": "OK"
+      }
+    },
+    {
+      "id": "NFR3.4",
+      "statusByStage": {
+        "code-generation": "OK",
+        "infrastructure-design": "N/A",
+        "nfr-design": "OK"
+      }
+    },
+    {
+      "id": "NFR4",
+      "statusByStage": {
+        "nfr-requirements": "OK",
+        "user-stories": "Deferred"
+      }
+    }
+  ],
+  "runtimeGraph": {
+    "topLevelKeys": [
+      "bolt_dag",
+      "scope",
+      "stages",
+      "started_at",
+      "workflow_id"
+    ],
+    "workflow_id": "2026-08-25T13:00:31Z",
+    "scope": "mvp",
+    "started_at": "2026-08-25T13:00:31Z",
+    "stageCount": 22,
+    "stages": [
+      {
+        "slug": "workspace-scaffold",
+        "agent": "orchestrator",
+        "outcome": "approved",
+        "started_at": "2026-08-25T13:00:31Z",
+        "completed_at": "2026-08-25T13:00:31Z",
+        "sensorFirings": 0,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "workspace-detection",
+        "agent": "orchestrator",
+        "outcome": "approved",
+        "started_at": "2026-08-25T13:00:31Z",
+        "completed_at": "2026-08-25T13:00:32Z",
+        "sensorFirings": 0,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "state-init",
+        "agent": "orchestrator",
+        "outcome": "approved",
+        "started_at": "2026-08-25T13:00:32Z",
+        "completed_at": "2026-08-25T13:00:32Z",
+        "sensorFirings": 0,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "intent-capture",
+        "agent": "aidlc-product-agent",
+        "outcome": "approved",
+        "started_at": "2026-08-25T13:00:32Z",
+        "completed_at": "2026-09-17T12:04:43Z",
+        "sensorFirings": 9,
+        "sensorFailed": 3
+      },
+      {
+        "slug": "feasibility",
+        "agent": "aidlc-architect-agent",
+        "outcome": "approved",
+        "started_at": "2026-09-17T12:04:43Z",
+        "completed_at": "2026-09-17T12:19:07Z",
+        "sensorFirings": 8,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "scope-definition",
+        "agent": "aidlc-product-agent",
+        "outcome": "approved",
+        "started_at": "2026-09-17T12:19:07Z",
+        "completed_at": "2026-09-17T12:48:38Z",
+        "sensorFirings": 6,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "rough-mockups",
+        "agent": "aidlc-design-agent",
+        "outcome": "approved",
+        "started_at": "2026-09-17T12:48:38Z",
+        "completed_at": "2026-09-18T09:52:54Z",
+        "sensorFirings": 6,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "practices-discovery",
+        "agent": "aidlc-pipeline-deploy-agent",
+        "outcome": "approved",
+        "started_at": "2026-09-18T09:52:54Z",
+        "completed_at": "2026-09-18T16:59:53Z",
+        "sensorFirings": 8,
+        "sensorFailed": 1
+      },
+      {
+        "slug": "requirements-analysis",
+        "agent": "aidlc-product-agent",
+        "outcome": "approved",
+        "started_at": "2026-09-18T16:59:53Z",
+        "completed_at": "2026-10-01T14:03:13Z",
+        "sensorFirings": 4,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "user-stories",
+        "agent": "aidlc-product-agent",
+        "outcome": "approved",
+        "started_at": "2026-10-01T14:03:13Z",
+        "completed_at": "2026-10-01T14:32:57Z",
+        "sensorFirings": 10,
+        "sensorFailed": 2
+      },
+      {
+        "slug": "refined-mockups",
+        "agent": "aidlc-design-agent",
+        "outcome": "approved",
+        "started_at": "2026-10-01T14:32:57Z",
+        "completed_at": "2026-10-01T14:46:18Z",
+        "sensorFirings": 10,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "domain-design",
+        "agent": "aidlc-architect-agent",
+        "outcome": "approved",
+        "started_at": "2026-10-01T14:46:18Z",
+        "completed_at": "2026-10-01T15:04:16Z",
+        "sensorFirings": 7,
+        "sensorFailed": 1
+      },
+      {
+        "slug": "units-generation",
+        "agent": "aidlc-architect-agent",
+        "outcome": "approved",
+        "started_at": "2026-10-01T15:04:17Z",
+        "completed_at": "2026-10-02T10:19:50Z",
+        "sensorFirings": 9,
+        "sensorFailed": 1
+      },
+      {
+        "slug": "contract-design",
+        "agent": "aidlc-architect-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-09T15:18:59Z",
+        "completed_at": "2026-11-10T09:31:31Z",
+        "sensorFirings": 4,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "delivery-planning",
+        "agent": "aidlc-delivery-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-10T09:31:31Z",
+        "completed_at": "2026-11-10T09:33:53Z",
+        "sensorFirings": 12,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "functional-design",
+        "agent": "aidlc-architect-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-10T09:33:53Z",
+        "completed_at": "2026-11-10T11:08:08Z",
+        "sensorFirings": 12,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "nfr-requirements",
+        "agent": "aidlc-architect-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-10T11:08:08Z",
+        "completed_at": "2026-11-10T11:11:47Z",
+        "sensorFirings": 18,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "nfr-design",
+        "agent": "aidlc-architect-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-10T11:11:47Z",
+        "completed_at": "2026-11-10T11:21:19Z",
+        "sensorFirings": 18,
+        "sensorFailed": 1
+      },
+      {
+        "slug": "infrastructure-design",
+        "agent": "aidlc-aws-platform-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-10T11:21:19Z",
+        "completed_at": "2026-11-10T11:21:22Z",
+        "sensorFirings": 5,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "code-generation",
+        "agent": "aidlc-developer-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-10T11:21:22Z",
+        "completed_at": "2026-11-10T11:21:29Z",
+        "sensorFirings": 5,
+        "sensorFailed": 0
+      },
+      {
+        "slug": "build-and-test",
+        "agent": "aidlc-quality-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-10T11:21:30Z",
+        "completed_at": "2026-11-10T12:05:23Z",
+        "sensorFirings": 12,
+        "sensorFailed": 1
+      },
+      {
+        "slug": "ci-pipeline",
+        "agent": "aidlc-pipeline-deploy-agent",
+        "outcome": "approved",
+        "started_at": "2026-11-10T12:05:23Z",
+        "completed_at": "2026-11-16T13:19:52Z",
+        "sensorFirings": 12,
+        "sensorFailed": 0
+      }
+    ],
+    "outcomes": {
+      "approved": 22
+    },
+    "agents": {
+      "orchestrator": 3,
+      "aidlc-product-agent": 4,
+      "aidlc-architect-agent": 7,
+      "aidlc-design-agent": 2,
+      "aidlc-pipeline-deploy-agent": 2,
+      "aidlc-delivery-agent": 1,
+      "aidlc-aws-platform-agent": 1,
+      "aidlc-developer-agent": 1,
+      "aidlc-quality-agent": 1
+    },
+    "sensors": {
+      "total": 175,
+      "byResult": {
+        "failed": 10,
+        "passed": 165
+      },
+      "bySensor": {
+        "claim-sources": 3,
+        "required-sections": 107,
+        "upstream-coverage": 50,
+        "traceability": 11,
+        "linter": 2,
+        "type-check": 2
+      },
+      "failed": [
+        {
+          "stage": "intent-capture",
+          "id": "claim-sources",
+          "fire_id": "39db88da",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-sensors/intent-capture/claim-sources-39db88da.md"
+        },
+        {
+          "stage": "intent-capture",
+          "id": "claim-sources",
+          "fire_id": "30a8b80d",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-sensors/intent-capture/claim-sources-30a8b80d.md"
+        },
+        {
+          "stage": "intent-capture",
+          "id": "claim-sources",
+          "fire_id": "bf369ba0",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-sensors/intent-capture/claim-sources-bf369ba0.md"
+        },
+        {
+          "stage": "practices-discovery",
+          "id": "required-sections",
+          "fire_id": "ab0e0d56",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-sensors/practices-discovery/required-sections-ab0e0d56.md"
+        },
+        {
+          "stage": "user-stories",
+          "id": "traceability",
+          "fire_id": "ddb2737c",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-sensors/user-stories/traceability-ddb2737c.md"
+        },
+        {
+          "stage": "user-stories",
+          "id": "traceability",
+          "fire_id": "0a44dc33",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-sensors/user-stories/traceability-0a44dc33.md"
+        },
+        {
+          "stage": "domain-design",
+          "id": "traceability",
+          "fire_id": "da4de8de",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-sensors/domain-design/traceability-da4de8de.md"
+        },
+        {
+          "stage": "units-generation",
+          "id": "traceability",
+          "fire_id": "50b80e18",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-sensors/units-generation/traceability-50b80e18.md"
+        },
+        {
+          "stage": "nfr-design",
+          "id": "traceability",
+          "fire_id": "65c92f8c",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-engine/sensors/nfr-design/traceability-65c92f8c.md"
+        },
+        {
+          "stage": "build-and-test",
+          "id": "upstream-coverage",
+          "fire_id": "ae95af39",
+          "detail_path": "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-engine/sensors/build-and-test/upstream-coverage-ae95af39.md"
+        }
+      ],
+      "withDetailPath": 10,
+      "missingDetailFiles": [
+        "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-engine/sensors/nfr-design/traceability-65c92f8c.md",
+        "aidlc/spaces/default/intents/260825-inventory-api/.aidlc-engine/sensors/build-and-test/upstream-coverage-ae95af39.md"
+      ]
+    },
+    "bolt_dag": {
+      "units": [
+        {
+          "name": "inventory-api",
+          "depends_on": [],
+          "kind": "service"
+        }
+      ],
+      "batches": [
+        [
+          "inventory-api"
+        ]
+      ]
+    }
+  },
+  "state": {
+    "project": "Inventory management REST API (reference fixture)",
+    "scope": "mvp",
+    "phaseProgress": {
+      "Initialization": "Verified",
+      "Ideation": "Verified",
+      "Inception": "Verified",
+      "Construction": "Verified",
+      "Operation": "Skipped"
+    },
+    "stageLineCount": 33,
+    "stagesByMark": {
+      "x": 22,
+      " ": 11
+    },
+    "stagesByPlan": {
+      "EXECUTE": 22,
+      "SKIP": 11
+    },
+    "executed": [
+      "workspace-scaffold",
+      "workspace-detection",
+      "state-init",
+      "intent-capture",
+      "feasibility",
+      "scope-definition",
+      "rough-mockups",
+      "practices-discovery",
+      "requirements-analysis",
+      "user-stories",
+      "refined-mockups",
+      "domain-design",
+      "units-generation",
+      "contract-design",
+      "delivery-planning",
+      "functional-design",
+      "nfr-requirements",
+      "nfr-design",
+      "infrastructure-design",
+      "code-generation",
+      "build-and-test",
+      "ci-pipeline"
+    ],
+    "skipped": [
+      "market-research",
+      "team-formation",
+      "approval-handoff",
+      "reverse-engineering",
+      "deployment-pipeline",
+      "environment-provisioning",
+      "deployment-execution",
+      "observability-setup",
+      "incident-response",
+      "performance-validation",
+      "feedback-optimization"
+    ],
+    "currentStatus": {
+      "Lifecycle Phase": "CONSTRUCTION",
+      "Current Stage": "ci-pipeline",
+      "Next Stage": "none",
+      "Status": "Completed",
+      "Last Updated": "2026-11-16T13:19:52Z"
+    }
+  },
+  "reviews": {
+    "recordCount": 10,
+    "byVerdict": {
+      "READY": 7,
+      "NOT-READY": 3
+    },
+    "byStage": {
+      "code-generation": 2,
+      "contract-design": 1,
+      "functional-design": 2,
+      "infrastructure-design": 2,
+      "nfr-design": 2,
+      "nfr-requirements": 1
+    },
+    "attemptCount": 7,
+    "totalFindings": 102,
+    "records": [
+      {
+        "path": ".aidlc-engine/reviews/code-generation/units/inventory-api/4fe7d91a8083f410/1.json",
+        "stage": "code-generation",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "4fe7d91a8083f410",
+        "iteration": 1,
+        "verdict": "READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-05T11:26:28Z",
+        "findingCount": 6,
+        "derivedFindingCount": 6,
+        "findingsBySeverity": {
+          "Major": 1,
+          "Minor": 5
+        },
+        "findingsByStatus": {
+          "New": 6
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/code-generation/units/inventory-api/58cb9181c57f4edf/1.json",
+        "stage": "code-generation",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "58cb9181c57f4edf",
+        "iteration": 1,
+        "verdict": "READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T11:02:30Z",
+        "findingCount": 8,
+        "derivedFindingCount": 8,
+        "findingsBySeverity": {
+          "Major": 1,
+          "Minor": 7
+        },
+        "findingsByStatus": {
+          "Resolved": 3,
+          "Unresolved": 3,
+          "New": 2
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/contract-design/stage/41ed14842d7e7ca6/1.json",
+        "stage": "contract-design",
+        "scope": "stage",
+        "unit": null,
+        "attempt": "41ed14842d7e7ca6",
+        "iteration": 1,
+        "verdict": "READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T09:29:52Z",
+        "findingCount": 8,
+        "derivedFindingCount": 8,
+        "findingsBySeverity": {
+          "Major": 3,
+          "Minor": 5
+        },
+        "findingsByStatus": {
+          "Resolved": 1,
+          "New": 7
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/functional-design/units/inventory-api/58cb9181c57f4edf/1.json",
+        "stage": "functional-design",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "58cb9181c57f4edf",
+        "iteration": 1,
+        "verdict": "NOT-READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T09:40:27Z",
+        "findingCount": 10,
+        "derivedFindingCount": 10,
+        "findingsBySeverity": {
+          "Major": 3,
+          "Critical": 1,
+          "Minor": 6
+        },
+        "findingsByStatus": {
+          "Resolved": 1,
+          "New": 9
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/functional-design/units/inventory-api/58cb9181c57f4edf/2.json",
+        "stage": "functional-design",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "58cb9181c57f4edf",
+        "iteration": 2,
+        "verdict": "READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T09:44:45Z",
+        "findingCount": 14,
+        "derivedFindingCount": 14,
+        "findingsBySeverity": {
+          "Major": 3,
+          "Critical": 1,
+          "Minor": 10
+        },
+        "findingsByStatus": {
+          "Resolved": 7,
+          "Unresolved": 3,
+          "New": 4
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/infrastructure-design/units/inventory-api/58cb9181c57f4edf/1.json",
+        "stage": "infrastructure-design",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "58cb9181c57f4edf",
+        "iteration": 1,
+        "verdict": "NOT-READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T09:52:27Z",
+        "findingCount": 12,
+        "derivedFindingCount": 12,
+        "findingsBySeverity": {
+          "Major": 5,
+          "Minor": 7
+        },
+        "findingsByStatus": {
+          "Resolved": 1,
+          "New": 11
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/infrastructure-design/units/inventory-api/58cb9181c57f4edf/2.json",
+        "stage": "infrastructure-design",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "58cb9181c57f4edf",
+        "iteration": 2,
+        "verdict": "READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T09:57:59Z",
+        "findingCount": 18,
+        "derivedFindingCount": 18,
+        "findingsBySeverity": {
+          "Major": 4,
+          "Minor": 14
+        },
+        "findingsByStatus": {
+          "Resolved": 11,
+          "Unresolved": 1,
+          "New": 6
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/nfr-design/units/inventory-api/58cb9181c57f4edf/1.json",
+        "stage": "nfr-design",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "58cb9181c57f4edf",
+        "iteration": 1,
+        "verdict": "NOT-READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T11:16:14Z",
+        "findingCount": 8,
+        "derivedFindingCount": 8,
+        "findingsBySeverity": {
+          "Major": 3,
+          "Minor": 5
+        },
+        "findingsByStatus": {
+          "New": 8
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/nfr-design/units/inventory-api/58cb9181c57f4edf/2.json",
+        "stage": "nfr-design",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "58cb9181c57f4edf",
+        "iteration": 2,
+        "verdict": "READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T11:21:02Z",
+        "findingCount": 13,
+        "derivedFindingCount": 13,
+        "findingsBySeverity": {
+          "Major": 2,
+          "Minor": 11
+        },
+        "findingsByStatus": {
+          "Resolved": 7,
+          "Unresolved": 1,
+          "New": 5
+        }
+      },
+      {
+        "path": ".aidlc-engine/reviews/nfr-requirements/units/inventory-api/58cb9181c57f4edf/1.json",
+        "stage": "nfr-requirements",
+        "scope": "units",
+        "unit": "inventory-api",
+        "attempt": "58cb9181c57f4edf",
+        "iteration": 1,
+        "verdict": "READY",
+        "reviewer": "aidlc-architecture-reviewer-agent",
+        "recorded_at": "2026-11-10T11:10:59Z",
+        "findingCount": 5,
+        "derivedFindingCount": 5,
+        "findingsBySeverity": {
+          "Major": 2,
+          "Minor": 3
+        },
+        "findingsByStatus": {
+          "Unresolved": 1,
+          "New": 4
+        }
+      }
+    ],
+    "markdownReviewFiles": [
+      "construction/inventory-api/code-generation/reviews/review-01.md",
+      "construction/inventory-api/code-generation/reviews/review-02.md",
+      "construction/inventory-api/functional-design/reviews/review-01.md",
+      "construction/inventory-api/functional-design/reviews/review-02.md",
+      "construction/inventory-api/infrastructure-design/reviews/review-01.md",
+      "construction/inventory-api/infrastructure-design/reviews/review-02.md",
+      "construction/inventory-api/nfr-design/reviews/review-01.md",
+      "construction/inventory-api/nfr-design/reviews/review-02.md",
+      "construction/inventory-api/nfr-requirements/reviews/review-01.md",
+      "inception/contract-design/reviews/review-01.md"
+    ]
+  },
+  "sourceTree": {
+    "srcTotal": 41,
+    "srcSourceFiles": 22,
+    "srcTestFiles": 19,
+    "srcIntegrationTestFiles": 6,
+    "srcByExtension": {
+      ".ts": 41
+    },
+    "infraFiles": 10,
+    "testSupportFiles": 5
+  },
+  "audit": {
+    "files": [
+      "9c5884848955-782427804e2d.md"
+    ],
+    "headingCount": 2,
+    "eventLineCount": 1,
+    "keyEvents": {
+      "WORKFLOW_STARTED": 0,
+      "STAGE_STARTED": 0,
+      "STAGE_COMPLETED": 0,
+      "GATE_APPROVED": 0,
+      "REVIEW_COMPLETED": 0,
+      "SENSOR_FAILED": 0,
+      "STAGE_JUMPED": 1
+    }
+  },
+  "spotChecks": {
+    "AC1.1.1": {
+      "code-generation": {
+        "status": "OK",
+        "target": "src/items/item-handlers.ts"
+      },
+      "functional-design": {
+        "status": "OK",
+        "target": "BR1.1"
+      }
+    },
+    "FR1.1": {
+      "user-stories": {
+        "status": "OK",
+        "target": "US1.1"
+      }
+    },
+    "NFR4": {
+      "nfr-requirements": {
+        "status": "OK",
+        "target": "NFR4.1, NFR4.2"
+      },
+      "user-stories": {
+        "status": "Deferred",
+        "target": "infrastructure-design"
+      }
+    },
+    "US3.1": {
+      "domain-design": {
+        "status": "OK",
+        "target": "ApiEdge"
+      },
+      "units-generation": {
+        "status": "OK",
+        "target": "U1"
+      }
+    },
+    "AC2.1.1": {
+      "code-generation": {
+        "status": "OK",
+        "target": "src/stock/stock-repository.ts"
+      },
+      "functional-design": {
+        "status": "OK",
+        "target": "BR2.1, BR2.4"
+      }
+    },
+    "NFR1.9": {
+      "code-generation": {
+        "status": "OK",
+        "target": "src/items/item-repository.ts"
+      },
+      "infrastructure-design": {
+        "status": "Deferred",
+        "target": "Per-request list work is bounded by the offset cap (at most 10100 items read), but the total count Scan grows with table size; accepted for the MVP catalogue, with a maintained count item and cursor paging as the upgrade path"
+      },
+      "nfr-design": {
+        "status": "Deferred",
+        "target": "per-request list reads bounded by the offset cap (at most 10100 items) but the total COUNT scan grows with table size; accepted at MVP, maintained count item and cursor paging as the upgrade path"
+      }
+    },
+    "NFR4.2": {
+      "code-generation": {
+        "status": "OK",
+        "target": ".github/dependabot.yml"
+      },
+      "infrastructure-design": {
+        "status": "OK",
+        "target": "CI pipeline: gitleaks (secret scan) + Dependabot/npm audit (dependency scan) as merge-blocking gates; cdk-nag Errors gate with in-code justified suppressions"
+      },
+      "nfr-design": {
+        "status": "OK",
+        "target": "security-design: gitleaks + Dependabot merge-blocking CI gates"
+      }
+    },
+    "BR4.2": {
+      "code-generation": {
+        "status": "OK",
+        "target": "src/shared/config.ts"
+      }
+    },
+    "reverse": {
+      "US4.2": {
+        "user-stories": {
+          "status": "N/A",
+          "target": "operator observability story; no single upstream FR — realizes NFR3 and the operational posture"
+        }
+      },
+      "BR4.2": {
+        "functional-design": {
+          "status": "N/A",
+          "target": "No-hardcoded-secrets rule (NFR4) — a configuration/security constraint with no behavioural acceptance criterion at this stage; deferred to infrastructure-design per the user-stories NFR4 Deferred mapping."
+        }
+      },
+      "NFR1.5": {
+        "nfr-requirements": {
+          "status": "Deferred",
+          "target": "performance/throughput SLO deferred at MVP (team practice); latency captured in logs for a future target"
+        }
+      }
+    }
+  }
+}

@@ -3,6 +3,8 @@
 node_modules/
 *.log
 .kiro/
+# ...except the test fixture, which needs its .kiro stage-spec names
+!tests/fixtures/inventory-api/.kiro/
 
 
 # Claude Code local permission settings; per machine, never shared

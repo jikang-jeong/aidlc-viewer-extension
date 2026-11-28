@@ -1,0 +1,51 @@
+{
+  "name": "inventory-api",
+  "version": "1.0.0",
+  "description": "Single-location inventory management REST API (MVP): item CRUD plus concurrency-safe stock adjustments on AWS Lambda + DynamoDB.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/lambda.mjs --external:@aws-sdk/*",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:unit": "vitest run --project inventory-api-unit",
+    "test:integration": "vitest run --project inventory-api-integration",
+    "test:infra": "vitest run --project inventory-api-infra",
+    "test:coverage": "vitest run --project inventory-api-unit --project inventory-api-integration --project inventory-api-infra --coverage",
+    "ddb:up": "docker compose -f docker-compose.test.yml up -d dynamodb-local",
+    "ddb:down": "docker compose -f docker-compose.test.yml down",
+    "synth": "cdk synth -c env=staging",
+    "smoke": "tsx scripts/smoke-test.ts",
+    "scan:secrets": "gitleaks detect --no-banner",
+    "scan:deps": "npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1161.0",
+    "@aws-sdk/lib-dynamodb": "3.1161.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/aws-lambda": "8.10.164",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.5",
+    "aws-cdk": "2.1147.0",
+    "aws-cdk-lib": "2.275.0",
+    "cdk-nag": "3.0.2",
+    "constructs": "10.8.1",
+    "esbuild": "0.28.2",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-security": "4.2.1",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.0.5"
+  }
+}

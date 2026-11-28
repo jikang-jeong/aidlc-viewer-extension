@@ -1,0 +1,361 @@
+{
+  "version": 1,
+  "stage": "infrastructure-design",
+  "unit": "inventory-api",
+  "workflow": null,
+  "attempt": "58cb9181c57f4edf",
+  "iteration": 2,
+  "reviewer": "aidlc-architecture-reviewer-agent",
+  "verdict": "READY",
+  "request_id": "review:c3922676d1fda3f1eb66b96dd2e5f2f4",
+  "request_challenge": null,
+  "artifact_fingerprint": "sha256:71f045d53390e0013dfda76413788af15e93b2e8cf56939bd860a21e21aaf84b",
+  "source_fingerprint": null,
+  "unit_source_fingerprint": null,
+  "findings": [
+    {
+      "id": "R-00",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > review findings table",
+      "finding": "The reviewer's findings table could not be read, so its rows are not listed here: aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md: findings table header declares #, Severity, Location, Finding, Recommendation. Expected columns: ID, Severity, Location, Finding, Required action, Status. Missing: ID, Required action, Status",
+      "required_action": "Address the reviewer's findings as written below this table.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-01",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > API Gateway HTTP API row, and the illustrative CDK snippet (`addRoutes` for `/v1/{proxy+}` and `/health`)",
+      "finding": "The contract (contract-summary.md OpenAPI) sets `servers: - url: /v1` and lists `/health` under `paths` with `security: []`, so the contract's open health URL is `/v1/health`. The design routes an open `/health` at the root and puts the JWT authorizer on `/v1/{proxy+}`. A caller following the contract and calling `GET /v1/health` with no token falls into the `/v1/{proxy+}` route and gets 401, which breaks the contract's \"open route, no token required\". The root `/health` the design opens is not in the contract. The smoke test (cicd-pipeline.md stage 13) checks the root path, so it would not catch this.",
+      "required_action": "Add a specific `GET /v1/health` route with no authorizer (HTTP API picks the most specific route, so it wins over `/v1/{proxy+}`) and point the smoke test at it. Keep or drop the root `/health` as an explicit choice. Alternatively, get the contract changed so the health check sits outside `/v1`. Either way, the route table and the contract must give the same URL.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-02",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/monitoring-design.md > Alerts > Elevated 5xx, and SLIs / SLOs > Availability",
+      "finding": "The only alarm that can page, and the 99.9% availability SLI, are both worked out from the service's own log line (`statusCode`, `outcome=InternalError`). That line is written only when a request finishes inside the Lambda. Failures that hit callers hardest never produce it: a Lambda timeout (10 s), a crash or out-of-memory, a throttle at the ~50 reserved-concurrency cap, or a gateway integration error. The infrastructure specification itself says these come back as the gateway's own 5xx body. So the alarm misses them, they are left out of the SLI's denominator, and measured availability looks better than it is.",
+      "required_action": "Base the 5xx alarm and the availability SLI on the edge: the HTTP API `5xx` and `Count` CloudWatch metrics, or a metric filter on the access-log `status` field. Keep the app-log `InternalError` filter as a second signal for diagnosis. Say whether 401s count toward total requests in the SLI.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-03",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > DynamoDB table `Item` (failed-condition handling); traceability.json NFR1.2",
+      "finding": "Upstream performance-design.md (Bounded retry row) says to retry internally on a conditional-check failure, treating it as transient contention. This design says that on a failed condition the repository reads the item once to tell ItemNotFound from InsufficientStock from overflow. The two contradict each other, and nothing here says which errors the ≤3 retry in NFR1.2 actually covers. With `SET quantity = quantity + :delta`, a failed condition is never contention: DynamoDB applies single-item updates one at a time. The follow-up read also races: if a concurrent increment lands between the failed update and the read, the read shows a state that would pass, and the design does not say what happens next. On the path the team calls its most important, a developer has to guess.",
+      "required_action": "State that on ConditionalCheckFailedException the repository classifies and does not retry. Use `ReturnValuesOnConditionCheckFailure: ALL_OLD` on the UpdateItem so the item as it was at the failed check comes back with the error, with no second read and no race. Say what the bounded retry covers: throttling or internal-server errors only, beyond the AWS SDK's own default retries. Update the NFR1.2 target to match.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-04",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > DynamoDB table `Item` Notes (\"No secondary indexes at MVP; every access is by sku\") and IAM execution role row; traceability.json NFR1.4, NFR1.9",
+      "finding": "WF3 in functional-spec.md lists all items with `limit`, `offset` up to 10000, and a `total` count. On a table whose only key is `sku`, with no secondary index, a DynamoDB Query needs an equality condition on one `sku`, so it cannot list across items. The design's \"DynamoDB Query with Limit (≤100) serving bounded pagination\" cannot be built as written. DynamoDB also has no offset: serving offset 10000 means reading and discarding 10000+ items, and `total` means counting the whole table. That makes the OK claims for NFR1.9 (\"per-request work bounded independent of total item count\") and NFR1.4 false, and contradicts performance-design.md's \"no unbounded scans\". The IAM row also lists Query as the list permission and leaves out Scan.",
+      "required_action": "Pick and document the list access pattern. One option is a Scan with Limit plus a stated item-count ceiling for the MVP. Another is a GSI on a constant partition key with `sku` as sort key, or a maintained counter item for `total`. Say how `offset` and `total` are served and what they cost. Mark NFR1.9 as a known limit (or N/A with a ceiling) instead of OK if work grows with offset and table size. Fix the IAM action list to match.",
+      "status": "Unresolved"
+    },
+    {
+      "id": "R-05",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/monitoring-design.md > Alerts > Health failing; traceability.json NFR1.13, NFR3.1",
+      "finding": "Nothing calls `/health` on a schedule: the design names no CloudWatch Synthetics canary or Route 53 health check, so the \"`/health` returning non-200\" condition has nothing to measure it. The NFR1.13 target \"API Gateway routes only to healthy integration\" is also wrong about AWS: API Gateway does not health-check a Lambda integration or route around one. Readiness and liveness probes (NFR3.1 target) do not exist for Lambda either.",
+      "required_action": "Name the probe, for example a Synthetics canary on the open health URL every 5 minutes with an alarm on its success metric, or drop that part of the alert condition. Reword NFR1.13 and NFR3.1 to describe what Lambda and the probe actually do.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-06",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > AWS Lambda `InventoryApi` row (\"auto-scaling via concurrency target tracking\")",
+      "finding": "On-demand Lambda concurrency has no target-tracking scaling. Target tracking through Application Auto Scaling applies only to provisioned concurrency, which this design does not use. The real controls here are on-demand scaling plus the reserved-concurrency cap.",
+      "required_action": "Drop \"concurrency target tracking\". State on-demand scaling capped by reserved concurrency of 50.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-07",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > Deployment strategy and Rollback; infrastructure-specification.md CDK snippet (`LambdaProxy(fn)`)",
+      "finding": "Rollback relies on moving a Lambda alias back to the previous version, but the snippet points the HTTP API integration at the function itself (`fn`), not at an alias. If the gateway calls `$LATEST`, moving the alias changes nothing.",
+      "required_action": "Say that each deploy publishes a version, that a `live` alias points at it, and that the HTTP API integration targets that alias.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-08",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > DynamoDB table `Item` Configuration, versus cicd-pipeline.md > Rollback > Data and identity safety",
+      "finding": "cicd-pipeline.md says the table has deletion protection. The table's configuration in the infrastructure specification (and its snippet) lists PITR and encryption but no deletion protection and no retain-on-delete removal policy.",
+      "required_action": "Add `deletionProtection: true` and a RETAIN removal policy to the table configuration so the two documents agree.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-09",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > stage 13 Smoke test; infrastructure-specification.md > Cognito user pool row",
+      "finding": "A user created with `admin-create-user` starts in FORCE_CHANGE_PASSWORD status. `initiate-auth` with USER_PASSWORD_AUTH then returns a NEW_PASSWORD_REQUIRED challenge, not tokens. Nothing says who creates the smoke-test user or makes its password permanent, so the first merge-blocking smoke run would fail.",
+      "required_action": "Say how the smoke-test user is provisioned (CDK custom resource or a one-time runbook step) and that its password is set with `admin-set-user-password --permanent` from the Secrets Manager value.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-10",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > stage 10 (cdk-nag \"no High findings\")",
+      "finding": "cdk-nag reports Errors and Warnings, not High. In the AwsSolutions pack, a Cognito user pool without MFA (AwsSolutions-COG2) or without advanced security set to enforced (AwsSolutions-COG3) is an Error, so the new auth stack would fail stage 10 as designed unless a suppression is planned.",
+      "required_action": "Define the gate as \"no unsuppressed cdk-nag Errors\". Either list the planned, justified suppressions (for example COG2 and COG3 for an admin-created MVP user pool) or turn on the matching Cognito settings.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-11",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json > upstream_ids and reverse",
+      "finding": "The NFR design defines 32 ids (NFR1.1 to 1.16, NFR2.1 to 2.5, NFR3.1 to 3.9, NFR4.1 to 4.2). `upstream_ids` lists 28. NFR3.3, NFR3.4, NFR3.8 and NFR3.9, all defined in observability-design.md, are only in `reverse`. Other N/A and Deferred ids (NFR1.3, NFR1.5, NFR3.2) sit in `coverage`, so the file treats the same kind of id two ways.",
+      "required_action": "List all 32 NFR-design ids in `upstream_ids`. Move the four into `coverage` with their existing N/A or Deferred status and reasons.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-12",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/monitoring-design.md > Logs & Tracing (access-log fields) and Alerts > Elevated 5xx routing",
+      "finding": "The access log's `requestId` would be API Gateway's own `$context.requestId`. The service log's `requestId` is a separate UUID made by the entry middleware (observability-design.md line 22). The two fields share a name but hold different values, so there is no key that links an access-log line to its service-log line. The 5xx alert says \"query the access log and service logs for the failing requestIds\", and that join cannot be done.",
+      "required_action": "Pick one shared key: either have the middleware use the gateway request id from `event.requestContext.requestId` as its `requestId`, or log the gateway id as an extra allow-listed field. Then state the incident query that uses it.",
+      "status": "New"
+    },
+    {
+      "id": "R-13",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > Pipeline stages > stage 13 Smoke test",
+      "finding": "The happy path creates an item in the persistent staging table on every merge. The contract returns 409 `DuplicateSku` for an existing SKU. With a fixed SKU the second run fails the blocking gate, and nothing says how the test item is removed.",
+      "required_action": "Use a SKU unique to each run (for example the commit SHA plus a timestamp), and add a delete step at the end. That step also exercises WF5.",
+      "status": "New"
+    },
+    {
+      "id": "R-14",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > Pipeline stages > stage 10 (cdk-nag suppressions)",
+      "finding": "The design itself causes cdk-nag findings that are not in the suppression list: AwsSolutions-APIG4 on the deliberately open `GET /v1/health` route, AwsSolutions-IAM4 on the default Lambda role's AWS-managed `AWSLambdaBasicExecutionRole` policy, and likely IAM5 on the Synthetics canary role. Stage 10 blocks on unsuppressed Errors, so the first synth would fail.",
+      "required_action": "Add justified suppressions for APIG4 (health route open by contract) and for IAM4/IAM5, or design them out, for example with a customer-managed log-write policy. List them next to COG2 and COG3.",
+      "status": "New"
+    },
+    {
+      "id": "R-15",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > CloudWatch Synthetics canary; Deployment > IaC approach; cicd-pipeline.md > Secrets management (deploy role)",
+      "finding": "The canary needs an execution role and an S3 bucket for its artifacts. Neither is named, and no stack owns the canary: the IaC row lists only the data, auth and compute stacks, and the deploy role is scoped to \"the three stacks\".",
+      "required_action": "Say which stack owns the canary, its role and its artifact bucket (lifecycle-expired, with public access blocked), and include them in the deploy role's scope.",
+      "status": "New"
+    },
+    {
+      "id": "R-16",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > AWS Lambda row (reserved concurrency 50)",
+      "finding": "Lambda refuses a reserved concurrency that leaves the account with less than 100 unreserved concurrency. Some new accounts have a total concurrency quota of 10. Unless the staging account's quota is at least 150, deploying with reserved concurrency 50 fails. No precondition is stated.",
+      "required_action": "State the account concurrency quota needed (150 or more), and add a quota check or an increase request as a provisioning step.",
+      "status": "New"
+    },
+    {
+      "id": "R-17",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Deployment > Resource sizing; traceability.json NFR1.2 target",
+      "finding": "The 10 s timeout is said to be \"sized above the retry budget\", but no per-attempt timeout is given. Also, AWS SDK v3 already retries on its own (3 attempts by default). If the app's 3 jittered retries run on top of that, one call can make up to 9 attempts. Nothing shows the worst case fits in 10 s.",
+      "required_action": "Say whether the bounded retry is the SDK's own retry (set its maxAttempts) or an app-level loop with SDK retries off. Give the per-attempt request timeout, and show the worst case stays under 10 s.",
+      "status": "New"
+    }
+  ],
+  "derived_findings": [
+    {
+      "id": "R-00",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > review findings table",
+      "finding": "The reviewer's findings table could not be read, so its rows are not listed here: aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md: findings table header declares #, Severity, Location, Finding, Recommendation. Expected columns: ID, Severity, Location, Finding, Required action, Status. Missing: ID, Required action, Status",
+      "required_action": "Address the reviewer's findings as written below this table.",
+      "status": "Resolved",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-01",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > API Gateway HTTP API row, and the illustrative CDK snippet (`addRoutes` for `/v1/{proxy+}` and `/health`)",
+      "finding": "The contract (contract-summary.md OpenAPI) sets `servers: - url: /v1` and lists `/health` under `paths` with `security: []`, so the contract's open health URL is `/v1/health`. The design routes an open `/health` at the root and puts the JWT authorizer on `/v1/{proxy+}`. A caller following the contract and calling `GET /v1/health` with no token falls into the `/v1/{proxy+}` route and gets 401, which breaks the contract's \"open route, no token required\". The root `/health` the design opens is not in the contract. The smoke test (cicd-pipeline.md stage 13) checks the root path, so it would not catch this.",
+      "required_action": "Add a specific `GET /v1/health` route with no authorizer (HTTP API picks the most specific route, so it wins over `/v1/{proxy+}`) and point the smoke test at it. Keep or drop the root `/health` as an explicit choice. Alternatively, get the contract changed so the health check sits outside `/v1`. Either way, the route table and the contract must give the same URL.",
+      "status": "Resolved",
+      "reviewer_note": "`GET /v1/health` is now its own route with no authorizer, beside `ANY /v1/{proxy+}` with the JWT authorizer. HTTP API picks the most specific route, so the open health route wins. The smoke test (cicd stage 13) and the canary both call `/v1/health`.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-02",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/monitoring-design.md > Alerts > Elevated 5xx, and SLIs / SLOs > Availability",
+      "finding": "The only alarm that can page, and the 99.9% availability SLI, are both worked out from the service's own log line (`statusCode`, `outcome=InternalError`). That line is written only when a request finishes inside the Lambda. Failures that hit callers hardest never produce it: a Lambda timeout (10 s), a crash or out-of-memory, a throttle at the ~50 reserved-concurrency cap, or a gateway integration error. The infrastructure specification itself says these come back as the gateway's own 5xx body. So the alarm misses them, they are left out of the SLI's denominator, and measured availability looks better than it is.",
+      "required_action": "Base the 5xx alarm and the availability SLI on the edge: the HTTP API `5xx` and `Count` CloudWatch metrics, or a metric filter on the access-log `status` field. Keep the app-log `InternalError` filter as a second signal for diagnosis. Say whether 401s count toward total requests in the SLI.",
+      "status": "Resolved",
+      "reviewer_note": "The 5xx alarm and the availability SLI now use API Gateway `5xx` / `Count`, and the doc says plainly that these cover timeouts, crashes, throttles and integration failures. The service log is kept for finding the cause only.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-03",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > DynamoDB table `Item` (failed-condition handling); traceability.json NFR1.2",
+      "finding": "Upstream performance-design.md (Bounded retry row) says to retry internally on a conditional-check failure, treating it as transient contention. This design says that on a failed condition the repository reads the item once to tell ItemNotFound from InsufficientStock from overflow. The two contradict each other, and nothing here says which errors the ≤3 retry in NFR1.2 actually covers. With `SET quantity = quantity + :delta`, a failed condition is never contention: DynamoDB applies single-item updates one at a time. The follow-up read also races: if a concurrent increment lands between the failed update and the read, the read shows a state that would pass, and the design does not say what happens next. On the path the team calls its most important, a developer has to guess.",
+      "required_action": "State that on ConditionalCheckFailedException the repository classifies and does not retry. Use `ReturnValuesOnConditionCheckFailure: ALL_OLD` on the UpdateItem so the item as it was at the failed check comes back with the error, with no second read and no race. Say what the bounded retry covers: throttling or internal-server errors only, beyond the AWS SDK's own default retries. Update the NFR1.2 target to match.",
+      "status": "Resolved",
+      "reviewer_note": "The DynamoDB row now says how a failed condition is classified (ALL_OLD from `ReturnValuesOnConditionCheckFailure`: no item, below min, above max), with no second read and no retry. Retries cover transient SDK errors only. The doc says openly where this narrows performance-design.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-04",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > DynamoDB table `Item` Notes (\"No secondary indexes at MVP; every access is by sku\") and IAM execution role row; traceability.json NFR1.4, NFR1.9",
+      "finding": "WF3 in functional-spec.md lists all items with `limit`, `offset` up to 10000, and a `total` count. On a table whose only key is `sku`, with no secondary index, a DynamoDB Query needs an equality condition on one `sku`, so it cannot list across items. The design's \"DynamoDB Query with Limit (≤100) serving bounded pagination\" cannot be built as written. DynamoDB also has no offset: serving offset 10000 means reading and discarding 10000+ items, and `total` means counting the whole table. That makes the OK claims for NFR1.9 (\"per-request work bounded independent of total item count\") and NFR1.4 false, and contradicts performance-design.md's \"no unbounded scans\". The IAM row also lists Query as the list permission and leaves out Scan.",
+      "required_action": "Pick and document the list access pattern. One option is a Scan with Limit plus a stated item-count ceiling for the MVP. Another is a GSI on a constant partition key with `sku` as sort key, or a maintained counter item for `total`. Say how `offset` and `total` are served and what they cost. Mark NFR1.9 as a known limit (or N/A with a ceiling) instead of OK if work grows with offset and table size. Fix the IAM action list to match.",
+      "status": "Unresolved",
+      "reviewer_note": "Fixed in substance: listing is a `Scan` with Limit and ExclusiveStartKey, the offset cap and the cost of the `total` count are stated, and NFR1.9 is now honestly `Deferred`. What is left: the IAM row says the role gets `GetItem/PutItem/UpdateItem/DeleteItem/Scan` \"via CDK `table.grantReadWriteData(fn)`\". That grant actually gives more: it also includes BatchGetItem, BatchWriteItem, Query, ConditionCheckItem, DescribeTable, GetRecords and GetShardIterator. Either use an explicit grant with only the five actions, or state the full action set the grant gives.",
+      "resolved_in_review": false,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-05",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/monitoring-design.md > Alerts > Health failing; traceability.json NFR1.13, NFR3.1",
+      "finding": "Nothing calls `/health` on a schedule: the design names no CloudWatch Synthetics canary or Route 53 health check, so the \"`/health` returning non-200\" condition has nothing to measure it. The NFR1.13 target \"API Gateway routes only to healthy integration\" is also wrong about AWS: API Gateway does not health-check a Lambda integration or route around one. Readiness and liveness probes (NFR3.1 target) do not exist for Lambda either.",
+      "required_action": "Name the probe, for example a Synthetics canary on the open health URL every 5 minutes with an alarm on its success metric, or drop that part of the alert condition. Reword NFR1.13 and NFR3.1 to describe what Lambda and the probe actually do.",
+      "status": "Resolved",
+      "reviewer_note": "A CloudWatch Synthetics canary runs on `GET /v1/health` every 5 minutes. NFR1.13 and NFR3.1 are reworded, and the doc says API Gateway does no health checks on a Lambda integration.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-06",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > AWS Lambda `InventoryApi` row (\"auto-scaling via concurrency target tracking\")",
+      "finding": "On-demand Lambda concurrency has no target-tracking scaling. Target tracking through Application Auto Scaling applies only to provisioned concurrency, which this design does not use. The real controls here are on-demand scaling plus the reserved-concurrency cap.",
+      "required_action": "Drop \"concurrency target tracking\". State on-demand scaling capped by reserved concurrency of 50.",
+      "status": "Resolved",
+      "reviewer_note": "The Lambda row now says on-demand per-request scaling with reserved concurrency 50 as the cap, and that target tracking applies only to provisioned concurrency.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-07",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > Deployment strategy and Rollback; infrastructure-specification.md CDK snippet (`LambdaProxy(fn)`)",
+      "finding": "Rollback relies on moving a Lambda alias back to the previous version, but the snippet points the HTTP API integration at the function itself (`fn`), not at an alias. If the gateway calls `$LATEST`, moving the alias changes nothing.",
+      "required_action": "Say that each deploy publishes a version, that a `live` alias points at it, and that the HTTP API integration targets that alias.",
+      "status": "Resolved",
+      "reviewer_note": "A `live` alias is added and the API integrates `LambdaProxy(live)`. Rollback repoints the alias.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-08",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > DynamoDB table `Item` Configuration, versus cicd-pipeline.md > Rollback > Data and identity safety",
+      "finding": "cicd-pipeline.md says the table has deletion protection. The table's configuration in the infrastructure specification (and its snippet) lists PITR and encryption but no deletion protection and no retain-on-delete removal policy.",
+      "required_action": "Add `deletionProtection: true` and a RETAIN removal policy to the table configuration so the two documents agree.",
+      "status": "Resolved",
+      "reviewer_note": "`deletionProtection: true` is in the snippet. A CDK `Table` defaults to the RETAIN removal policy. The Cognito pool also has deletion protection on.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-09",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > stage 13 Smoke test; infrastructure-specification.md > Cognito user pool row",
+      "finding": "A user created with `admin-create-user` starts in FORCE_CHANGE_PASSWORD status. `initiate-auth` with USER_PASSWORD_AUTH then returns a NEW_PASSWORD_REQUIRED challenge, not tokens. Nothing says who creates the smoke-test user or makes its password permanent, so the first merge-blocking smoke run would fail.",
+      "required_action": "Say how the smoke-test user is provisioned (CDK custom resource or a one-time runbook step) and that its password is set with `admin-set-user-password --permanent` from the Secrets Manager value.",
+      "status": "Resolved",
+      "reviewer_note": "The Cognito row now has `admin-set-user-password --permanent`.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-10",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > stage 10 (cdk-nag \"no High findings\")",
+      "finding": "cdk-nag reports Errors and Warnings, not High. In the AwsSolutions pack, a Cognito user pool without MFA (AwsSolutions-COG2) or without advanced security set to enforced (AwsSolutions-COG3) is an Error, so the new auth stack would fail stage 10 as designed unless a suppression is planned.",
+      "required_action": "Define the gate as \"no unsuppressed cdk-nag Errors\". Either list the planned, justified suppressions (for example COG2 and COG3 for an admin-created MVP user pool) or turn on the matching Cognito settings.",
+      "status": "Resolved",
+      "reviewer_note": "Stage 10 now fails on unsuppressed Errors, with justified COG2 and COG3 suppressions written in code. One more gap is a new finding below.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-11",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/traceability.json > upstream_ids and reverse",
+      "finding": "The NFR design defines 32 ids (NFR1.1 to 1.16, NFR2.1 to 2.5, NFR3.1 to 3.9, NFR4.1 to 4.2). `upstream_ids` lists 28. NFR3.3, NFR3.4, NFR3.8 and NFR3.9, all defined in observability-design.md, are only in `reverse`. Other N/A and Deferred ids (NFR1.3, NFR1.5, NFR3.2) sit in `coverage`, so the file treats the same kind of id two ways.",
+      "required_action": "List all 32 NFR-design ids in `upstream_ids`. Move the four into `coverage` with their existing N/A or Deferred status and reasons.",
+      "status": "Resolved",
+      "reviewer_note": "`upstream_ids` and `coverage` hold the same 32 NFR ids, equal to the set in the nfr-design documents. `reverse` is empty.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-12",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/monitoring-design.md > Logs & Tracing (access-log fields) and Alerts > Elevated 5xx routing",
+      "finding": "The access log's `requestId` would be API Gateway's own `$context.requestId`. The service log's `requestId` is a separate UUID made by the entry middleware (observability-design.md line 22). The two fields share a name but hold different values, so there is no key that links an access-log line to its service-log line. The 5xx alert says \"query the access log and service logs for the failing requestIds\", and that join cannot be done.",
+      "required_action": "Pick one shared key: either have the middleware use the gateway request id from `event.requestContext.requestId` as its `requestId`, or log the gateway id as an extra allow-listed field. Then state the incident query that uses it.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-13",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > Pipeline stages > stage 13 Smoke test",
+      "finding": "The happy path creates an item in the persistent staging table on every merge. The contract returns 409 `DuplicateSku` for an existing SKU. With a fixed SKU the second run fails the blocking gate, and nothing says how the test item is removed.",
+      "required_action": "Use a SKU unique to each run (for example the commit SHA plus a timestamp), and add a delete step at the end. That step also exercises WF5.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-14",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > Pipeline stages > stage 10 (cdk-nag suppressions)",
+      "finding": "The design itself causes cdk-nag findings that are not in the suppression list: AwsSolutions-APIG4 on the deliberately open `GET /v1/health` route, AwsSolutions-IAM4 on the default Lambda role's AWS-managed `AWSLambdaBasicExecutionRole` policy, and likely IAM5 on the Synthetics canary role. Stage 10 blocks on unsuppressed Errors, so the first synth would fail.",
+      "required_action": "Add justified suppressions for APIG4 (health route open by contract) and for IAM4/IAM5, or design them out, for example with a customer-managed log-write policy. List them next to COG2 and COG3.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-15",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > CloudWatch Synthetics canary; Deployment > IaC approach; cicd-pipeline.md > Secrets management (deploy role)",
+      "finding": "The canary needs an execution role and an S3 bucket for its artifacts. Neither is named, and no stack owns the canary: the IaC row lists only the data, auth and compute stacks, and the deploy role is scoped to \"the three stacks\".",
+      "required_action": "Say which stack owns the canary, its role and its artifact bucket (lifecycle-expired, with public access blocked), and include them in the deploy role's scope.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-16",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > AWS Lambda row (reserved concurrency 50)",
+      "finding": "Lambda refuses a reserved concurrency that leaves the account with less than 100 unreserved concurrency. Some new accounts have a total concurrency quota of 10. Unless the staging account's quota is at least 150, deploying with reserved concurrency 50 fails. No precondition is stated.",
+      "required_action": "State the account concurrency quota needed (150 or more), and add a quota check or an increase request as a provisioning step.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-17",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Deployment > Resource sizing; traceability.json NFR1.2 target",
+      "finding": "The 10 s timeout is said to be \"sized above the retry budget\", but no per-attempt timeout is given. Also, AWS SDK v3 already retries on its own (3 attempts by default). If the app's 3 jittered retries run on top of that, one call can make up to 9 attempts. Nothing shows the worst case fits in 10 s.",
+      "required_action": "Say whether the bounded retry is the SDK's own retry (set its maxAttempts) or an app-level loop with SDK retries off. Give the per-attempt request timeout, and show the worst case stays under 10 s.",
+      "status": "New",
+      "introduced_in_review": true
+    }
+  ],
+  "body": "## Review\n\n**Verdict:** READY\n**Reviewer:** aidlc-architecture-reviewer-agent\n**Date:** 2026-11-10T09:54:19Z\n**Iteration:** 2\n**Verdict Dictated:** no\n\n### Findings\n\n**Prior findings**\n\n| ID | Now | Severity | Note |\n|---|---|---|---|\n| R-01 | Fixed | Major | `GET /v1/health` is now its own route with no authorizer, beside `ANY /v1/{proxy+}` with the JWT authorizer. HTTP API picks the most specific route, so the open health route wins. The smoke test (cicd stage 13) and the canary both call `/v1/health`. |\n| R-02 | Fixed | Major | The 5xx alarm and the availability SLI now use API Gateway `5xx` / `Count`, and the doc says plainly that these cover timeouts, crashes, throttles and integration failures. The service log is kept for finding the cause only. |\n| R-03 | Fixed | Major | The DynamoDB row now says how a failed condition is classified (ALL_OLD from `ReturnValuesOnConditionCheckFailure`: no item, below min, above max), with no second read and no retry. Retries cover transient SDK errors only. The doc says openly where this narrows performance-design. |\n| R-04 | Still applies | Minor | Fixed in substance: listing is a `Scan` with Limit and ExclusiveStartKey, the offset cap and the cost of the `total` count are stated, and NFR1.9 is now honestly `Deferred`. What is left: the IAM row says the role gets `GetItem/PutItem/UpdateItem/DeleteItem/Scan` \"via CDK `table.grantReadWriteData(fn)`\". That grant actually gives more: it also includes BatchGetItem, BatchWriteItem, Query, ConditionCheckItem, DescribeTable, GetRecords and GetShardIterator. Either use an explicit grant with only the five actions, or state the full action set the grant gives. |\n| R-05 | Fixed | Minor | A CloudWatch Synthetics canary runs on `GET /v1/health` every 5 minutes. NFR1.13 and NFR3.1 are reworded, and the doc says API Gateway does no health checks on a Lambda integration. |\n| R-06 | Fixed | Minor | The Lambda row now says on-demand per-request scaling with reserved concurrency 50 as the cap, and that target tracking applies only to provisioned concurrency. |\n| R-07 | Fixed | Minor | A `live` alias is added and the API integrates `LambdaProxy(live)`. Rollback repoints the alias. |\n| R-08 | Fixed | Minor | `deletionProtection: true` is in the snippet. A CDK `Table` defaults to the RETAIN removal policy. The Cognito pool also has deletion protection on. |\n| R-09 | Fixed | Minor | The Cognito row now has `admin-set-user-password --permanent`. |\n| R-10 | Fixed | Minor | Stage 10 now fails on unsuppressed Errors, with justified COG2 and COG3 suppressions written in code. One more gap is a new finding below. |\n| R-11 | Fixed | Minor | `upstream_ids` and `coverage` hold the same 32 NFR ids, equal to the set in the nfr-design documents. `reverse` is empty. |\n\n**New findings**\n\n| Severity | Location | Finding | Required action |\n|---|---|---|---|\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/monitoring-design.md > Logs & Tracing (access-log fields) and Alerts > Elevated 5xx routing | The access log's `requestId` would be API Gateway's own `$context.requestId`. The service log's `requestId` is a separate UUID made by the entry middleware (observability-design.md line 22). The two fields share a name but hold different values, so there is no key that links an access-log line to its service-log line. The 5xx alert says \"query the access log and service logs for the failing requestIds\", and that join cannot be done. | Pick one shared key: either have the middleware use the gateway request id from `event.requestContext.requestId` as its `requestId`, or log the gateway id as an extra allow-listed field. Then state the incident query that uses it. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > Pipeline stages > stage 13 Smoke test | The happy path creates an item in the persistent staging table on every merge. The contract returns 409 `DuplicateSku` for an existing SKU. With a fixed SKU the second run fails the blocking gate, and nothing says how the test item is removed. | Use a SKU unique to each run (for example the commit SHA plus a timestamp), and add a delete step at the end. That step also exercises WF5. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/cicd-pipeline.md > Pipeline stages > stage 10 (cdk-nag suppressions) | The design itself causes cdk-nag findings that are not in the suppression list: AwsSolutions-APIG4 on the deliberately open `GET /v1/health` route, AwsSolutions-IAM4 on the default Lambda role's AWS-managed `AWSLambdaBasicExecutionRole` policy, and likely IAM5 on the Synthetics canary role. Stage 10 blocks on unsuppressed Errors, so the first synth would fail. | Add justified suppressions for APIG4 (health route open by contract) and for IAM4/IAM5, or design them out, for example with a customer-managed log-write policy. List them next to COG2 and COG3. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > CloudWatch Synthetics canary; Deployment > IaC approach; cicd-pipeline.md > Secrets management (deploy role) | The canary needs an execution role and an S3 bucket for its artifacts. Neither is named, and no stack owns the canary: the IaC row lists only the data, auth and compute stacks, and the deploy role is scoped to \"the three stacks\". | Say which stack owns the canary, its role and its artifact bucket (lifecycle-expired, with public access blocked), and include them in the deploy role's scope. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Infrastructure Services > AWS Lambda row (reserved concurrency 50) | Lambda refuses a reserved concurrency that leaves the account with less than 100 unreserved concurrency. Some new accounts have a total concurrency quota of 10. Unless the staging account's quota is at least 150, deploying with reserved concurrency 50 fails. No precondition is stated. | State the account concurrency quota needed (150 or more), and add a quota check or an increase request as a provisioning step. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/construction/inventory-api/infrastructure-design/infrastructure-specification.md > Deployment > Resource sizing; traceability.json NFR1.2 target | The 10 s timeout is said to be \"sized above the retry budget\", but no per-attempt timeout is given. Also, AWS SDK v3 already retries on its own (3 attempts by default). If the app's 3 jittered retries run on top of that, one call can make up to 9 attempts. Nothing shows the worst case fits in 10 s. | Say whether the bounded retry is the SDK's own retry (set its maxAttempts) or an app-level loop with SDK retries off. Give the per-attempt request timeout, and show the worst case stays under 10 s. |\n\n### Validation Tool Results\n\n| Tool | Result | Interpretation |\n|---|---|---|\n| traceability (read-only JSON parse) | PASS. Valid JSON. 32 `upstream_ids` = 32 `coverage` ids, no difference between the two sets. Every OK, N/A and Deferred row has a target. `reverse` is empty. | Every NFR id that appears in the nfr-design documents (NFR1.1 to 1.16, NFR2.1 to 2.5, NFR3.1 to 3.9, NFR4.1 to 4.2) is covered. Deferred rows (NFR1.5, 1.9, 1.16, 3.8, 3.9) are justified. NFR2.3 and NFR2.4 point to the Contract Design auth decision, as the brief says. |\n| required-sections | PASS | infrastructure-specification has 4 H2 sections, monitoring-design 5, cicd-pipeline 6. `## Sources` is in all three. No team templates are configured. |\n| upstream-coverage | PASS | The `## Sources` section of infrastructure-specification cites all nine consumed artifacts. |\n| linter | N/A, not run | This stage produces only design documents, no source code. |\n| type-check | N/A, not run | Same reason: no TypeScript is produced by this stage. |\n| Contract consistency (manual) | PASS | `/v1` servers plus the open `/health`, the gateway 401 body `{\"message\":\"Unauthorized\"}`, offset 10000 and limit 100 caps, 409 InsufficientStock, the overflow 400 at 9007199254740991, and the admin-created no-secret Cognito client all match contract-summary.md lines 39-55. |\n\n### Summary\n\nAll four Major findings from iteration 1 are fixed: the health route, API Gateway-based 5xx and availability, classification of failed conditions, and the list access pattern with an honest NFR1.9. Traceability now fully covers all 32 NFR ids. What remains are Minor implementability gaps: request-id correlation, a repeatable smoke test, predictable cdk-nag suppressions, ownership of the canary's resources, a Lambda concurrency quota precondition, the retry and timeout budget, and the IAM grant wording. None of them blocks building this design.\n",
+  "recorded_at": "2026-11-10T09:57:59Z"
+}

@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "stage": "contract-design",
+  "unit": null,
+  "workflow": null,
+  "attempt": "41ed14842d7e7ca6",
+  "iteration": 1,
+  "reviewer": "aidlc-architecture-reviewer-agent",
+  "verdict": "READY",
+  "request_id": "review:f72095b0cd680d426f7052d08128c1ce",
+  "request_challenge": null,
+  "artifact_fingerprint": "sha256:dcb424ed02537c1acee4f92cf5ce8913c39960f628630d6941e88436f0029022",
+  "source_fingerprint": null,
+  "unit_source_fingerprint": null,
+  "findings": [
+    {
+      "id": "R-00",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > review findings table",
+      "finding": "The reviewer's findings table could not be read, so its rows are not listed here: aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md: findings table header declares #, Severity, Location, Finding, Recommendation. Expected columns: ID, Severity, Location, Finding, Required action, Status. Missing: ID, Required action, Status",
+      "required_action": "Address the reviewer's findings as written below this table.",
+      "status": "Resolved"
+    },
+    {
+      "id": "R-01",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > Contract 1 resolved decisions and components.securitySchemes.cognitoJwt / responses.Unauthorized",
+      "finding": "The contract now depends on a specific front door: an API Gateway JWT check that rejects bad tokens before the service runs and answers with the fixed body {\"message\":\"Unauthorized\"}. Requirements constraint C1 says compute and edge are chosen later, and the Open Questions table hands only the token flow to Infrastructure Design. If Infrastructure Design picks anything else (a load balancer, a REST API with a different authorizer, or in-service token checking), the 401 body and the before-the-service promise silently break. The same gateway can also return its own bodies for throttling (429) and gateway failures (502/503/504), which are not in the contract.",
+      "required_action": "Add an Open Questions row (or a stated constraint) saying Infrastructure Design must place an API Gateway JWT authorizer in front of every /v1 item route and keep /health unauthenticated, and document that gateway-generated errors other than 401 (for example 429 and 5xx) also use the gateway's own body, or state that they are out of contract.",
+      "status": "New"
+    },
+    {
+      "id": "R-02",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md > Assumptions A1, Open Questions OQ3, Out of Scope (identity/auth integration)",
+      "finding": "The contract adds Cognito bearer authentication by the person's decision (Q7), but the approved requirements still say there is no authentication at MVP (A1) and list identity/auth integration as out of scope. The contract notes it replaces A1 for this contract only. Functional Design, NFR Requirements and Infrastructure Design read requirements.md as well, so they will meet two conflicting statements about auth and may not plan the user pool, token validation tests, or the 401 path.",
+      "required_action": "Record the auth decision where downstream stages will see it: revise requirements A1, OQ3 and the out-of-scope line (or add a DECIDED line under project memory), so requirements and contract agree that every /v1 item route needs a Cognito JWT and /health is open.",
+      "status": "New"
+    },
+    {
+      "id": "R-03",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > OpenAPI servers and paths./health",
+      "finding": "servers is url /v1, so the spec places the health check at /v1/health. Q7 reads as every /v1 route requiring a token with /health staying open, which suggests /health sits outside /v1. The probe path and the gateway's unauthenticated route depend on which it is.",
+      "required_action": "State the exact health path (either /v1/health or /health outside the version prefix) and, if outside, give the /health path its own servers entry.",
+      "status": "New"
+    },
+    {
+      "id": "R-04",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > OpenAPI responses on every operation",
+      "finding": "The Error enum includes InternalError and the status table maps it to 500, but no operation declares a 500 (or default) response. GET /items/{sku} and DELETE /items/{sku} also declare no 400, although the sku path parameter is length-validated (1 to 64) at the boundary under NFR2, so an over-length SKU gets an undocumented 400.",
+      "required_action": "Add a shared 500 response using the Error schema to every operation (or a default response), and add a 400 Error response to GET and DELETE /items/{sku}.",
+      "status": "New"
+    },
+    {
+      "id": "R-05",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > components.schemas.AdjustStockRequest.delta",
+      "finding": "delta has no minimum or maximum. A delta beyond the largest safe integer loses precision when parsed in Node.js before validation runs, so the overflow rule (Q10) cannot be enforced reliably, and a huge negative delta is reported as InsufficientStock 409 rather than a validation error.",
+      "required_action": "Bound delta to minimum -9007199254740991 and maximum 9007199254740991 (non-zero) so out-of-range deltas are a 400 ValidationError.",
+      "status": "New"
+    },
+    {
+      "id": "R-06",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > /items/{sku} put description vs UpdateItemRequest additionalProperties false",
+      "finding": "The update description promises a quantity attempt is rejected with a message guiding the caller to the adjustments endpoint, but the schema only rejects it as a generic unknown field. The 400 outcome is right; the guiding message is not pinned.",
+      "required_action": "Either say it is rejected as a ValidationError with a fields entry for quantity, or state the exact guiding message so tests can assert it.",
+      "status": "New"
+    },
+    {
+      "id": "R-07",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > Contract Ownership Rules (error envelope) and components.schemas.Error",
+      "finding": "The rules say adding a new error code is additive if consumers treat unknown codes as generic failures, while the spec publishes code as a strict closed enum; a consumer validating against the spec would reject a new code. The Error description also still says it is the envelope for every failure, while 401 now uses the gateway body.",
+      "required_action": "Describe code as the known codes that consumers must tolerate unknown values for (or drop the strict enum), and reword the Error description to every failure the service itself returns, with 401 excepted.",
+      "status": "New"
+    }
+  ],
+  "derived_findings": [
+    {
+      "id": "R-00",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > review findings table",
+      "finding": "The reviewer's findings table could not be read, so its rows are not listed here: aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md: findings table header declares #, Severity, Location, Finding, Recommendation. Expected columns: ID, Severity, Location, Finding, Required action, Status. Missing: ID, Required action, Status",
+      "required_action": "Address the reviewer's findings as written below this table.",
+      "status": "Resolved",
+      "reviewer_note": "Reviewed the contract afresh against the Q&A (Q1 to Q11) and the four upstream artifacts; every current concern is recorded below as its own finding.",
+      "resolved_by_reviewer": true,
+      "resolved_in_review": true,
+      "introduced_in_review": false
+    },
+    {
+      "id": "R-01",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > Contract 1 resolved decisions and components.securitySchemes.cognitoJwt / responses.Unauthorized",
+      "finding": "The contract now depends on a specific front door: an API Gateway JWT check that rejects bad tokens before the service runs and answers with the fixed body {\"message\":\"Unauthorized\"}. Requirements constraint C1 says compute and edge are chosen later, and the Open Questions table hands only the token flow to Infrastructure Design. If Infrastructure Design picks anything else (a load balancer, a REST API with a different authorizer, or in-service token checking), the 401 body and the before-the-service promise silently break. The same gateway can also return its own bodies for throttling (429) and gateway failures (502/503/504), which are not in the contract.",
+      "required_action": "Add an Open Questions row (or a stated constraint) saying Infrastructure Design must place an API Gateway JWT authorizer in front of every /v1 item route and keep /health unauthenticated, and document that gateway-generated errors other than 401 (for example 429 and 5xx) also use the gateway's own body, or state that they are out of contract.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-02",
+      "severity": "Major",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md > Assumptions A1, Open Questions OQ3, Out of Scope (identity/auth integration)",
+      "finding": "The contract adds Cognito bearer authentication by the person's decision (Q7), but the approved requirements still say there is no authentication at MVP (A1) and list identity/auth integration as out of scope. The contract notes it replaces A1 for this contract only. Functional Design, NFR Requirements and Infrastructure Design read requirements.md as well, so they will meet two conflicting statements about auth and may not plan the user pool, token validation tests, or the 401 path.",
+      "required_action": "Record the auth decision where downstream stages will see it: revise requirements A1, OQ3 and the out-of-scope line (or add a DECIDED line under project memory), so requirements and contract agree that every /v1 item route needs a Cognito JWT and /health is open.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-03",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > OpenAPI servers and paths./health",
+      "finding": "servers is url /v1, so the spec places the health check at /v1/health. Q7 reads as every /v1 route requiring a token with /health staying open, which suggests /health sits outside /v1. The probe path and the gateway's unauthenticated route depend on which it is.",
+      "required_action": "State the exact health path (either /v1/health or /health outside the version prefix) and, if outside, give the /health path its own servers entry.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-04",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > OpenAPI responses on every operation",
+      "finding": "The Error enum includes InternalError and the status table maps it to 500, but no operation declares a 500 (or default) response. GET /items/{sku} and DELETE /items/{sku} also declare no 400, although the sku path parameter is length-validated (1 to 64) at the boundary under NFR2, so an over-length SKU gets an undocumented 400.",
+      "required_action": "Add a shared 500 response using the Error schema to every operation (or a default response), and add a 400 Error response to GET and DELETE /items/{sku}.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-05",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > components.schemas.AdjustStockRequest.delta",
+      "finding": "delta has no minimum or maximum. A delta beyond the largest safe integer loses precision when parsed in Node.js before validation runs, so the overflow rule (Q10) cannot be enforced reliably, and a huge negative delta is reported as InsufficientStock 409 rather than a validation error.",
+      "required_action": "Bound delta to minimum -9007199254740991 and maximum 9007199254740991 (non-zero) so out-of-range deltas are a 400 ValidationError.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-06",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > /items/{sku} put description vs UpdateItemRequest additionalProperties false",
+      "finding": "The update description promises a quantity attempt is rejected with a message guiding the caller to the adjustments endpoint, but the schema only rejects it as a generic unknown field. The 400 outcome is right; the guiding message is not pinned.",
+      "required_action": "Either say it is rejected as a ValidationError with a fields entry for quantity, or state the exact guiding message so tests can assert it.",
+      "status": "New",
+      "introduced_in_review": true
+    },
+    {
+      "id": "R-07",
+      "severity": "Minor",
+      "location": "aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > Contract Ownership Rules (error envelope) and components.schemas.Error",
+      "finding": "The rules say adding a new error code is additive if consumers treat unknown codes as generic failures, while the spec publishes code as a strict closed enum; a consumer validating against the spec would reject a new code. The Error description also still says it is the envelope for every failure, while 401 now uses the gateway body.",
+      "required_action": "Describe code as the known codes that consumers must tolerate unknown values for (or drop the strict enum), and reword the Error description to every failure the service itself returns, with 401 excepted.",
+      "status": "New",
+      "introduced_in_review": true
+    }
+  ],
+  "body": "## Review\n\n**Verdict:** READY\n**Reviewer:** aidlc-architecture-reviewer-agent\n**Date:** 2026-11-10T09:27:44Z\n**Iteration:** 1\n**Verdict Dictated:** no\n\n### Findings\n\n**Prior findings**\n\n| ID | Now | Severity | Note |\n|---|---|---|---|\n| R-00 | Fixed | Major | Reviewed the contract afresh against the Q&A (Q1 to Q11) and the four upstream artifacts; every current concern is recorded below as its own finding. |\n\n**New findings**\n\n| Severity | Location | Finding | Required action |\n|---|---|---|---|\n| Major | aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > Contract 1 resolved decisions and components.securitySchemes.cognitoJwt / responses.Unauthorized | The contract now depends on a specific front door: an API Gateway JWT check that rejects bad tokens before the service runs and answers with the fixed body {\"message\":\"Unauthorized\"}. Requirements constraint C1 says compute and edge are chosen later, and the Open Questions table hands only the token flow to Infrastructure Design. If Infrastructure Design picks anything else (a load balancer, a REST API with a different authorizer, or in-service token checking), the 401 body and the before-the-service promise silently break. The same gateway can also return its own bodies for throttling (429) and gateway failures (502/503/504), which are not in the contract. | Add an Open Questions row (or a stated constraint) saying Infrastructure Design must place an API Gateway JWT authorizer in front of every /v1 item route and keep /health unauthenticated, and document that gateway-generated errors other than 401 (for example 429 and 5xx) also use the gateway's own body, or state that they are out of contract. |\n| Major | aidlc/spaces/default/intents/260825-inventory-api/inception/requirements-analysis/requirements.md > Assumptions A1, Open Questions OQ3, Out of Scope (identity/auth integration) | The contract adds Cognito bearer authentication by the person's decision (Q7), but the approved requirements still say there is no authentication at MVP (A1) and list identity/auth integration as out of scope. The contract notes it replaces A1 for this contract only. Functional Design, NFR Requirements and Infrastructure Design read requirements.md as well, so they will meet two conflicting statements about auth and may not plan the user pool, token validation tests, or the 401 path. | Record the auth decision where downstream stages will see it: revise requirements A1, OQ3 and the out-of-scope line (or add a DECIDED line under project memory), so requirements and contract agree that every /v1 item route needs a Cognito JWT and /health is open. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > OpenAPI servers and paths./health | servers is url /v1, so the spec places the health check at /v1/health. Q7 reads as every /v1 route requiring a token with /health staying open, which suggests /health sits outside /v1. The probe path and the gateway's unauthenticated route depend on which it is. | State the exact health path (either /v1/health or /health outside the version prefix) and, if outside, give the /health path its own servers entry. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > OpenAPI responses on every operation | The Error enum includes InternalError and the status table maps it to 500, but no operation declares a 500 (or default) response. GET /items/{sku} and DELETE /items/{sku} also declare no 400, although the sku path parameter is length-validated (1 to 64) at the boundary under NFR2, so an over-length SKU gets an undocumented 400. | Add a shared 500 response using the Error schema to every operation (or a default response), and add a 400 Error response to GET and DELETE /items/{sku}. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > components.schemas.AdjustStockRequest.delta | delta has no minimum or maximum. A delta beyond the largest safe integer loses precision when parsed in Node.js before validation runs, so the overflow rule (Q10) cannot be enforced reliably, and a huge negative delta is reported as InsufficientStock 409 rather than a validation error. | Bound delta to minimum -9007199254740991 and maximum 9007199254740991 (non-zero) so out-of-range deltas are a 400 ValidationError. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > /items/{sku} put description vs UpdateItemRequest additionalProperties false | The update description promises a quantity attempt is rejected with a message guiding the caller to the adjustments endpoint, but the schema only rejects it as a generic unknown field. The 400 outcome is right; the guiding message is not pinned. | Either say it is rejected as a ValidationError with a fields entry for quantity, or state the exact guiding message so tests can assert it. |\n| Minor | aidlc/spaces/default/intents/260825-inventory-api/inception/contract-design/contract-summary.md > Contract Ownership Rules (error envelope) and components.schemas.Error | The rules say adding a new error code is additive if consumers treat unknown codes as generic failures, while the spec publishes code as a strict closed enum; a consumer validating against the spec would reject a new code. The Error description also still says it is the envelope for every failure, while 401 now uses the gateway body. | Describe code as the known codes that consumers must tolerate unknown values for (or drop the strict enum), and reword the Error description to every failure the service itself returns, with 401 excepted. |\n\n### Validation Tool Results\n\n| Tool | Result | Interpretation |\n|---|---|---|\n| OpenAPI YAML parse (Bun.YAML on the inline block) | PASS | openapi 3.0.3, 4 paths, 7 operations, 7 schemas, 1 shared response, 1 security scheme. |\n| $ref resolution | PASS | All 8 distinct refs (ItemPage, Unauthorized, Error, CreateItemRequest, Item, UpdateItemRequest, AdjustStockRequest, GatewayUnauthorized) resolve. |\n| Security coverage | PASS | Global security cognitoJwt; /health overrides with an empty security list; every item operation declares 401 using the Unauthorized response (Q7, Q8). |\n| Decision reflection Q1 to Q11 | PASS | REST and OpenAPI (Q1); limit default 20 max 100 and offset max 10000 (Q2, Q11); InsufficientStock 409 (Q3); no ConcurrencyConflict code (Q4); Cognito JWT replaces Q5 (Q7); gateway 401 body (Q8); /v1 with info.version 1.1.0 (Q9, Q6); overflow is 400 ValidationError with Item.quantity maximum 9007199254740991 (Q10). |\n| Boundary table vs dependency DAG | PASS | Single node with depends_on empty; one external contract row, no invented inter-unit contracts. |\n| Requirements endpoint coverage | PASS | FR1.1 to FR1.6, FR2.1 to FR2.5, FR3.1 and FR3.2 (with the documented 401 exception), and the NFR3 health check all have operations. |\n\n### Summary\n\nThe contract is well-formed, every reference resolves, and all eleven answered decisions are reflected, so a developer could build from it; zero Critical and two Major findings keep this advisory pass READY. The two things to weigh before approving are that the 401 behaviour quietly commits Infrastructure Design to an API Gateway JWT authorizer, and that requirements.md still says there is no auth at MVP, so downstream stages will see conflicting statements unless the auth decision is recorded upstream.\n",
+  "recorded_at": "2026-11-10T09:29:52Z"
+}

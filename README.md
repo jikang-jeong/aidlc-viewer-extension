@@ -49,6 +49,12 @@ A stage waiting for your answer is stopped, not slow, and the chat said so once 
 
 Nothing is estimated and no amount in money is shown, because the price of a credit depends on your plan.
 
+## Trace what it built (v2)
+
+The **Trace Explorer** row (or `AI-DLC: Trace Explorer` in the Command Palette) opens one panel over the engine's own traceability records. **Trace** follows any requirement, story, rule, component, file or test up and down its lineage; **Coverage** shows which requirements reach code and tests; **Reviews & rework** lists every verdict, the open findings, and what a rework invalidated; **About** says where the data was read from and what was left out. Source paths open in the editor. The panel re-reads as the engine writes, and writes nothing itself.
+
+A tour of all four tabs and the design notes: [docs/trace-explorer/README.md](docs/trace-explorer/README.md).
+
 ## Also
 
 **Setup is reversible.** `AI-DLC v2: Remove` takes back only what the extension installed and refuses if it has no record of installing anything. `AI-DLC v2: Check setup` says what is present and what is missing when `/aidlc` does not appear, which is usually that Kiro reads agents from the workspace root and the folder you set up is not it.
@@ -66,6 +72,23 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
 
 ## What's New
 
+ 
+### 0.2.0
+
+- **Trace Explorer (v2): follow every requirement to the code and tests that answer it.**
+  A new **Trace Explorer** row in the tree, next to Usage, and the command
+  `AI-DLC: Trace Explorer`, open one panel with four tabs. **Trace** picks any item
+  (requirement, story, acceptance criterion, business rule, component, unit, code file or
+  test) and draws its lineage upstream and downstream, with the record each link came from.
+  **Coverage** is the traceability matrix: which requirements reach code and tests, and
+  which stop short. **Reviews & rework** lists every review verdict the engine recorded, in
+  order, the open findings at approval, and, when the engine jumped back for rework, which
+  files it invalidated. **About** says where the data was read from and
+  what was left out because no record supports it. Everything is read from the engine's
+  own files (`traceability.json`, `runtime-graph.json`, its review records) and nothing is
+  guessed; the source paths it shows open in the editor. The panel follows the project
+  as the engine writes, and never writes anything itself.
+ 
 ### 0.1.7
 
 - **Projects set up for Claude Code, Codex CLI, Cursor, Copilot or opencode are read too.**
@@ -81,6 +104,7 @@ Nothing is estimated and no amount in money is shown, because the price of a cre
   `aidlc/spaces/<space>/intents/audit/`, which the viewer listed as an intent with every stage
   pending, or reported as missing from the manifest. An intent is now what the engine says it
   is: a directory under `intents/` that holds `aidlc-state.md`. Also from issue #5.
+ 
 
 ### 0.1.6
 

@@ -1,0 +1,26 @@
+{
+  "stage": "domain-design",
+  "upstream_ids": [
+    "US1.1", "US1.2", "US1.3", "US1.4", "US1.5",
+    "US2.1", "US2.2",
+    "US3.1",
+    "US4.1", "US4.2"
+  ],
+  "coverage": [
+    { "id": "US1.1", "status": "OK", "target": "InventoryItem" },
+    { "id": "US1.2", "status": "OK", "target": "InventoryItem" },
+    { "id": "US1.3", "status": "OK", "target": "InventoryItem" },
+    { "id": "US1.4", "status": "OK", "target": "InventoryItem" },
+    { "id": "US1.5", "status": "OK", "target": "InventoryItem" },
+    { "id": "US2.1", "status": "OK", "target": "InventoryItem" },
+    { "id": "US2.2", "status": "OK", "target": "InventoryItem" },
+    { "id": "US3.1", "status": "OK", "target": "ApiEdge" },
+    { "id": "US4.1", "status": "OK", "target": "ApiEdge" },
+    { "id": "US4.2", "status": "OK", "target": "ApiEdge" }
+  ],
+  "reverse": [
+    { "id": "Item", "status": "OK", "target": "InventoryItem (owning component)" },
+    { "id": "InventoryItem", "status": "OK", "target": "realizes item CRUD + stock adjustment stories (US1.x, US2.x)" },
+    { "id": "ApiEdge", "status": "OK", "target": "realizes error-contract, validation, and observability stories (US3.1, US4.1, US4.2)" }
+  ]
+}
