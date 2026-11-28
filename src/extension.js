@@ -71,6 +71,7 @@ const SETUP_NEEDED_CONTEXT_KEY = 'aidlcViewer.setupNeeded';
 const { readProject } = require('./aidlc/index');
 const { checkpointIndexForPath } = require('./aidlc/journey-v2');
 const { detectGeneration } = require('./aidlc/detect');
+const { HARNESS_DIRS, readHarnessRecord } = require('./aidlc/harness-dirs');
 const installCommands = require('./install-commands');
 
 const STATE_KEY = 'markdownWatchViewer.watchedFolder';
@@ -573,8 +574,16 @@ class WatchController {
         await this.openChatWithPrompt(message.prompt);
       }
     });
+    // Which harness the project is configured for, in the engine's own words. This page
+    // is reachable from the tree's "Not started" row on any v2 project, including one set
+    // up for Claude Code or Codex CLI from a terminal (issue #5), where ".kiro/agents"
+    // would describe a directory the project does not have.
+    const record = generation === 'v2' ? readHarnessRecord(folderUri.fsPath) : undefined;
+    const configured = record && record.dir !== '.kiro'
+      ? `Project configured for ${record.productName ?? record.distribution ?? record.dir}: ${record.dir}/, aidlc/`
+      : 'Project configured: .kiro/agents, hooks, aidlc/';
     const installed = generation === 'v2'
-      ? ['AI-DLC v2 engine on this machine', 'Project configured: .kiro/agents, hooks, aidlc/']
+      ? ['AI-DLC v2 engine on this machine', configured]
       : ['AI-DLC v1 rules in the project'];
     panel.webview.html = renderStartPage({ webview: panel.webview, root: folderUri.fsPath, project, generation, installed });
   }
@@ -2369,7 +2378,13 @@ function ensureTrailingSlash(value) {
 // Matched on a path segment rather than on a full path, so a layout that moves within
 // the project still works, and expressed as a positive list so a new dot-directory
 // upstream invents is ignored by default rather than silently steering refreshes.
-const WATCHED_DOT_DIRS = new Set(['.kiro', '.aidlc-sensors']);
+//
+// Every harness directory the engine can write is watched, not `.kiro` alone: a project
+// configured for Claude Code keeps the same compiled data under `.claude/` (issue #5), and
+// an `aidlc config` refresh there has to reach the reader exactly as one under `.kiro/`
+// does. The NEW-tracking rule below is unaffected, because it follows what the tree can
+// show rather than this list.
+const WATCHED_DOT_DIRS = new Set([...HARNESS_DIRS, '.aidlc-sensors']);
 
 const SKIP_DIRS = new Set([
   'node_modules', 'dist', 'build', 'out', 'coverage',

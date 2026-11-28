@@ -48,6 +48,28 @@ function isBookkeeping(name) {
   return name.startsWith('.');
 }
 
+// What makes a directory under `intents/` an intent record: it holds `aidlc-state.md`.
+//
+// This is the engine's own test, not a rule invented here -- `listIntentDirs` in its
+// aidlc-locks.ts: "A record dir holds aidlc-state.md; skip the active-intent cursor,
+// intents.json, and any stray files." It is what tells a record from the SPACE-level
+// audit shard, `aidlc/spaces/<space>/intents/audit/<host>-<clone>.md`, which the
+// knowledge base and other space-wide events write to (its audit-format.md: "all three
+// events land in the space-level audit shard"). That directory has no dot in its name, so
+// it passed as an intent (issue #5: an intent called `audit` with every stage pending, or
+// `audit` reported as on disk but missing from the manifest). Judged by what the
+// directory holds rather than by its name, so the next space-level folder upstream puts
+// under `intents/` is excluded the same way; a name list would need a release each time.
+function isIntentRecord(intentsDir, name) {
+  if (isBookkeeping(name)) return false;
+  try {
+    fs.statSync(path.join(intentsDir, name, 'aidlc-state.md'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function listSpaces(root) {
   return listDirs(path.join(root, ...SPACES_DIR)).filter((name) => !isBookkeeping(name));
 }
@@ -55,12 +77,13 @@ function listSpaces(root) {
 // Intents of a space. `intents.json` is preferred when present because it is the
 // engine's own list; the directory walk is the fallback. Directory NAMES are
 // never pattern-matched: the observed shape (`YYMMDD-<scope-slug>`) is a
-// convention, not a contract, and an intent named anything at all still counts.
+// convention, not a contract, and an intent named anything at all still counts --
+// what counts is that the directory holds an intent record (isIntentRecord).
 function listIntents(root, space) {
   const intentsDir = path.join(root, ...SPACES_DIR, space, 'intents');
   const manifest = readJson(intentsDir, 'intents.json');
   const fromManifest = collectManifestEntries(manifest);
-  const onDisk = listDirs(intentsDir).filter((name) => !isBookkeeping(name));
+  const onDisk = listDirs(intentsDir).filter((name) => isIntentRecord(intentsDir, name));
 
   const matched = fromManifest.filter((entry) => onDisk.includes(entry.dirName));
   // A manifest entry whose directory is absent, and a directory the manifest does
@@ -218,6 +241,7 @@ module.exports = {
   SPACES_DIR,
   KNOWN_RUNTIME_FIELDS,
   isBookkeeping,
+  isIntentRecord,
   listSpaces,
   listIntents,
   readRuntime,
