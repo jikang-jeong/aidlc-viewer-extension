@@ -28,12 +28,24 @@ Copyright (c) Microsoft Corporation. MIT License.
 Scoped under `.preview` and with this extension's inline-code colours, which were
 chosen for contrast on both of Kiro's themes (see docs/v2-support.md).
 
-## mermaid 11.14.0 (`mermaid.min.js`)
+## mermaid 12.4.0 (`mermaid.min.js`)
 
 https://github.com/mermaid-js/mermaid
 Copyright (c) 2014 - 2022 Knut Sveidqvist. MIT License.
 
-Renders ```` ```mermaid ```` blocks. The browser bundle, unmodified.
+Renders ```` ```mermaid ```` blocks. The browser bundle `dist/mermaid.min.js` from the
+npm release, unmodified:
+
+- sha256 `c0891e4c0413d0710ad193b431d8cbbe9d031636e51c467d11daa4721ba22094`
+- from `mermaid-12.4.0.tgz`, integrity
+  `sha512-j2gvsGUFeS/53WdYLl9H5G2YtMZX9G/PlCvV3E5Pf4j5XSnK19DwazU6wki7OTcKeYKed7+qujRDLhy8NV2zBg==`
+
+Updated from 11.14.0 on 2026-11-28 because that version had nine GitHub security
+advisories against it and bundled js-yaml 4.1.1 (GHSA-2883-xcg3-v3hh); 12.4.0 has none
+and bundles js-yaml 4.3.2. The bundle carries its own third-party code (d3, dompurify,
+js-yaml, dagre, elk and others), each under its own permissive licence as listed in the
+mermaid repository. tests/vendored-assets.test.js checks the file against the hash above
+and the version named here.
 
 ---
 

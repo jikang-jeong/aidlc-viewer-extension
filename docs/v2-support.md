@@ -888,6 +888,34 @@ met (CI run 9 on 6af04c7, two trace-data tests reading "no intents found"), so i
 `makeProject` writes the file too. The rule for every fixture from here: a directory that
 stands for an intent carries `aidlc-state.md`, or it is not an intent.
 
+**The bundled Mermaid carried nine advisories for seven months, and nothing here could
+tell.** `media/mermaid.min.js` was 11.14.0 (April 2026). Checked on 2026-11-28 with the
+GitHub advisory API (`/advisories?ecosystem=npm&affects=mermaid@11.14.0`): nine advisories,
+all medium or low (CSS injection through configuration and `classDef`, infinite-loop
+denial of service in Gantt and XY charts, prototype pollution in the configuration APIs
+and architecture diagrams, radar-chart DoS), every one patched by 11.16.1. And inside the
+bundle, js-yaml 4.1.1: GHSA-2883-xcg3-v3hh, high, denial of service through merge keys,
+patched in 4.3.2. The viewer hands every ```` ```mermaid ```` block of a project's markdown
+to this file, so the exposure is the project's own artifacts. The update went to 12.4.0,
+not to the last 11.x, for a reason a version number cannot show: 11.17.2 bundles js-yaml
+4.3.1 and 12.4.0 bundles 4.3.2. Minified code keeps no version numbers, but it keeps
+string literals, and the 4.3.2 fix added one error message, `abnormal merge sequence
+size`; 11.14.0 has none of the 4.3.x strings, 11.17.2 has the budget strings and not that
+one, 12.4.0 has all of them. `affects=mermaid@12.4.0` returns nothing. The file is npm's
+`dist/mermaid.min.js` byte for byte (sha256 in the notices, tarball integrity beside it),
+the same IIFE exporting `globalThis.mermaid`, and `initialize`/`render` are unchanged.
+What 12.0 did change: ELK became the default layout for flowchart, state, class and ER
+diagrams, which redraws every existing diagram, so the viewer now names `layout: 'dagre'`
+and a diagram that wants ELK asks in its front matter; the default theme changed too, but
+the viewer always set `theme: 'dark'`; the target is ES2024, which Kiro's Chromium has.
+The file grew from 3.2 to 5.8 MB (ELK is inlined). Pins: vendored-assets "mermaid.min.js
+is the npm 12.4.0 build, byte for byte", "carries js-yaml 4.3.2 or later", "keeps the
+dagre layout"; and markdown-it and its task-list plugin are hashed the same way (both
+byte-identical to their npm releases; the task-lists banner inside npm's own 2.1.1 build
+reads 2.1.0, so the hash is the check, not the banner). Not done: no job watches these
+three files for new advisories; the upstream cron watches the engine, not the viewer's
+libraries, and that would be the place to add it.
+
 **The Trace Explorer reads names and answers from markdown, and on older runs most of them
 do not resolve.** The panel (0.2.0, #6, @CloudaYolla) is the one place in this extension
 that parses markdown content. Its graph is JSON (`traceability.json` per stage,

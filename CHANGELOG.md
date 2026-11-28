@@ -36,6 +36,12 @@ The same notes as the README's What's New section, kept identical by a test
   `aidlc/spaces/<space>/intents/audit/`, which the viewer listed as an intent with every stage
   pending, or reported as missing from the manifest. An intent is now what the engine says it
   is: a directory under `intents/` that holds `aidlc-state.md`. Also from issue #5.
+- **Mermaid updated from 11.14.0 to 12.4.0.** The diagram renderer the viewer bundles had nine
+  GitHub security advisories against its version and carried a js-yaml with a high-severity
+  denial-of-service advisory; 12.4.0 has none and carries the fixed js-yaml. The file is the npm
+  release byte for byte (its hash is in `media/THIRD-PARTY-NOTICES.md` and checked by a test).
+  Flowcharts, state, class and ER diagrams keep the dagre layout they had: Mermaid 12 made ELK
+  the default, and this viewer names dagre so existing diagrams draw as before.
 
 
 ## 0.1.6
