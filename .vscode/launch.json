@@ -1,4 +1,9 @@
 {
+  // F5 from Kiro or VS Code. `${execPath}` is whichever of the two is running this
+  // workspace, so the Extension Development Host is that IDE, with this folder loaded as
+  // the extension (an installed copy of the same extension is set aside for that window).
+  // Every launch runs the syntax check first; the test suite is its own configuration
+  // below, because a 700-test run before every F5 is not a gate, it is a wait.
   "version": "0.2.0",
   "configurations": [
     {
@@ -8,22 +13,40 @@
       "request": "launch",
       "runtimeExecutable": "${execPath}",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "preLaunchTask": "npm: verify"
+      "preLaunchTask": "npm: check"
     },
     {
-      // Opens an AI-DLC project directly, so the tree and the journey strip have
-      // real artifacts to render. Enter the folder that CONTAINS aidlc-docs.
+      // Opens an AI-DLC project directly, so the tree, the strip and the pages have real
+      // records to render. v2: the folder that holds `aidlc/` and the harness directory
+      // (`.kiro/`, or `.claude/`, `.codex/`, ...). v1: the folder that holds `aidlc-docs`.
       "name": "Run AI-DLC Viewer (open an AI-DLC project…)",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}", "${input:aidlcProject}"],
-      "preLaunchTask": "npm: verify"
+      "preLaunchTask": "npm: check"
     },
     {
-      // Same, but with a throwaway profile so first-run behaviour is reproducible:
-      // the welcome guide, the "AI-DLC artifacts detected" prompt and the per-version
-      // setup notice all fire again instead of being remembered from a previous run.
+      // The Trace Explorer's fixture: a trimmed copy of a completed v2 run that ships in
+      // the repository, so the panel has a full graph, coverage and reviews to debug with
+      // no project of your own. The copy carries no compiled stage graph, so the tree and
+      // the strip read it as "stage-graph-unreadable"; that is the fixture, not a bug.
+      "name": "Run AI-DLC Viewer (Trace Explorer fixture)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/tests/fixtures/inventory-api"
+      ],
+      "preLaunchTask": "npm: check"
+    },
+    {
+      // Same as the second, with a throwaway profile so first-run behaviour is
+      // reproducible: the welcome guide, the setup toast and the per-version notice all
+      // fire again instead of being remembered from a previous run. Kiro's own agents and
+      // settings are not in that profile, so /aidlc is not there; use it for the
+      // extension's first-run surfaces, not for a workflow run.
       "name": "Run AI-DLC Viewer (clean profile, open an AI-DLC project…)",
       "type": "extensionHost",
       "request": "launch",
@@ -33,14 +56,39 @@
         "--profile-temp",
         "${input:aidlcProject}"
       ],
-      "preLaunchTask": "npm: verify"
+      "preLaunchTask": "npm: check"
+    },
+    {
+      // The whole suite under the debugger: breakpoints in src/ and tests/ both hold.
+      // node --test runs each file in a child process, so child processes are attached.
+      "name": "Debug tests (all)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/run-tests.js",
+      "cwd": "${workspaceFolder}",
+      "autoAttachChildProcesses": true,
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      // The test file open in the editor, alone. Open tests/<name>.test.js, set a
+      // breakpoint, pick this.
+      "name": "Debug this test file",
+      "type": "node",
+      "request": "launch",
+      "runtimeArgs": ["--test"],
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "autoAttachChildProcesses": true,
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
     }
   ],
   "inputs": [
     {
       "id": "aidlcProject",
       "type": "promptString",
-      "description": "Path to an AI-DLC project (the folder that contains aidlc-docs)",
+      "description": "Path to an AI-DLC project: the folder that holds aidlc/ and .kiro/ (v2), or aidlc-docs (v1)",
       "default": ""
     }
   ]

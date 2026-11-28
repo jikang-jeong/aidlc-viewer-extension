@@ -2,15 +2,28 @@
   "version": "2.0.0",
   "tasks": [
     {
-      // Runs before every debug launch so the dev host never starts on code that
-      // fails the syntax check or the tests.
+      // Runs before every debug launch: the syntax check alone, so the dev host never
+      // starts on a file that cannot parse, and F5 is not held behind the suite.
+      "type": "npm",
+      "script": "check",
+      "problemMatcher": [],
+      "label": "npm: check",
+      "detail": "node --check src/extension.js",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      // Check plus the whole suite, the same two steps CI's verify job runs.
       "type": "npm",
       "script": "verify",
       "problemMatcher": [],
       "label": "npm: verify",
-      "detail": "node --check src/extension.js && node --test tests/*.test.js",
+      "detail": "node --check src/extension.js && node tools/run-tests.js",
       "presentation": {
-        "reveal": "silent",
+        "reveal": "always",
         "panel": "dedicated",
         "clear": true
       }
@@ -20,6 +33,7 @@
       "script": "test",
       "problemMatcher": [],
       "label": "npm: test",
+      "detail": "node tools/run-tests.js (exactly tests/*.test.js, on every Node)",
       "group": {
         "kind": "test",
         "isDefault": true

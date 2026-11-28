@@ -155,6 +155,13 @@ h1 .accent { color: var(--violet-ink); font-weight: 600; }
 .banner.warn { border-left-color: var(--amber); background: var(--amber-soft); color: var(--text); margin: 0 0 12px; }
 .banner.err { border-left-color: var(--red); background: var(--red-soft); color: var(--text); }
 .banner ul { margin: 4px 0 0; padding-left: 18px; }
+/* The warning list folds: the count and a button on one row, then the first two warnings
+   clipped to one line each; unfolded, every warning wraps as it did before. */
+.bannerHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bannerHead .chipBtn { flex: 0 0 auto; }
+.banner .warnings.collapsed li:nth-child(n+3) { display: none; }
+.banner .warnings.collapsed li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.banner .wpath { color: var(--dim); }
 
 /* ------------------------------------------------------------------ tabs */
 

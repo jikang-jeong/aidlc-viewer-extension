@@ -3826,7 +3826,11 @@ function getWebviewHtml(webview, fileUri, markdown, extensionUri, journey, initi
       // 'antiscript' strips script tags/event handlers but keeps HTML labels
       // (e.g. <br/> in node text) rendering exactly as before — 'strict' would
       // encode those tags and visibly change existing diagrams.
-      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'antiscript' });
+      // layout 'dagre': Mermaid 12 made ELK the default layout for flowchart, state,
+      // class and ER diagrams, which lays existing diagrams out differently. Named here
+      // so the 12.4.0 bundle (a security update) draws what 11.14.0 drew; a diagram that
+      // wants ELK says so in its own front matter (config: layout: elk).
+      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'antiscript', layout: 'dagre' });
       function renderMermaidBlocks() {
         const done = Array.from(document.querySelectorAll('pre.mermaid')).map(async (el, idx) => {
           const code = el.textContent;

@@ -888,6 +888,79 @@ met (CI run 9 on 6af04c7, two trace-data tests reading "no intents found"), so i
 `makeProject` writes the file too. The rule for every fixture from here: a directory that
 stands for an intent carries `aidlc-state.md`, or it is not an intent.
 
+**The bundled Mermaid carried nine advisories for seven months, and nothing here could
+tell.** `media/mermaid.min.js` was 11.14.0 (April 2026). Checked on 2026-11-28 with the
+GitHub advisory API (`/advisories?ecosystem=npm&affects=mermaid@11.14.0`): nine advisories,
+all medium or low (CSS injection through configuration and `classDef`, infinite-loop
+denial of service in Gantt and XY charts, prototype pollution in the configuration APIs
+and architecture diagrams, radar-chart DoS), every one patched by 11.16.1. And inside the
+bundle, js-yaml 4.1.1: GHSA-2883-xcg3-v3hh, high, denial of service through merge keys,
+patched in 4.3.2. The viewer hands every ```` ```mermaid ```` block of a project's markdown
+to this file, so the exposure is the project's own artifacts. The update went to 12.4.0,
+not to the last 11.x, for a reason a version number cannot show: 11.17.2 bundles js-yaml
+4.3.1 and 12.4.0 bundles 4.3.2. Minified code keeps no version numbers, but it keeps
+string literals, and the 4.3.2 fix added one error message, `abnormal merge sequence
+size`; 11.14.0 has none of the 4.3.x strings, 11.17.2 has the budget strings and not that
+one, 12.4.0 has all of them. `affects=mermaid@12.4.0` returns nothing. The file is npm's
+`dist/mermaid.min.js` byte for byte (sha256 in the notices, tarball integrity beside it),
+the same IIFE exporting `globalThis.mermaid`, and `initialize`/`render` are unchanged.
+What 12.0 did change: ELK became the default layout for flowchart, state, class and ER
+diagrams, which redraws every existing diagram, so the viewer now names `layout: 'dagre'`
+and a diagram that wants ELK asks in its front matter; the default theme changed too, but
+the viewer always set `theme: 'dark'`; the target is ES2024, which Kiro's Chromium has.
+The file grew from 3.2 to 5.8 MB (ELK is inlined). Pins: vendored-assets "mermaid.min.js
+is the npm 12.4.0 build, byte for byte", "carries js-yaml 4.3.2 or later", "keeps the
+dagre layout"; and markdown-it and its task-list plugin are hashed the same way (both
+byte-identical to their npm releases; the task-lists banner inside npm's own 2.1.1 build
+reads 2.1.0, so the hash is the check, not the banner). Not done: no job watches these
+three files for new advisories; the upstream cron watches the engine, not the viewer's
+libraries, and that would be the place to add it.
+
+**The third-party notices said "All are MIT", and two of the four entries were not, nor
+was a third of the Mermaid file.** The first `media/THIRD-PARTY-NOTICES.md` opened with
+that sentence two lines above the task-list plugin's own line, "ISC License", and
+described Mermaid by Mermaid's licence alone. A single-file Mermaid build inlines its
+dependencies, and 12.4.0's are not all MIT (read 2026-11-28 from each package's `license`
+field and LICENSE file in the tarballs the 12.4.0 dependency set resolves to): DOMPurify
+3.4.17 is `(MPL-2.0 OR Apache-2.0)`, chevrotain 13.2.0 Apache-2.0, elkjs 0.12.2 `EPL-2.0
+OR GPL-3.0-or-later` and inlined whole since Mermaid 12 (the `org.eclipse.elk.*` package
+names are in the file), d3-sankey 0.12.3 BSD-3-Clause, d3 7.9 and internmap and delaunator
+ISC; the rest MIT. Pointed out by the user, with the bundle's own licence comments as the
+evidence: esbuild keeps every `/*! ... */` comment of what it inlines in one `Bundled
+license information` block at the end of `mermaid.min.js`, and that block names DOMPurify's
+dual licence in so many words. The notices now name each component with the licence it is
+taken under (Apache-2.0 for DOMPurify, EPL-2.0 for ELK, with ELK's source locations as
+EPL asks) and reproduce every licence text named, copied from the packages' LICENSE files;
+the EPL text's own `##` headings are demoted so the document's top level stays the list of
+files. The VS Code stylesheet entry was right and stays. Rule: a notices file names the
+licence per component and never summarises, and a bundle is listed by what it contains,
+read from the bundle, not by the licence of the package that built it. Pins:
+vendored-assets "the notices name every licence the shipped files carry" (no blanket
+claim, the ISC heading, the DOMPurify/chevrotain/elkjs/d3-sankey/d3 lines, each of the
+five texts present by a sentence only it has, no top-level heading after "Licence
+texts") and "the Mermaid bundle keeps its own licence comments" (the block exists, sits
+at the end, names DOMPurify 3.4.17's dual licence, regenerator-runtime, lodash and
+cytoscape; ELK's package names are in the file).
+
+**The 0.2.0 vsix carried the git bundle made for the desktop and a scratch HTML report,
+1.9 MB of 4.9.** Seen in `unzip -l` while checking that the corrected notices were in
+the package: `extension/aidlc-viewer-post-merge.bundle` (1.7 MB, the transfer bundle this
+machine makes because it cannot push) and `extension/renderer-comparison-report.html`
+(145 KB, left at the root on 2026-11-11 by the renderer work). vsce packs everything
+`.vscodeignore` does not name, matching with minimatch (`dot: true`, so a pattern without
+a slash covers the root only); `.gitignore` had `*.bundle` and `.vscodeignore` did not,
+and nothing named `*.html`. The two 0.2.0 builds installed locally had both files, and
+the published 0.1.6 (downloaded from open-vsx and listed on 2026-11-28) carries
+`extension/aidlc-viewer-main.bundle` (6.8 KB, that release's own transfer bundle) and the
+same report: 79 files, 152 KB of which are not the extension's. Both are inert, nothing
+loads them, and the bundle holds commits that are public on GitHub, so nothing leaked;
+they are still not the product. Fix: `*.bundle` and `*.html` in `.vscodeignore`.
+Rule: the two ignore files answer different questions (what is not source, what is not
+product) and a file kind added to one is checked against the other. Pin: changelog
+"nothing at the repository root ships in the vsix but the four files meant to", which
+reads the root as it is and applies vsce's rule, so a new kind of scratch file fails the
+suite before it is packaged.
+
 **The Trace Explorer reads names and answers from markdown, and on older runs most of them
 do not resolve.** The panel (0.2.0, #6, @CloudaYolla) is the one place in this extension
 that parses markdown content. Its graph is JSON (`traceability.json` per stage,
@@ -906,10 +979,38 @@ shows the IDs bare. Two projects still in Inception (v2-agent, v2-tableOrder) ha
 `traceability.json` yet and show an empty graph behind the banner, which is correct. So
 the panel degrades the way the design rules ask -- a warning per unresolved thing, never
 an invented one, `meta.omitted` naming what no record supports -- and the release note
-says names come from the documents. What is NOT done, and would be the next step if the
-panel is to serve old runs: teach the definition scanner the heading form, validated
-against those projects rather than a fixture, as the lesson about parsing AI-written
-markdown requires. Two more things from the merge. The stage-spec listing and the
+says names come from the documents. Then the scanner was taught the other shapes, with
+those six projects as the measure (2026-11-28). What the stage specs of that engine era
+actually fix, read from v2-probe2's own `.kiro/aidlc-common/stages/`: the IDs (`FR{n}`,
+`FR{n}.{m}`, `NFR{n}`), the MoSCoW words, a yaml block in rules.md and components.md, and
+`Unit ID` + `Directory` columns -- not the bullet's typography, the heading's separator or
+the other column names. So: definition bullets are read bold or plain (`- FR1.1 text`,
+`- NFR1 성능: text`), with a plain line taken only for an ID that has no label yet and
+never counted as "defined but untraced"; a `- FR1.1, FR1.2 → US1.1` line is a reference,
+not a definition; inside the bold a title may follow a dot (`- **FR1. 긴 URL 입력 및
+단축**`); `### FR1 지도 표시` and `### FR1. 계정 및 인증` headings define the group; story
+headings may lack the dash, put the priority first (`### US1.1 (Must) 관리자 계정 생성`) or
+use a colon, the reference shape tried first and unchanged; `(Q1)` citations count
+alongside `[Q1]`; rules.md without the yaml block the spec asks for is read from its
+`- BR1.1 text` bullets, and the warning says so; components.md's yaml catalogue gives a
+component its text and kind when the table is not headed `Component` (the label stays the
+id, as in the table path); a unit without a `Name` column is named by its spec-mandated
+directory less the `u{n}-` prefix; an NFR detail's text is the first cell after the ID
+that is not itself an ID (v2-probe puts the parent NFR second); and rules and NFR details
+are also looked for under `construction/` itself, the stage-major layout (v2-probe), not
+only under `construction/<unit>/`. Measured, old reader against new, same six projects:
+unlabeled nodes v2-probe2 73 -> 8, v2-probe 106 -> 5, v2-probe3 22 -> 9, v2-test 14 -> 2,
+word-book 2 -> 0, inventory-api 2 -> 2; `why` chains v2-probe2 0 -> 22 and v2-probe 0 -> 6;
+every graph identical in nodes and edges, no previously labelled node changed, warnings
+unchanged. What remains is by design or beyond a scanner: components are labelled by id
+(their text now carries the name), a code node whose id is a bare file name has nothing
+shorter to show, and v2-probe3 wrote method signatures as component targets and no
+`Unit ID` table (its own review said so). Pins: trace-data "requirements: plain bullets
+and headings define an ID the bold form did not", "a bold definition still wins over a
+plain mention", "stories: headings without the dash", "rules: bullets stand in for the
+yaml block", "stage-major runs keep rules and NFR details under construction/ itself",
+"components: the yaml catalogue gives text and kind", every snippet pasted from a real
+run. Two more things from the merge. The stage-spec listing and the
 watcher's trace-input test hardcoded `.kiro/`, written before #7 landed; both now go
 through harness-dirs.js (pins: trace-data "stage specs are listed from the project's
 harness directory", trace-explorer-wiring "isTraceInputPath: aidlc/ and the harness

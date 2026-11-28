@@ -474,6 +474,67 @@ test('main.js: warnings show in the banner, escaped', () => {
   assert.doesNotMatch(banner.innerHTML, /<img/);
 });
 
+test('main.js: a long warning list folds to its count and two lines, unfolds on the button, and stays as left across a refresh', () => {
+  // The banner sits above the tabs. On v2-probe3 the reader has 78 warnings, one per
+  // coverage target it had to show as a note, and the list pushed every tab below the fold.
+  const base = fixture();
+  const longPath = 'aidlc/spaces/default/intents/260821-lms-exploratory-build/construction/nfr-requirements/traceability.json';
+  const warnings = [
+    `${longPath}: NFR3 is OK but "NFR3.1, OBS.1" does not name nfr_detail ids; shown as a note`,
+    `${longPath}: NFR5 is OK but "tech-stack-decisions.md (node:test)" does not name nfr_detail ids; shown as a note`,
+    'no traceability.json found under the intent; the graph is empty',
+    `${longPath}: fourth`,
+    `${longPath}: fifth`
+  ];
+  const w = runMain();
+  w.send(setDataMsg({ ...base, meta: { ...base.meta, warnings } }));
+  const banner = w.document.getElementById('te-banner');
+  assert.match(banner.innerHTML, /5 warnings while reading the project/);
+  let list = banner.querySelector('[id="te-warnings"]');
+  assert.ok(list.classList.contains('collapsed'), 'folded by default');
+  assert.equal(list.querySelectorAll('li').length, 5, 'every warning is in the DOM; the stylesheet hides the third onward');
+  let button = banner.querySelector('[data-action="toggle-warnings"]');
+  assert.equal(button.getAttribute('aria-expanded'), 'false');
+  assert.equal(button.getAttribute('aria-controls'), 'te-warnings');
+  // Folded, the path is shortened to its tail so the one visible line is the message; the
+  // full path stays in the title. A warning without a path prefix is all message.
+  const items = list.querySelectorAll('li');
+  const firstPath = items[0].querySelector('.wpath');
+  assert.equal(firstPath.getAttribute('title'), longPath);
+  assert.match(banner.innerHTML, /…\/nfr-requirements\/traceability\.json:<\/span> <span class="wmsg">NFR3 is OK but/);
+  assert.equal(items[2].querySelector('.wpath'), null);
+  assert.match(banner.innerHTML, /<li><span class="wmsg">no traceability\.json found under the intent/);
+
+  // Unfold: the full paths, aria-expanded, the label, and the state is persisted.
+  w.click({ 'data-action': 'toggle-warnings' });
+  list = banner.querySelector('[id="te-warnings"]');
+  assert.ok(!list.classList.contains('collapsed'));
+  button = banner.querySelector('[data-action="toggle-warnings"]');
+  assert.equal(button.getAttribute('aria-expanded'), 'true');
+  assert.match(banner.innerHTML, /aria-controls="te-warnings">Show less</);
+  assert.match(banner.innerHTML, new RegExp(`<span class="wpath" title="${longPath}">${longPath}:</span>`));
+  assert.equal(w.getState().warningsOpen, true);
+
+  // A refresh with the same warnings keeps it unfolded.
+  w.send(setDataMsg({ ...base, meta: { ...base.meta, warnings } }, 2, 'file-change'));
+  assert.ok(!banner.querySelector('[id="te-warnings"]').classList.contains('collapsed'));
+
+  // Fold again.
+  w.click({ 'data-action': 'toggle-warnings' });
+  assert.ok(banner.querySelector('[id="te-warnings"]').classList.contains('collapsed'));
+  assert.equal(w.getState().warningsOpen, false);
+
+  // Two short warnings fit: shown whole, no button.
+  w.send(setDataMsg({ ...base, meta: { ...base.meta, warnings: ['short one', 'short two'] } }, 3, 'refresh'));
+  assert.equal(banner.querySelector('[data-action="toggle-warnings"]'), null);
+  assert.ok(!banner.querySelector('[id="te-warnings"]').classList.contains('collapsed'));
+
+  // The state restores from vscode.getState like the tab does.
+  const w2 = runMain({ savedState: { tab: 'trace', warningsOpen: true } });
+  w2.send(setDataMsg({ ...base, meta: { ...base.meta, warnings } }));
+  assert.ok(!w2.document.getElementById('te-banner').querySelector('[id="te-warnings"]').classList.contains('collapsed'));
+});
+
 test('main.js: restores tab and mode from vscode.getState, and arrow keys move between tabs', () => {
   const w = runMain({ savedState: { tab: 'about', selected: 'US1.1', covMode: 'br', query: 'x' }, renderers: { renderAbout: (d, i, s) => `about ${s.covMode} ${s.selected}` } });
   assert.equal(w.view('about').hidden, false);
