@@ -101,6 +101,7 @@ Names match the spec. **Bold** marks names that are new or changed in the port.
 | `.wrap` | Page container, max 1400px |
 | `.kicker`, `h1 .accent`, `.sub`, `.stamp`, `.dot` | Header. `.dot` is the amber snapshot dot |
 | **`.banner`**, **`.banner.warn`**, **`.banner.err`** | Host messages: loading, `meta.warnings[]`, errors |
+| `.bannerHead`, `.warnings` (+ `.collapsed`), `.wpath`, `.wmsg` | The warning list inside the banner: count and fold button on one row; folded, the first two warnings clipped to one line each (`li:nth-child(n+3)` hidden), the path dimmed and shortened to its tail |
 | `.tabs` > `.tab` (+ `.active` or **`[aria-selected="true"]`**) | Tab bar. Use `role="tablist"` and `role="tab"` |
 | `.view` (+ `.active`) | Tab panels; only `.active` is shown. `[hidden]` also works |
 

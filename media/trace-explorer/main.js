@@ -70,7 +70,10 @@
   }
 
   // ---- state ----
-  var state = { tab: 'trace', selected: null, covMode: 'fr', query: '' };
+  // warningsOpen: whether the banner's warning list is unfolded. It sits above every tab,
+  // so a long list (one line per file the reader could not read as expected) used to push
+  // the tabs below the fold; folded, it is the count and the first two lines.
+  var state = { tab: 'trace', selected: null, covMode: 'fr', query: '', warningsOpen: false };
   var data = null;
   var indexes = null;
   var nodeIds = null; // Set-like object of node ids in the current data
@@ -85,11 +88,12 @@
     if (cleanNodeId(saved.selected)) state.selected = saved.selected;
     if (COV_MODES.indexOf(saved.covMode) !== -1) state.covMode = saved.covMode;
     if (typeof saved.query === 'string') state.query = saved.query.slice(0, 200);
+    if (saved.warningsOpen === true) state.warningsOpen = true;
   })();
 
   function persist() {
     if (vscode && typeof vscode.setState === 'function') {
-      vscode.setState({ tab: state.tab, selected: state.selected, covMode: state.covMode, query: state.query });
+      vscode.setState({ tab: state.tab, selected: state.selected, covMode: state.covMode, query: state.query, warningsOpen: state.warningsOpen });
     }
   }
 
@@ -146,23 +150,73 @@
   }
 
   // ---- banner ----
+  // Folded, a warning list shows its first WARNINGS_PREVIEW lines, each on one line (the
+  // stylesheet clips them), behind a button that unfolds the whole list; a list that fits
+  // (two short lines or fewer) is shown whole with no button. The last list is kept so the
+  // button can redraw it, and so a refresh redraws it in the state the person left it.
+  var WARNINGS_PREVIEW = 2;
+  var WARNING_LINE_FITS = 110; // characters; longer than this wraps in the panel's width
+  var lastBanner = null;
+
+  // A warning is `<project-relative path>: <message>`; the path is dimmed and, folded,
+  // shortened to its last two segments so the message is what the one line shows. A warning
+  // with no such prefix is all message.
+  function warningParts(w) {
+    var m = /^(\S+\/\S+): (.+)$/.exec(w);
+    return m ? { path: m[1], message: m[2] } : { path: '', message: w };
+  }
+  function shortPath(p) {
+    var parts = p.split('/');
+    return parts.length > 2 ? '\u2026/' + parts.slice(-2).join('/') : p;
+  }
+
   function showBanner(kind, text, list) {
     var el = byId('te-banner');
     if (!el) return;
     if (!kind) {
+      lastBanner = null;
       el.hidden = true;
       el.innerHTML = '';
       return;
     }
+    lastBanner = { kind: kind, text: text, list: list };
     el.hidden = false;
     el.className = 'banner' + (kind === 'warn' ? ' warn' : kind === 'err' ? ' err' : '');
-    var html = esc(text);
-    if (list && list.length) {
-      var shown = list.slice(0, 20);
-      html += '<ul>' + shown.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>';
-      if (list.length > shown.length) html += '<div class="sev">and ' + (list.length - shown.length) + ' more</div>';
+    if (!list || !list.length) {
+      el.innerHTML = esc(text);
+      return;
     }
+    var foldable = list.length > WARNINGS_PREVIEW || list.some(function (w) { return String(w).length > WARNING_LINE_FITS; });
+    var open = !foldable || state.warningsOpen;
+    var html = '<div class="bannerHead"><span>' + esc(text) + '</span>';
+    if (foldable) {
+      html += '<button type="button" class="chipBtn" data-action="toggle-warnings" aria-expanded="' + (open ? 'true' : 'false') +
+        '" aria-controls="te-warnings">' + (open ? 'Show less' : 'Show all (' + list.length + ')') + '</button>';
+    }
+    html += '</div>';
+    var shown = list.slice(0, 20);
+    html += '<ul id="te-warnings" class="warnings' + (open ? '' : ' collapsed') + '">' + shown.map(function (w) {
+      var p = warningParts(String(w));
+      var path = p.path
+        ? '<span class="wpath" title="' + esc(p.path) + '">' + esc(open ? p.path : shortPath(p.path)) + ':</span> '
+        : '';
+      return '<li>' + path + '<span class="wmsg">' + esc(p.message) + '</span></li>';
+    }).join('') + '</ul>';
+    if (open && list.length > shown.length) html += '<div class="sev">and ' + (list.length - shown.length) + ' more</div>';
     el.innerHTML = html;
+  }
+
+  function toggleWarnings() {
+    state.warningsOpen = !state.warningsOpen;
+    persist();
+    if (!lastBanner) return;
+    var el = byId('te-banner');
+    var hadFocus = el && document.activeElement && el.contains(document.activeElement);
+    showBanner(lastBanner.kind, lastBanner.text, lastBanner.list);
+    if (hadFocus && el) {
+      var btn = el.querySelector('[data-action="toggle-warnings"]');
+      if (btn) btn.focus();
+    }
   }
 
   function updateHeader() {
@@ -541,6 +595,7 @@
       showBanner('info', 'Reading the project again…');
       return post({ type: TO_HOST.REFRESH });
     }
+    if (el.getAttribute('data-action') === 'toggle-warnings') return toggleWarnings();
   }
 
   function onClick(event) {
