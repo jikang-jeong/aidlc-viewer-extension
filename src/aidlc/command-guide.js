@@ -9,8 +9,9 @@
 //
 //   - The scope rows come from the project's own engine files: `scope-grid.json` for
 //     which stages each scope runs (counted the way `aidlc --help` counts, without the
-//     three Initialization stages) and `.kiro/scopes/aidlc-<name>.md` frontmatter for
-//     the description, depth, test strategy and defaults. So the table is the installed
+//     three Initialization stages) and `<harness dir>/scopes/aidlc-<name>.md` frontmatter
+//     (`.kiro/scopes/` on Kiro) for the description, depth, test strategy and defaults.
+//     So the table is the installed
 //     engine's, not this build's memory of it; a new or renamed scope appears without a
 //     release here. A project without those files shows no scope table rather than an
 //     old one.
@@ -23,6 +24,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { harnessDir } = require('./harness-dirs');
 
 const INITIALIZATION_PHASE = 'initialization';
 
@@ -64,10 +66,14 @@ function readScopeCatalogue(root, { readStageGraph, readScopeGrid } = require('.
   if (!graph || !grid) return [];
   const counted = graph.stages.filter((s) => s.phase !== INITIALIZATION_PHASE);
   const total = counted.length;
+  // The scope files sit beside the compiled data, under the same harness directory
+  // (`.kiro/scopes/` on Kiro, `.claude/scopes/` on Claude Code, ...), and the engine writes
+  // the same frontmatter into each (verified byte-identical on 2.11.3).
+  const scopesDir = path.join(root, harnessDir(root) ?? '.kiro', 'scopes');
   const rows = [];
   for (const [name, entry] of Object.entries(grid.scopes)) {
     const run = counted.filter((s) => entry.inScope.has(s.slug)).length;
-    const meta = readScopeFrontmatter(path.join(root, '.kiro', 'scopes', `aidlc-${name}.md`)) ?? {};
+    const meta = readScopeFrontmatter(path.join(scopesDir, `aidlc-${name}.md`)) ?? {};
     rows.push({
       name,
       run,

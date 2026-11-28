@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { GENERATION, detectGeneration } = require('./detect');
+const { harnessDataDir } = require('./harness-dirs');
 const { buildV2 } = require('./journey-v2');
 const { readKiroUsage } = require('./kiro-usage');
 const { diagnose } = require('./diagnose');
@@ -46,8 +47,15 @@ function mtimeOf(target) {
 // missed by mtime alone, which is why size is part of each entry -- the ledger is
 // append-only, so any new record changes it.
 function signature(root) {
-  const parts = [mtimeOf(path.join(root, '.kiro', 'tools', 'data', 'stage-graph.json'))];
-  parts.push(mtimeOf(path.join(root, '.kiro', 'tools', 'data', 'scope-grid.json')));
+  // The compiled data lives under the project's harness directory, whichever that is
+  // (harness-dirs.js). The directory itself is part of the stamp, not only the mtimes:
+  // when `.claude/tools/data/` appears beside a project that had no data, or `.kiro/`
+  // appears beside `.claude/` and takes precedence, the answer changes even if no mtime
+  // the previous stamp held does.
+  const data = harnessDataDir(root);
+  const dataDir = data ? path.join(root, ...data) : path.join(root, '.kiro', 'tools', 'data');
+  const parts = [dataDir, mtimeOf(path.join(dataDir, 'stage-graph.json'))];
+  parts.push(mtimeOf(path.join(dataDir, 'scope-grid.json')));
   const intentsRoot = path.join(root, 'aidlc', 'spaces');
   let spaces;
   try {

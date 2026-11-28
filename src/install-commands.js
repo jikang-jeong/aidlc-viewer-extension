@@ -45,6 +45,7 @@ const {
 const HARNESSES = { 'kiro-ide': 'kiro-ide', 'kiro-cli': 'kiro' };
 const { configureProject } = require('./aidlc/engine-config');
 const { readProject } = require('./aidlc/index');
+const { readHarnessRecord } = require('./aidlc/harness-dirs');
 const { kiroReadiness } = require('./aidlc/kiro-readiness');
 
 // Dialogs that carry a sentence carry it in English with a Korean line beneath. The
@@ -581,9 +582,22 @@ async function checkV2(folderUri) {
   // NO -- a Windows install this session, or a Mac whose shell profile lacks
   // ~/.local/bin -- and then /aidlc appears and nothing behind it runs.
   const resolvable = engineResolvable();
+  // The harness directory the viewer reads the project's data from, in the engine's own
+  // words (harness.json beside the stage graph). `.kiro` on a project this extension set
+  // up; `.claude`, `.codex`, `.cursor` or `.aidlc` on one configured for another tool from
+  // a terminal (issue #5), which the viewer follows but Kiro has no agent for.
+  const record = readHarnessRecord(root);
+  const otherHarness = Boolean(record) && record.dir !== '.kiro';
 
   lines.push(`Folder: ${root}`);
   lines.push(`Generation detected: ${state.ok ? state.generation : 'unreadable'}`);
+  lines.push(
+    `Harness directory read: ${
+      record
+        ? `${record.dir} (${[record.productName ?? record.distribution, record.version].filter(Boolean).join(' ') || 'unrecorded'})`
+        : 'none (no tools/data/stage-graph.json under any harness directory)'
+    }`
+  );
   lines.push(
     `.kiro/agents/aidlc*.{md,json}: ${hasAgent ? `present (${path.basename(agentFile)})` : 'MISSING'}`
   );
@@ -608,7 +622,18 @@ async function checkV2(folderUri) {
   }
   lines.push('');
 
-  if (!hasAgent) {
+  if (!hasAgent && otherHarness) {
+    // Not a gap to send someone to "Set up AI-DLC" over: that is refused on a project with
+    // any AI-DLC trace, and the project is set up -- for another tool. The viewer reads it
+    // all the same; only Kiro's own agent is absent, and adding a harness is the engine's
+    // job (`aidlc config`), not this extension's.
+    lines.push(
+      `This project is configured for ${record.productName ?? record.distribution ?? record.dir} ` +
+        `(${record.dir}/), so Kiro has no /aidlc agent here. The viewer reads its stages and ` +
+        'progress from that directory. To drive it from Kiro as well, run `aidlc config` in a ' +
+        'terminal and choose Kiro; the extension does not add or switch harnesses.'
+    );
+  } else if (!hasAgent) {
     lines.push(
       'The /aidlc agent comes from that file, so it cannot appear until v2 is ' +
         'installed here. Use "Set up AI-DLC" and pick v2.'
@@ -655,8 +680,9 @@ async function checkV2(folderUri) {
   // not.
   //
   // Read through the same reader the panel uses, so what is reported is what the
-  // extension actually acted on rather than a separate scan of its own.
-  if (hasAgent) {
+  // extension actually acted on rather than a separate scan of its own. A project
+  // configured for another tool is read the same way, so it is reported the same way.
+  if (hasAgent || otherHarness) {
     const unknown = unrecognisedVocabulary(root);
     if (unknown.length > 0) {
       lines.push('');

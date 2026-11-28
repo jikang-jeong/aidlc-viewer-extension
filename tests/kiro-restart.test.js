@@ -302,10 +302,47 @@ test('Check setup knows the 2.11.3 agent file and reports whether Kiro can run a
   fs.mkdirSync(path.join(root, '.kiro', 'agents'), { recursive: true });
   fs.writeFileSync(path.join(root, '.kiro', 'agents', 'aidlc-aidlc.md'), '---\nname: aidlc\n---\n');
   fs.mkdirSync(path.join(root, '.kiro', 'tools', 'data'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.kiro', 'tools', 'data', 'stage-graph.json'), '[]');
   const { api, shown } = loadSetup({ root, readiness: QUIT, onModal: () => undefined });
   await api.checkV2({ fsPath: root });
   const report = shown.modals.find((m) => /AI-DLC v2 (looks ready|is not ready)/.test(m.message));
   assert.ok(report);
   assert.match(report.options.detail, /aidlc\*\.\{md,json\}: present \(aidlc-aidlc\.md\)/);
   assert.match(report.options.detail, /Kiro can run `aidlc` from its PATH: yes/);
+  assert.match(report.options.detail, /Harness directory read: \.kiro \(/);
+});
+
+test('Check setup on a project configured for Claude Code names the harness and does not send it to Set up', async () => {
+  // Issue #5: the project has `.claude/tools/data/` and no `.kiro/`. The viewer reads it;
+  // Kiro has no /aidlc agent for it; and "Set up AI-DLC" is refused on a project with any
+  // AI-DLC trace, so pointing there is a dead end. The harness is named in the engine's own
+  // words (harness.json, aidlc-stamp.json), and adding Kiro is left to `aidlc config`.
+  const root = freshRoot();
+  fs.mkdirSync(path.join(root, '.claude', 'tools', 'data'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.claude', 'tools', 'data', 'stage-graph.json'), '[]');
+  fs.writeFileSync(
+    path.join(root, '.claude', 'tools', 'data', 'harness.json'),
+    JSON.stringify({ schemaVersion: 1, distribution: 'claude', productName: 'Claude Code', name: 'claude', harnessDir: '.claude' })
+  );
+  fs.writeFileSync(
+    path.join(root, '.claude', 'tools', 'data', 'aidlc-stamp.json'),
+    JSON.stringify({ schemaVersion: 1, frameworkVersion: '2.11.3', distribution: 'claude', harnessDir: '.claude' })
+  );
+  const { api, shown } = loadSetup({ root, readiness: QUIT, onModal: () => undefined });
+  await api.checkV2({ fsPath: root });
+  const report = shown.modals.find((m) => /AI-DLC v2 (looks ready|is not ready)/.test(m.message));
+  assert.ok(report);
+  assert.match(report.options.detail, /Harness directory read: \.claude \(Claude Code 2\.11\.3\)/);
+  assert.match(report.options.detail, /aidlc\*\.\{md,json\}: MISSING/);
+  assert.match(report.options.detail, /configured for Claude Code \(\.claude\/\), so Kiro has no \/aidlc agent here/);
+  assert.match(report.options.detail, /run `aidlc config` in a terminal and choose Kiro/);
+  assert.doesNotMatch(report.options.detail, /Use "Set up AI-DLC" and pick v2/);
+
+  // No harness directory at all: said so, and the old advice stands.
+  const empty = freshRoot();
+  const second = loadSetup({ root: empty, readiness: QUIT, onModal: () => undefined });
+  await second.api.checkV2({ fsPath: empty });
+  const bare = second.shown.modals.find((m) => /AI-DLC v2 (looks ready|is not ready)/.test(m.message));
+  assert.match(bare.options.detail, /Harness directory read: none/);
+  assert.match(bare.options.detail, /Use "Set up AI-DLC" and pick v2/);
 });

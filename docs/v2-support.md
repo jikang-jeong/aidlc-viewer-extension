@@ -46,8 +46,10 @@ event count, or a path that exists.
 | Question | Source |
 |---|---|
 | v1, v2, both, or neither | path existence (`src/aidlc/detect.js`) |
-| stage list, order, phases, per-stage contract | `.kiro/tools/data/stage-graph.json` |
-| which stages this scope runs | `.kiro/tools/data/scope-grid.json`, overridden per intent by the state file's checklist suffixes (`- [ ] slug — EXECUTE\|SKIP`), the channel the engine's own `effectivePlanAction` reads first |
+| which harness directory holds the compiled data | the first of `.kiro`, `.claude`, `.codex`, `.cursor`, `.aidlc` with `tools/data/stage-graph.json` (`src/aidlc/harness-dirs.js`); `harness.json` and `aidlc-stamp.json` beside it say which tool and version |
+| stage list, order, phases, per-stage contract | `<harness dir>/tools/data/stage-graph.json` |
+| which stages this scope runs | `<harness dir>/tools/data/scope-grid.json`, overridden per intent by the state file's checklist suffixes (`- [ ] slug — EXECUTE\|SKIP`), the channel the engine's own `effectivePlanAction` reads first |
+| which directories under `intents/` are intents | the ones holding `aidlc-state.md`, the engine's own test (`listIntentDirs`); `intents/audit/` is the space-level audit shard |
 | what actually ran | `runtime-graph.json`, `outcome` field; for a stage it has no record of, the audit ledger's `STAGE_*` events (checkpoint `source: 'ledger'`) |
 | which scope ran | `runtime-graph.json` `scope`; without it, the intent manifest's |
 | units of work and their dependencies | `runtime-graph.json`, `bolt_dag` |
@@ -802,6 +804,84 @@ and the first thing to read when a job fails is its own log. Pins: ci-contract "
 script is bare node --test", "only tests/*.test.js matches the default patterns", "the
 verify job checks out the full history"; the behaviour is pinned by the matrix itself,
 since only a real Node 20 and Node 22 can show the two failures.
+
+**The compiled data is read from the project's harness directory, not from `.kiro/`.**
+Issue #5 (2026-11-24), from a person following an AI-DLC 2.11.3 run with the Claude Code
+and Codex CLI harnesses in VS Code: a repo with no `.kiro/` at all, detected as v2 by
+`aidlc/spaces`, then `{ ok: false, reason: 'stage-graph-unreadable' }`. The engine writes
+the same compiled data under the directory of the harness it was asked for, and this
+extension had read `.kiro/tools/data/` only, in three places (graph.js, the cache
+signature in index.js, the marker list in detect.js), plus the scope files for the Start
+page guide (`.kiro/scopes/`), the watcher's dot-directory allowance and Check setup's
+advice. Reproduced on 2.11.3 with `aidlc config --harness claude --yes` then `--harness
+codex --yes`. What the engine's own runtime tree says (`runtime/<harness>/`): kiro and
+kiro-ide write `.kiro`, claude `.claude`, codex `.codex`, cursor `.cursor`, copilot and
+opencode `.aidlc`; five directories for seven distributions. Measured on that project: the
+stage graph differs between harness directories in exactly one field,
+`sensors_applicable[].path`, which names the directory itself and which nothing here
+reads; `scope-grid.json` and the scope files are byte-identical. So `harness-dirs.js` is
+the one place that knows the five names and resolves the directory as "the first that
+holds `tools/data/stage-graph.json`", `.kiro` first so a project this extension set up
+reads exactly what it read before, and every reader goes through it: graph.js, detect.js
+(one data marker per directory), index.js (the resolved directory is part of the cache
+stamp, so `.claude/` appearing, or `.kiro/` appearing beside it, is a miss even when no
+remembered mtime moved), command-guide.js (`<dir>/scopes/`), the watcher's
+`WATCHED_DOT_DIRS`, the Start page's "What was set up" line and Check setup, which now
+names the directory and the tool from the engine's `harness.json`/`aidlc-stamp.json` and
+no longer sends a Claude Code project to "Set up AI-DLC" (refused on any AI-DLC trace; the
+project IS set up, for another tool, and adding Kiro is `aidlc config`'s job). Not done:
+removal stays with `.kiro` (the only harness this extension installs; a Claude or Codex
+install is removed with the tool that made it), and the Start page still says `/aidlc`
+where Codex CLI types `$aidlc`, because the engine records no entry token in
+`harness.json` to read it from. The fixed order is a preference, not a search for the
+newest: a project with several harnesses was configured by the same engine for each, and
+if one is refreshed and another not, Check setup shows which one is read. Checked against
+2.11.5, the latest release on 2026-11-28, installed in isolation: all eight harness ids
+(`kiro`, `kiro-ide`, `kiro-v2`, `claude`, `codex`, `cursor`, `copilot`, `opencode`) write
+the same five directories, every one reads as 33 stages and 11 scopes with the scope rows
+filled, `sensors_applicable` is still the only differing field, and `harness.json` names
+the tool (`kiro-v2` records distribution `kiro`, product "Kiro CLI"). Cross-checked
+against the 31 real projects on the development machine, old reader against new: 30 read
+identically (10 v1, 7 `.kiro` v2 with the same positions, counts and gaps, 13 with no
+AI-DLC), and the one that changed is `aidlc-codex`, a Codex-harness project from 2.8.0
+that went from `stage-graph-unreadable` to 33 stages -- so the layout predates 2.11 and
+the issue had been reproducible here all along. Setup is still not offered on such a
+project (any trace refuses it), and Remove still refuses without a receipt, which a
+`.claude`/`.codex` project never has. The cache stamp costs five more stats: 0.44 to 0.50
+ms per cached read on the word-book sample. Pins:
+harness-dirs.test.js (the five directories; resolution and the `.kiro` tie; detection by
+`.codex/` alone with the v1 `.aidlc/aidlc-rules` layout kept distinct; the readers on a
+`.claude`-only project; the cache noticing the directory appear and change; the scope rows
+from `.claude/scopes/`; the Start page line), kiro-restart "Check setup on a project
+configured for Claude Code", v1-isolation "v2's evidence lives in dot-directories" (the
+other four directories' events refresh).
+
+**`intents/audit/` is the space-level audit shard, not an intent; an intent is a directory
+that holds `aidlc-state.md`.** The second half of issue #5. The engine files space-wide
+events (the knowledge base's `DOCUMENT_INDEXED`, its audit-format.md: "all three events
+land in the space-level audit shard") under
+`aidlc/spaces/<space>/intents/audit/<host>-<clone>.md`, beside the intent records.
+`isBookkeeping()` skipped dot-names only, so with
+no `intents.json` the space listed an intent called `audit` with every stage pending, and
+with one it reported `audit` as on disk but missing from the manifest. Reproduced on 2.11.3
+with one `aidlc engine knowledge onboard`; none of the five regress samples had the
+shard, which is why it was never seen here. The fix is the engine's own rule, not a name:
+`listIntentDirs` in its aidlc-locks.ts reads "A record dir holds aidlc-state.md; skip the
+active-intent cursor, intents.json, and any stray files", and `isIntentRecord` says the
+same, for the directory walk and for the manifest cross-check alike. Every real intent
+record seen (five samples, the live word-book, the engine's own init) holds the file, and
+2.11.5's `listIntentDirs` reads the same line; on 2.11.5 one `knowledge onboard` produced
+the same shard, which the old reader listed as the intent `audit` and the new one does not.
+Judged by what the directory holds, the next space-level folder upstream puts under
+`intents/` is excluded without a release, which a denylist entry for `audit` would have
+needed; and a manifest entry whose directory has lost its state file is now reported as
+missing on disk, which is what the engine would say too. The fixtures that modelled an
+intent as runtime-graph.json alone now write the state file, as the engine does; the test
+that read "no state file" as a case is renamed, because a record without one is not a
+case this reader meets. Pins: harness-dirs.test.js ("an intent record is a directory that
+holds aidlc-state.md", the directory walk and the manifest cases, with the shard content
+pasted from the engine), v2-robustness "a record absent from the manifest is reported, not
+hidden; a bare directory is neither".
 
 ## Units of work
 

@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { HARNESS_DIRS, DATA_DIR, STAGE_GRAPH_FILE } = require('./harness-dirs');
 
 const GENERATION = {
   V1: 'v1',
@@ -35,8 +36,11 @@ const MARKERS = {
     ['.kiro', 'agents', 'aidlc.json'],
     ['.kiro', 'aidlc-common'],
     // The compiled data the reader depends on. Present in every v2 install regardless of
-    // harness, which makes it the marker least likely to move.
-    ['.kiro', 'tools', 'data', 'stage-graph.json']
+    // harness, which makes it the marker least likely to move -- but it sits under the
+    // directory of the harness the project was configured for, so it is listed once per
+    // harness directory the engine can write (issue #5: a Claude Code project has it under
+    // `.claude/`, and no `.kiro/` at all).
+    ...HARNESS_DIRS.map((dir) => [dir, ...DATA_DIR, STAGE_GRAPH_FILE])
   ],
   [GENERATION.V1]: [
     ['aidlc-docs'],
