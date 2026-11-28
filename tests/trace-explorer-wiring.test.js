@@ -208,7 +208,7 @@ test('the tree has a Trace Explorer row on v2, right after Usage, running the co
   assert.equal(items[at].iconPath.id, 'type-hierarchy');
 });
 
-test('isTraceInputPath: aidlc/ and .kiro/ only, never node_modules or .git', () => {
+test('isTraceInputPath: aidlc/ and the harness directories only, never node_modules or .git', () => {
   const { isTraceInputPath } = load();
   const root = uri('/p');
   const is = (rel) => isTraceInputPath(root, uri(path.join('/p', rel)));
@@ -216,6 +216,12 @@ test('isTraceInputPath: aidlc/ and .kiro/ only, never node_modules or .git', () 
   assert.ok(is('aidlc/spaces/x/intents/i/.aidlc-engine/reviews/r.json'));
   assert.ok(is('aidlc/spaces/x/intents/i/runtime-graph.json'));
   assert.ok(is('.kiro/aidlc-common/stages/inception/a.md'));
+  // The stage specs of a project configured for another tool (issue #5) live under its
+  // own harness directory; a refresh there has to reach the panel like one under .kiro/.
+  assert.ok(is('.claude/aidlc-common/stages/inception/a.md'));
+  assert.ok(is('.codex/aidlc-common/stages/construction/b.md'));
+  assert.ok(is('.aidlc/aidlc-common/stages/inception/a.md'));
+  assert.ok(!is('.vscode/settings.json'));
   assert.ok(!is('src/index.ts'));
   assert.ok(!is('aidlc/node_modules/x.json'));
   assert.ok(!is('aidlc/.git/HEAD'));

@@ -11,8 +11,8 @@
 //     (one per traceability-bearing stage, same shape everywhere: `stage`,
 //     optional `unit`, `upstream_ids`, `coverage[{id,status,target}]`,
 //     optional `reverse`). What a `target` means differs by stage; the table in
-//     STAGE_RULES encodes what each stage spec under
-//     `.kiro/aidlc-common/stages/` says its targets are.
+//     STAGE_RULES encodes what each stage spec under the harness directory's
+//     `aidlc-common/stages/` (`.kiro/` on Kiro) says its targets are.
 //   - two convention rules add edges the files imply but do not write down:
 //     ACx.y.z belongs to USx.y, and x.ts is tested by x.test.ts.
 //   - labels and text come from the markdown each ID is defined in; verdicts
@@ -34,6 +34,7 @@ const fs = require('fs');
 const path = require('path');
 const { listSpaces, listIntents, isBookkeeping } = require('./runtime');
 const { field, listShardPaths } = require('./audit');
+const { harnessDir } = require('./harness-dirs');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -422,9 +423,11 @@ function addEdge(ctx, edge) {
   ctx.edges.push(edge);
 }
 
-// Known stage slugs: the project's stage specs plus the intent's runtime graph.
+// Known stage slugs: the project's stage specs plus the intent's runtime graph. The specs
+// sit under the harness directory (`.kiro/aidlc-common/stages/` on Kiro, `.claude/...` on
+// Claude Code; see harness-dirs.js), the same directory the stage graph is read from.
 function collectStageSlugs(ctx) {
-  const stagesDir = path.join(ctx.root, '.kiro', 'aidlc-common', 'stages');
+  const stagesDir = path.join(ctx.root, harnessDir(ctx.root) ?? '.kiro', 'aidlc-common', 'stages');
   // Only file NAMES are used here, so this is a directory listing, not a file read:
   // it goes into meta.listedDirs rather than meta.sources.
   const phases = listEntries(stagesDir);

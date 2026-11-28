@@ -2,7 +2,7 @@
 
 The same notes as the README's What's New section, kept identical by a test
 (tests/changelog.test.js). Edit both, or the suite fails. Newest first.
- 
+
 ## 0.2.0
 
 - **Trace Explorer (v2): follow every requirement to the code and tests that answer it.**
@@ -13,28 +13,30 @@ The same notes as the README's What's New section, kept identical by a test
   **Coverage** is the traceability matrix: which requirements reach code and tests, and
   which stop short. **Reviews & rework** lists every review verdict the engine recorded, in
   order, the open findings at approval, and, when the engine jumped back for rework, which
-  files it invalidated. **About** says where the data was read from and
-  what was left out because no record supports it. Everything is read from the engine's
-  own files (`traceability.json`, `runtime-graph.json`, its review records) and nothing is
-  guessed; the source paths it shows open in the editor. The panel follows the project
-  as the engine writes, and never writes anything itself.
- 
-## 0.1.7
-
+  files it invalidated. **About** says where the data was read from and what was left out
+  because no record supports it. The graph comes from the engine's own files
+  (`traceability.json`, `runtime-graph.json`, its review records). Two links the files imply
+  but do not write (an acceptance criterion belongs to its story; `x.ts` is tested by
+  `x.test.ts`) are marked as derived, and names and answers are read from the stage
+  documents each ID is defined in, so an ID whose document this build does not recognise
+  shows as the ID. The source paths it shows open in the editor. The panel follows the
+  project as the engine writes, and never writes anything itself. Contributed by
+  @CloudaYolla.
 - **Projects set up for Claude Code, Codex CLI, Cursor, Copilot or opencode are read too.**
   The engine writes the same compiled data under the directory of the harness you chose
   (`.claude/`, `.codex/`, `.cursor/`, `.aidlc/`), and the viewer looked under `.kiro/` only, so a
   project with no `.kiro/` was detected as v2 and then showed nothing. It now reads whichever
   harness directory the project has, `.kiro/` first when there are several; the Start page's
-  scope table, the file watcher and **Check setup** follow it, and Check setup names the tool the
-  project is configured for instead of sending it to Set up. Setting up and removing AI-DLC from
-  the extension stays a Kiro matter. Reported in [issue #5](https://github.com/jikang-jeong/aidlc-viewer-extension/issues/5),
-  with a patch and the measurements that made this a one-line question. Thank you, @mageshwaranr.
+  scope table, the file watcher, the Trace Explorer and **Check setup** follow it, and Check
+  setup names the tool the project is configured for instead of sending it to Set up. Setting
+  up and removing AI-DLC from the extension stays a Kiro matter. Reported in
+  [issue #5](https://github.com/jikang-jeong/aidlc-viewer-extension/issues/5), with a patch
+  and the measurements that made this a one-line question. Thank you, @mageshwaranr.
 - **No more phantom `audit` intent.** The engine keeps a space-level audit folder at
   `aidlc/spaces/<space>/intents/audit/`, which the viewer listed as an intent with every stage
   pending, or reported as missing from the manifest. An intent is now what the engine says it
   is: a directory under `intents/` that holds `aidlc-state.md`. Also from issue #5.
- 
+
 
 ## 0.1.6
 

@@ -347,6 +347,31 @@ test('hostile inputs never throw and are reported', () => {
   assert.deepStrictEqual(d.meta.stageOrder, ['b', 'a']);
 });
 
+test('stage specs are listed from the project\'s harness directory, not from .kiro alone', () => {
+  // Issue #5: a project configured for Claude Code keeps everything the engine wrote under
+  // .claude/, stage specs included. The listing follows the same resolution as the stage
+  // graph (harness-dirs.js), and falls back to .kiro when no harness directory is found.
+  const claude = makeProject({
+    '/.claude/tools/data/stage-graph.json': [],
+    '/.claude/aidlc-common/stages/inception/intent-capture.md': '# Intent Capture\n',
+    'inception/intent-capture/traceability.json': { stage: 'intent-capture', coverage: [] }
+  });
+  const d = readTraceData(claude);
+  assert.deepStrictEqual(d.meta.listedDirs, ['.claude/aidlc-common/stages/']);
+  assert.ok(!d.meta.sources.some((s) => s.startsWith('.claude/')), 'stage specs are listed, not read');
+
+  const kiroToo = makeProject({
+    '/.kiro/tools/data/stage-graph.json': [],
+    '/.kiro/aidlc-common/stages/inception/intent-capture.md': '# Intent Capture\n',
+    '/.claude/tools/data/stage-graph.json': [],
+    '/.claude/aidlc-common/stages/inception/intent-capture.md': '# Intent Capture\n'
+  });
+  assert.deepStrictEqual(readTraceData(kiroToo).meta.listedDirs, ['.kiro/aidlc-common/stages/'], '.kiro first when both exist');
+
+  const bare = makeProject({ '/.kiro/aidlc-common/stages/inception/intent-capture.md': '# Intent Capture\n' });
+  assert.deepStrictEqual(readTraceData(bare).meta.listedDirs, ['.kiro/aidlc-common/stages/'], 'no stage graph anywhere: .kiro as before');
+});
+
 test('GAP rows, upstream-only IDs, deferrals and N/A notes', () => {
   const root = makeProject({
     'inception/user-stories/traceability.json': {

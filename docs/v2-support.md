@@ -40,8 +40,10 @@ reached a screen.
 
 ## Where the data comes from
 
-Zero markdown is parsed. Every number the extension shows is a JSON field, an
-event count, or a path that exists.
+Zero markdown is parsed for the tree, the strip, the Start page and the supervision
+panel. Every number they show is a JSON field, an event count, or a path that exists. The
+Trace Explorer (0.2.0) is the one deliberate exception, and the pitfall entry "The Trace
+Explorer reads names and answers from markdown" says what that costs and where.
 
 | Question | Source |
 |---|---|
@@ -803,7 +805,9 @@ standing one about samples, pointed at CI: a gate that has never been green is n
 and the first thing to read when a job fails is its own log. Pins: ci-contract "the test
 script is bare node --test", "only tests/*.test.js matches the default patterns", "the
 verify job checks out the full history"; the behaviour is pinned by the matrix itself,
-since only a real Node 20 and Node 22 can show the two failures.
+since only a real Node 20 and Node 22 can show the two failures. (Bare `node --test` lasted
+until 0.2.0's fixture; see the Trace Explorer entry below for why `npm test` is now
+`tools/run-tests.js`.)
 
 **The compiled data is read from the project's harness directory, not from `.kiro/`.**
 Issue #5 (2026-11-24), from a person following an AI-DLC 2.11.3 run with the Claude Code
@@ -882,7 +886,40 @@ case this reader meets. The Trace Explorer (#6), written in parallel, modelled i
 synthetic intents the same way: each PR was green on its own and main went red where they
 met (CI run 9 on 6af04c7, two trace-data tests reading "no intents found"), so its
 `makeProject` writes the file too. The rule for every fixture from here: a directory that
-stands for an intent carries `aidlc-state.md`, or it is not an intent. Pins: harness-dirs.test.js ("an intent record is a directory that
+stands for an intent carries `aidlc-state.md`, or it is not an intent.
+
+**The Trace Explorer reads names and answers from markdown, and on older runs most of them
+do not resolve.** The panel (0.2.0, #6, @CloudaYolla) is the one place in this extension
+that parses markdown content. Its graph is JSON (`traceability.json` per stage,
+`runtime-graph.json`, the engine's review records, the ledger's `STAGE_JUMPED` row) and
+holds up; but a node's name and text come from the document its ID is defined in, the
+`why` chain from `[Qn]` citations and `[Answer]:` blocks, verdicts from `test-results.md`,
+and reviews from `## Review` sections where no JSON exists. Measured on 2026-11-28 with
+the reader as merged, against the real projects on the development machine (never throws;
+1–134 ms per read): the contributor's fixture `inventory-api` resolves 214 of 216 names
+and the live word-book (2.11.3) 65 of 67; the August runs resolve far fewer -- v2-probe
+29 of 135, v2-probe2 41 of 114, v2-test 0 of 14 -- and v2-probe3 turns 78 coverage
+targets into "note" nodes with a warning each. The difference is the markdown the engine
+wrote at the time: word-book defines a requirement as `- **FR1** text`, which the scanner
+knows; v2-probe writes `### FR1. 제목` and `- FR1.1 text`, which it does not, so the panel
+shows the IDs bare. Two projects still in Inception (v2-agent, v2-tableOrder) have no
+`traceability.json` yet and show an empty graph behind the banner, which is correct. So
+the panel degrades the way the design rules ask -- a warning per unresolved thing, never
+an invented one, `meta.omitted` naming what no record supports -- and the release note
+says names come from the documents. What is NOT done, and would be the next step if the
+panel is to serve old runs: teach the definition scanner the heading form, validated
+against those projects rather than a fixture, as the lesson about parsing AI-written
+markdown requires. Two more things from the merge. The stage-spec listing and the
+watcher's trace-input test hardcoded `.kiro/`, written before #7 landed; both now go
+through harness-dirs.js (pins: trace-data "stage specs are listed from the project's
+harness directory", trace-explorer-wiring "isTraceInputPath: aidlc/ and the harness
+directories only"). And `npm test` is `tools/run-tests.js`: the fixture is a trimmed real
+project with 23 `*.test.ts` files, which bare `node --test` runs as tests on Node 22.18+
+(type stripping on by default) and not on Node 20 -- "702 tests" there, "679" here, and
+a fixture that gains an enum fails CI on one version only. The runner hands node the
+explicit list of `tests/*.test.js`, the one form every Node and shell reads alike (pins:
+ci-contract "the test script is the explicit runner", "the runner lists exactly
+tests/*.test.js"). Pins: harness-dirs.test.js ("an intent record is a directory that
 holds aidlc-state.md", the directory walk and the manifest cases, with the shard content
 pasted from the engine), v2-robustness "a record absent from the manifest is reported, not
 hidden; a bare directory is neither".

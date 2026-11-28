@@ -33,9 +33,10 @@ jobs:
       # node:test. Nothing to install, so nothing to cache.
       - name: Syntax check extension entry point
         run: npm run check
-      # `npm test` is bare `node --test`: Node 20 does not expand a quoted glob
-      # ("Could not find 'tests/*.test.js'") and Node 22 runs a directory argument
-      # as a module. Both find tests/*.test.js by the runner's default patterns.
+      # `npm test` runs tools/run-tests.js, which hands node --test the explicit list of
+      # tests/*.test.js. Every shorter form failed on one of these two Node versions
+      # (quoted glob: Node 20; directory: Node 22; default patterns: Node 22 also runs
+      # the Trace Explorer fixture's *.test.ts files). The script says which and why.
       - name: Run tests
         run: npm test
 
