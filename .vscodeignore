@@ -13,3 +13,6 @@ node_modules/**
 docs/**
 .kiro/**
 media/merged.gif
+# Scratch the repository root collects; matched at the root only (minimatch, no slash).
+*.bundle
+*.html

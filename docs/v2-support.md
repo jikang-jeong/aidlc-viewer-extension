@@ -942,6 +942,25 @@ texts") and "the Mermaid bundle keeps its own licence comments" (the block exist
 at the end, names DOMPurify 3.4.17's dual licence, regenerator-runtime, lodash and
 cytoscape; ELK's package names are in the file).
 
+**The 0.2.0 vsix carried the git bundle made for the desktop and a scratch HTML report,
+1.9 MB of 4.9.** Seen in `unzip -l` while checking that the corrected notices were in
+the package: `extension/aidlc-viewer-post-merge.bundle` (1.7 MB, the transfer bundle this
+machine makes because it cannot push) and `extension/renderer-comparison-report.html`
+(145 KB, left at the root on 2026-11-11 by the renderer work). vsce packs everything
+`.vscodeignore` does not name, matching with minimatch (`dot: true`, so a pattern without
+a slash covers the root only); `.gitignore` had `*.bundle` and `.vscodeignore` did not,
+and nothing named `*.html`. The two 0.2.0 builds installed locally had both files, and
+the published 0.1.6 (downloaded from open-vsx and listed on 2026-11-28) carries
+`extension/aidlc-viewer-main.bundle` (6.8 KB, that release's own transfer bundle) and the
+same report: 79 files, 152 KB of which are not the extension's. Both are inert, nothing
+loads them, and the bundle holds commits that are public on GitHub, so nothing leaked;
+they are still not the product. Fix: `*.bundle` and `*.html` in `.vscodeignore`.
+Rule: the two ignore files answer different questions (what is not source, what is not
+product) and a file kind added to one is checked against the other. Pin: changelog
+"nothing at the repository root ships in the vsix but the four files meant to", which
+reads the root as it is and applies vsce's rule, so a new kind of scratch file fails the
+suite before it is packaged.
+
 **The Trace Explorer reads names and answers from markdown, and on older runs most of them
 do not resolve.** The panel (0.2.0, #6, @CloudaYolla) is the one place in this extension
 that parses markdown content. Its graph is JSON (`traceability.json` per stage,

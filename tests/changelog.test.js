@@ -82,6 +82,30 @@ test('CHANGELOG.md is not excluded from the vsix', () => {
   assert.ok(!/^CHANGELOG/m.test(ignore), 'CHANGELOG.md must ship');
 });
 
+test('nothing at the repository root ships in the vsix but the four files meant to', () => {
+  // vsce packs everything .vscodeignore does not name. It matches with minimatch
+  // ({dot: true}), so a pattern without a slash covers root files only, and the root is
+  // where scratch lands: the first 0.2.0 build carried the 1.7 MB git bundle made for the
+  // desktop transfer and a 145 KB HTML report, 1.9 MB of a 4.9 MB package, because
+  // .gitignore knew about bundles and .vscodeignore did not. This reads the root as it
+  // is now and applies the same rule: a file is one of the four that ship, or a pattern
+  // drops it. A new kind of scratch file fails here before it is packaged.
+  const ships = new Set(['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE']);
+  const vsceDefaults = ['.vscodeignore', '.DS_Store', '*.vsix', 'package-lock.json'];
+  const patterns = fs.readFileSync(path.join(ROOT, '.vscodeignore'), 'utf8')
+    .split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))
+    .concat(vsceDefaults);
+  for (const required of ['*.bundle', '*.html']) {
+    assert.ok(patterns.includes(required), `.vscodeignore names ${required}`);
+  }
+  const rootOnly = (p) => !p.includes('/') && new RegExp('^' + p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$');
+  const dropped = (name) => patterns.some((p) => { const re = rootOnly(p); return re && re.test(name); });
+  const stray = fs.readdirSync(ROOT)
+    .filter((n) => fs.statSync(path.join(ROOT, n)).isFile())
+    .filter((n) => !ships.has(n) && !dropped(n));
+  assert.deepEqual(stray, [], `root files that would be packaged: ${stray.join(', ')}`);
+});
+
 test('configurationDefaults has no bracketed (language-override) key -- issue #3', () => {
   const defaults = pkg.contributes.configurationDefaults ?? {};
   const bracketed = Object.keys(defaults).filter((k) => k.startsWith('['));
