@@ -906,10 +906,38 @@ shows the IDs bare. Two projects still in Inception (v2-agent, v2-tableOrder) ha
 `traceability.json` yet and show an empty graph behind the banner, which is correct. So
 the panel degrades the way the design rules ask -- a warning per unresolved thing, never
 an invented one, `meta.omitted` naming what no record supports -- and the release note
-says names come from the documents. What is NOT done, and would be the next step if the
-panel is to serve old runs: teach the definition scanner the heading form, validated
-against those projects rather than a fixture, as the lesson about parsing AI-written
-markdown requires. Two more things from the merge. The stage-spec listing and the
+says names come from the documents. Then the scanner was taught the other shapes, with
+those six projects as the measure (2026-11-28). What the stage specs of that engine era
+actually fix, read from v2-probe2's own `.kiro/aidlc-common/stages/`: the IDs (`FR{n}`,
+`FR{n}.{m}`, `NFR{n}`), the MoSCoW words, a yaml block in rules.md and components.md, and
+`Unit ID` + `Directory` columns -- not the bullet's typography, the heading's separator or
+the other column names. So: definition bullets are read bold or plain (`- FR1.1 text`,
+`- NFR1 성능: text`), with a plain line taken only for an ID that has no label yet and
+never counted as "defined but untraced"; a `- FR1.1, FR1.2 → US1.1` line is a reference,
+not a definition; inside the bold a title may follow a dot (`- **FR1. 긴 URL 입력 및
+단축**`); `### FR1 지도 표시` and `### FR1. 계정 및 인증` headings define the group; story
+headings may lack the dash, put the priority first (`### US1.1 (Must) 관리자 계정 생성`) or
+use a colon, the reference shape tried first and unchanged; `(Q1)` citations count
+alongside `[Q1]`; rules.md without the yaml block the spec asks for is read from its
+`- BR1.1 text` bullets, and the warning says so; components.md's yaml catalogue gives a
+component its text and kind when the table is not headed `Component` (the label stays the
+id, as in the table path); a unit without a `Name` column is named by its spec-mandated
+directory less the `u{n}-` prefix; an NFR detail's text is the first cell after the ID
+that is not itself an ID (v2-probe puts the parent NFR second); and rules and NFR details
+are also looked for under `construction/` itself, the stage-major layout (v2-probe), not
+only under `construction/<unit>/`. Measured, old reader against new, same six projects:
+unlabeled nodes v2-probe2 73 -> 8, v2-probe 106 -> 5, v2-probe3 22 -> 9, v2-test 14 -> 2,
+word-book 2 -> 0, inventory-api 2 -> 2; `why` chains v2-probe2 0 -> 22 and v2-probe 0 -> 6;
+every graph identical in nodes and edges, no previously labelled node changed, warnings
+unchanged. What remains is by design or beyond a scanner: components are labelled by id
+(their text now carries the name), a code node whose id is a bare file name has nothing
+shorter to show, and v2-probe3 wrote method signatures as component targets and no
+`Unit ID` table (its own review said so). Pins: trace-data "requirements: plain bullets
+and headings define an ID the bold form did not", "a bold definition still wins over a
+plain mention", "stories: headings without the dash", "rules: bullets stand in for the
+yaml block", "stage-major runs keep rules and NFR details under construction/ itself",
+"components: the yaml catalogue gives text and kind", every snippet pasted from a real
+run. Two more things from the merge. The stage-spec listing and the
 watcher's trace-input test hardcoded `.kiro/`, written before #7 landed; both now go
 through harness-dirs.js (pins: trace-data "stage specs are listed from the project's
 harness directory", trace-explorer-wiring "isTraceInputPath: aidlc/ and the harness

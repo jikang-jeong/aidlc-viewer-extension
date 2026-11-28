@@ -280,13 +280,18 @@ function collapse(text) {
   return String(text ?? '').replace(/\s+/g, ' ').trim();
 }
 
-// Drop `[Q1]`, `[team-practices]` style citations from requirement text.
+// Drop `[Q1]`, `[team-practices]` style citations from requirement text, and the `(Q1)` /
+// `(Q1, Q4)` form some runs (v2-probe) write instead. Only question ids are read out of
+// parentheses: a parenthesis holds many things, a bracket in these files holds citations.
+const PAREN_CITATION = /\s*\(\s*(O?Q\d+(?:\s*,\s*O?Q\d+)*)\s*\)/g;
 function stripCitations(text) {
-  return collapse(String(text).replace(/\s*\[[A-Za-z0-9][\w.\-]*\]/g, ''));
+  return collapse(String(text).replace(/\s*\[[A-Za-z0-9][\w.\-]*\]/g, '').replace(PAREN_CITATION, ''));
 }
 
 function citationsOf(text) {
-  return [...String(text).matchAll(/\[([A-Za-z0-9][\w.\-]*)\]/g)].map((m) => m[1]);
+  const out = [...String(text).matchAll(/\[([A-Za-z0-9][\w.\-]*)\]/g)].map((m) => m[1]);
+  for (const m of String(text).matchAll(PAREN_CITATION)) out.push(...m[1].split(/\s*,\s*/));
+  return out;
 }
 
 function splitList(text) {
@@ -707,15 +712,38 @@ function deriveTests(ctx, testFiles) {
 // Labels and text from the markdown each ID is defined in
 // ---------------------------------------------------------------------------
 
-// `- **ID** text` / `- **NFR1 — Title.** text` bullets, continuation lines joined.
-function definitionBullets(text) {
+// Definition bullets, continuation lines joined. Two shapes, told apart by `bold`:
+//
+//   - **ID** text / - **NFR1 — Title.** text     bold, as the reference project writes them
+//   - ID text / - ID: text / - ID. text          plain, as other runs of the same engine write them
+//
+// The engine's stage spec fixes the IDs (`FR{n}`, `FR{n}.{m}`, `NFR{n}`), not the bullet's
+// typography, and the runs on the development machine use both. The plain shape is read
+// only where a definition is expected (requirements.md, stories.md, rules.md) and, by the
+// callers, only for a node that has no label yet, so a bold definition is never replaced
+// by a later plain mention. A plain bullet whose ID is followed by a list separator
+// (`- FR1.1, FR1.2 → US1.1`) is a reference, not a definition, and is skipped.
+function definitionBullets(text, { plain = false } = {}) {
   const out = [];
   let current;
   for (const line of String(text).split(/\r?\n/)) {
-    const m = line.match(/^\s*-\s+\*\*([A-Z]+\d+(?:\.\d+)*)(?:\s+[—–-]\s+([^*]+?))?\*\*\s*(.*)$/);
+    // Inside the bold, a title may follow the ID after ` — ` (the reference project), or
+    // after `.`/`:` (`- **FR1. 긴 URL 입력 및 단축**`, `- **NFR1. 실행 단순성** — text`, v2-test).
+    const bold = line.match(/^\s*-\s+\*\*([A-Z]+\d+(?:\.\d+)*)(?:\s*[—–\-.:：]\s*([^*]+?))?\.?\*\*\s*(.*)$/);
+    const m = bold || (plain
+      ? line.match(/^\s*-\s+([A-Z]+\d+(?:\.\d+)*)(?:\s*[:：—–]\s*|\.\s+|\s+(?![,;/)→\-–—]))(\S.*)$/)
+      : null);
     if (m) {
       if (current) out.push(current);
-      current = { id: m[1], title: m[2] ? m[2].replace(/\.\s*$/, '').trim() : undefined, body: m[3] };
+      current = bold
+        ? {
+            id: m[1],
+            title: m[2] ? m[2].replace(/\.\s*$/, '').trim() : undefined,
+            // `**NFR1. Title** — text`: the dash after the bold is a separator, not text.
+            body: m[3].replace(/^\s*[—–\-:：]\s*/, ''),
+            bold: true
+          }
+        : { id: m[1], title: undefined, body: m[2], bold: false };
       continue;
     }
     if (current && line.trim() && !/^\s*[-#|]/.test(line) && /^\s+/.test(line)) {
@@ -727,6 +755,23 @@ function definitionBullets(text) {
   }
   if (current) out.push(current);
   return out;
+}
+
+// Headings that define an ID: `### FR1 지도 표시 (B-1)`, `### FR1. 계정 및 인증`, `### FR1 — Item
+// CRUD`, `#### NFR2: Security`. The title is what follows the ID and its separator.
+function definitionHeadings(text, idPattern) {
+  const out = [];
+  for (const line of String(text).split(/\r?\n/)) {
+    const m = line.match(/^#{2,4}\s+([A-Z]+\d+(?:\.\d+)*)(?:\s*[:：.—–-]\s*|\s+|$)(.*)$/);
+    if (!m || !idPattern.test(m[1])) continue;
+    const title = collapse(m[2].replace(/\*\*/g, ''));
+    if (title) out.push({ id: m[1], title });
+  }
+  return out;
+}
+
+function unlabeled(node) {
+  return node && (node.label === undefined || node.label === '' || node.label === node.id);
 }
 
 // Units contributing per-unit records: construction/<unit>/ folders that hold stage folders.
@@ -744,18 +789,29 @@ function enrichRequirements(ctx) {
   const rel = ctx.rel(file);
   const cites = new Map();
   const openQuestions = new Map();
-  for (const b of definitionBullets(text)) {
-    if (/^OQ\d+$/.test(b.id)) openQuestions.set(b.id, stripCitations(b.body));
+  // Bold bullets first (and they alone say "defined but untraced": a plain line that
+  // happens to start with an ID is not evidence enough for that warning), then plain
+  // bullets and headings for the IDs still without a label.
+  for (const b of definitionBullets(text, { plain: true })) {
+    if (/^OQ\d+$/.test(b.id) && (b.bold || !openQuestions.has(b.id))) openQuestions.set(b.id, stripCitations(b.body));
     const node = ctx.nodes.get(b.id);
     if (!node) {
-      if (/^(FR|NFR)\d/.test(b.id)) ctx.warn(`${rel}: ${b.id} is defined but appears in no traceability.json`);
+      if (b.bold && /^(FR|NFR)\d/.test(b.id)) ctx.warn(`${rel}: ${b.id} is defined but appears in no traceability.json`);
       continue;
     }
+    if (!b.bold && !unlabeled(node)) continue;
     const body = stripCitations(b.body);
     node.label = b.title || body;
     node.text = body || b.title || node.id;
     node.path = rel;
     cites.set(b.id, citationsOf(b.body));
+  }
+  for (const h of definitionHeadings(text, /^(FR|NFR|OQ)\d/)) {
+    const node = ctx.nodes.get(h.id);
+    if (!unlabeled(node)) continue;
+    node.label = h.title;
+    node.text = h.title;
+    node.path = rel;
   }
   return { cites, openQuestions, rel };
 }
@@ -766,9 +822,9 @@ function enrichStories(ctx) {
   if (text === undefined) return;
   const rel = ctx.rel(file);
   for (const sec of sections(text, 3)) {
-    const h = sec.heading.match(/^(US\d+(?:\.\d+)+)\s+[—–-]\s+(.+?)(?:\s+\((Must|Should|Could|Won't)\))?(?:\s+[—–-]\s+.*)?$/);
+    const h = storyHeading(sec.heading);
     if (!h) continue;
-    const node = ctx.nodes.get(h[1]);
+    const node = ctx.nodes.get(h.id);
     if (node) {
       const para = [];
       for (const line of sec.lines) {
@@ -779,22 +835,39 @@ function enrichStories(ctx) {
         if (/^\s*-\s/.test(line)) break;
         para.push(line.trim());
       }
-      node.label = h[2].trim();
+      node.label = h.title;
       node.text = collapse(para.join(' ')) || node.label;
       node.path = rel;
-      if (h[3]) node.priority = h[3];
+      if (h.priority) node.priority = h.priority;
     }
   }
-  for (const b of definitionBullets(text)) {
+  for (const b of definitionBullets(text, { plain: true })) {
     if (!/^AC/.test(b.id)) continue;
     const node = ctx.nodes.get(b.id);
-    if (!node) continue;
+    if (!node || (!b.bold && !unlabeled(node))) continue;
     node.label = node.text = collapse(b.body);
     node.path = rel;
   }
 }
 
-// The fenced yaml rule list in rules.md: flat mappings, `>` folded scalars.
+// A story heading's ID, title and MoSCoW priority. The reference project writes
+// `US1.1 — Create an item (Must) — FR1.1, FR1.2`; other runs of the same engine write
+// `US1.1 지도 보기` (no separator), `US1.1 (Must) 관리자 계정 생성` (priority first) or
+// `US1.1: Title`. The spec fixes the ID and the MoSCoW priority, not the heading's shape.
+// The reference shape is tried first, exactly as before; the general one follows.
+const PRIORITY = '(Must|Should|Could|Won\'t)(?: Have)?';
+function storyHeading(heading) {
+  const strict = heading.match(new RegExp(`^(US\\d+(?:\\.\\d+)+)\\s+[—–-]\\s+(.+?)(?:\\s+\\(${PRIORITY}\\))?(?:\\s+[—–-]\\s+.*)?$`));
+  if (strict) return { id: strict[1], title: strict[2].trim(), priority: strict[3] };
+  const loose = heading.match(new RegExp(`^(US\\d+(?:\\.\\d+)+)(?:\\s*\\(${PRIORITY}\\))?\\s*[:：.—–-]?\\s*(.*?)\\s*(?:\\(${PRIORITY}\\))?\\s*$`));
+  if (!loose) return undefined;
+  const title = collapse(loose[3].replace(/\*\*/g, ''));
+  if (!title) return undefined;
+  return { id: loose[1], title, priority: loose[2] || loose[4] };
+}
+
+// The fenced yaml list of `- id:` entries in rules.md (and components.md, whose catalogue
+// has the same shape): flat mappings, `>` folded scalars. The first yaml block in the file.
 function parseRuleYaml(text) {
   const block = String(text).match(/```yaml\r?\n([\s\S]*?)```/);
   if (!block) return [];
@@ -821,9 +894,17 @@ function parseRuleYaml(text) {
   return rules;
 }
 
+// Where the per-unit stages wrote: `construction/<unit>/` under unit-major iteration, and
+// `construction/` itself under stage-major (v2-probe: `construction/functional-design/rules.md`,
+// `construction/nfr-requirements/*.md`, no unit directory at all). Both are the engine's
+// layouts; the reader used to know only the first.
+function constructionDirs(ctx) {
+  return [path.join(ctx.intentDir, 'construction'), ...unitDirs(ctx)];
+}
+
 function enrichRules(ctx) {
   const out = new Map();
-  for (const dir of unitDirs(ctx)) {
+  for (const dir of constructionDirs(ctx)) {
     const file = path.join(dir, 'functional-design', 'rules.md');
     const text = ctx.read(file);
     if (text === undefined) continue;
@@ -834,7 +915,6 @@ function enrichRules(ctx) {
       for (const t of tables(sec.lines)) for (const row of t.rows) summary.set(row[0], row[1]);
     }
     const parsed = parseRuleYaml(text);
-    if (!parsed.length) ctx.warn(`${rel}: no rule yaml block found; business rules keep their IDs as labels`);
     for (const r of parsed) {
       const node = ctx.nodes.get(r.id);
       if (!node) continue;
@@ -844,12 +924,32 @@ function enrichRules(ctx) {
       node.path = rel;
       out.set(r.id, { source: r.source || '', unitDir: dir });
     }
+    // The spec asks for the yaml block; a run that wrote `- BR1.1 text` bullets instead
+    // (v2-probe2) still names its rules, so those are read for the rules the block did not
+    // cover. The summary table, when there is one, still gives the label.
+    let fromBullets = 0;
+    for (const b of definitionBullets(text, { plain: true })) {
+      if (!/^BR\d/.test(b.id)) continue;
+      const node = ctx.nodes.get(b.id);
+      if (!node || !unlabeled(node)) continue;
+      const body = stripCitations(b.body);
+      node.label = stripMd(summary.get(b.id) || b.title || body);
+      node.text = body || node.label;
+      node.path = rel;
+      if (!out.has(b.id)) out.set(b.id, { source: '', unitDir: dir });
+      fromBullets += 1;
+    }
+    if (!parsed.length) {
+      ctx.warn(fromBullets
+        ? `${rel}: no rule yaml block found; ${fromBullets} rule(s) read from its bullets instead`
+        : `${rel}: no rule yaml block found; business rules keep their IDs as labels`);
+    }
   }
   return out;
 }
 
 function enrichNfrDetails(ctx) {
-  for (const dir of unitDirs(ctx)) {
+  for (const dir of constructionDirs(ctx)) {
     const nfrDir = path.join(dir, 'nfr-requirements');
     for (const entry of listEntries(nfrDir)) {
       if (!entry.isFile() || !entry.name.endsWith('-requirements.md')) continue;
@@ -862,7 +962,12 @@ function enrichNfrDetails(ctx) {
         for (const row of t.rows) {
           const node = ctx.nodes.get(row[0]);
           if (!node || node.type !== 'nfr_detail') continue;
-          node.label = node.text = stripMd(row[1] || node.id);
+          // The requirement is the first cell after the ID that is not itself an ID: the
+          // reference project's table is `| ID | Requirement | ... |`, v2-probe's is
+          // `| ID | 상속 | 요구사항 | ... |` with the parent NFR in the second column, and
+          // "NFR1" is no label for NFR1.1. Decided by the cell, not by the header's language.
+          const cell = row.slice(1).find((c) => stripMd(c) && !/^[A-Z]+\d+(?:\.\d+)*$/.test(stripMd(c)));
+          node.label = node.text = cell ? stripMd(cell) : node.id;
           node.category = category;
           node.path = ctx.rel(file);
         }
@@ -888,6 +993,21 @@ function enrichComponentsAndUnits(ctx) {
         node.path = ctx.rel(comp);
       }
     }
+    // The spec's machine-readable half: the fenced yaml catalogue (`- id: CMP-map`, `name`,
+    // `kind`, `responsibility`). Read for the components the summary table did not describe,
+    // which is every one of them when the table's first column is not headed `Component`
+    // (v2-probe2 heads it `ID`). A component's label stays its ID, as in the table path; the
+    // catalogue gives the text and the kind.
+    for (const c of parseRuleYaml(ctext)) {
+      const node = ctx.nodes.get(c.id);
+      if (!node || node.type !== 'component' || done.has(c.id)) continue;
+      const about = c.responsibility || c.purpose || c.description || c.name;
+      if (!about) continue;
+      done.add(c.id);
+      node.text = collapse(c.name && about !== c.name ? `${c.name}: ${about}` : about);
+      if (c.kind) node.kind = String(c.kind).trim();
+      node.path = ctx.rel(comp);
+    }
   }
   const uow = path.join(ctx.intentDir, 'inception', 'units-generation', 'unit-of-work.md');
   const utext = ctx.read(uow);
@@ -897,10 +1017,16 @@ function enrichComponentsAndUnits(ctx) {
       if (h[0] !== 'unit id') continue;
       const nameAt = h.indexOf('name');
       const kindAt = h.indexOf('kind');
+      // The spec requires `Unit ID` and `Directory`; a `Name` column is the reference project's
+      // own. Without one, the directory name less its `u{n}-` prefix is the unit's name
+      // (`u1-map-app` -> `map-app`): the run's own words, not this reader's guess at which
+      // of its other columns (`이름`, `복잡도`, ...) is a name.
+      const dirAt = h.indexOf('directory');
       for (const row of t.rows) {
         const node = ctx.nodes.get(row[0]);
         if (!node) continue;
-        if (nameAt >= 0) node.label = stripMd(row[nameAt]);
+        if (nameAt >= 0 && stripMd(row[nameAt])) node.label = stripMd(row[nameAt]);
+        else if (dirAt >= 0 && stripMd(row[dirAt])) node.label = stripMd(row[dirAt]).replace(/^u\d+-/, '');
         node.text = node.label;
         if (kindAt >= 0) node.kind = stripMd(row[kindAt]);
         node.path = ctx.rel(uow);

@@ -372,6 +372,212 @@ test('stage specs are listed from the project\'s harness directory, not from .ki
   assert.deepStrictEqual(readTraceData(bare).meta.listedDirs, ['.kiro/aidlc-common/stages/'], 'no stage graph anywhere: .kiro as before');
 });
 
+// ---------------------------------------------------------------------------
+// Definitions in the shapes other runs of the same engine write
+// ---------------------------------------------------------------------------
+//
+// The reference project writes `- **FR1.1** text`, `### US1.1 — Title (Must)`, a yaml rule
+// block, a `| Component |` table and a `Name` column, and the scanner knew those shapes
+// alone. The engine's stage specs fix the IDs, the MoSCoW words and (for rules and
+// components) a yaml block; not the bullet's typography, the heading's separator or a table's
+// column names. On the development machine's August runs most names therefore came out as
+// bare IDs (v2-probe2: 73 of 114). Every snippet below is pasted from one of those runs.
+
+const PROBE2_REQUIREMENTS = `# 요구사항
+
+> ID 표기: 요구사항 ID는 하이픈 없는 형식(FR1.1, NFR1)을 사용해 하위 추적성(traceability)과 일치시킨다.
+
+## 기능 요구사항
+
+### FR1 지도 표시 (B-1)
+- FR1.1 앱 로드 시 Leaflet 지도가 OpenStreetMap 타일로 렌더링된다 [intent-statement][scope-document].
+- FR1.2 사용자는 지도를 드래그로 이동하고 확대/축소할 수 있다 [scope-document].
+
+## 비기능 요구사항
+- NFR1 성능: 지도 초기 로드는 즉시 수준, 장소 검색 응답은 약 1~2초 이내를 목표로 한다 [Q1].
+
+## 추적
+- FR1.1, FR1.2 → US1.1
+`;
+const PROBE_REQUIREMENTS = `### FR1. 계정 및 인증 (Auth)
+- FR1.1 관리자는 강사·학생 계정을 생성한다(역할 지정 포함). 공개 회원가입은 없다. (Q1)
+`;
+const TEST_REQUIREMENTS = `- **FR1. 긴 URL 입력 및 단축**
+  - FR1.1 사용자는 브라우저 화면의 입력란에 긴 URL을 붙여넣고 "단축" 동작을 실행할 수 있다.
+- **NFR1. 실행 단순성** — 로컬에서 단일 프로세스로 즉시 실행 가능해야 하며, 외부 패키지 설치가 필요 없어야 한다(Python 3 표준 라이브러리 사용).
+`;
+
+function requirementsProject(requirements, ids) {
+  return makeProject({
+    'inception/requirements-analysis/requirements.md': requirements,
+    'inception/user-stories/traceability.json': {
+      stage: 'user-stories',
+      coverage: ids.map((id) => ({ id, status: 'OK', target: 'US1.1' }))
+    }
+  });
+}
+const nodesById = (d) => Object.fromEntries(d.nodes.map((n) => [n.id, n]));
+
+test('requirements: plain bullets and headings define an ID the bold form did not', () => {
+  const d = readTraceData(requirementsProject(PROBE2_REQUIREMENTS, ['FR1', 'FR1.1', 'FR1.2', 'NFR1']));
+  const n = nodesById(d);
+  assert.strictEqual(n.FR1.label, '지도 표시 (B-1)', 'a heading defines the group');
+  assert.strictEqual(n['FR1.1'].label, '앱 로드 시 Leaflet 지도가 OpenStreetMap 타일로 렌더링된다.', 'a plain bullet, citations stripped');
+  assert.strictEqual(n['FR1.2'].label, '사용자는 지도를 드래그로 이동하고 확대/축소할 수 있다.');
+  assert.strictEqual(n.NFR1.label, '성능: 지도 초기 로드는 즉시 수준, 장소 검색 응답은 약 1~2초 이내를 목표로 한다.');
+  assert.ok(n['FR1.1'].path.endsWith('requirements.md'));
+  // The reference line `- FR1.1, FR1.2 → US1.1` is a reference, not a second definition.
+  assert.ok(!n['FR1.1'].label.includes('→'));
+  // No "defined but untraced" warning comes from a plain line.
+  assert.ok(!d.meta.warnings.some((w) => /appears in no traceability/.test(w)), d.meta.warnings.join('\n'));
+
+  const probe = nodesById(readTraceData(requirementsProject(PROBE_REQUIREMENTS, ['FR1', 'FR1.1'])));
+  assert.strictEqual(probe.FR1.label, '계정 및 인증 (Auth)', '`### FR1. Title`');
+  assert.strictEqual(probe['FR1.1'].label, '관리자는 강사·학생 계정을 생성한다(역할 지정 포함). 공개 회원가입은 없다.');
+
+  const test = nodesById(readTraceData(requirementsProject(TEST_REQUIREMENTS, ['FR1', 'FR1.1', 'NFR1'])));
+  assert.strictEqual(test.FR1.label, '긴 URL 입력 및 단축', 'a title inside the bold, after a dot');
+  assert.strictEqual(test['FR1.1'].label, '사용자는 브라우저 화면의 입력란에 긴 URL을 붙여넣고 "단축" 동작을 실행할 수 있다.', 'a nested plain bullet');
+  assert.strictEqual(test.NFR1.label, '실행 단순성');
+  assert.match(test.NFR1.text, /^로컬에서 단일 프로세스로/, 'the dash after the bold is a separator, not text');
+});
+
+test('requirements: a bold definition still wins over a plain mention, and still warns when untraced', () => {
+  const text = '- FR1.1 is implemented first\n- **FR1.1** The real definition.\n- **FR9.9** never traced\n';
+  const d = readTraceData(requirementsProject(text, ['FR1.1']));
+  assert.strictEqual(nodesById(d)['FR1.1'].label, 'The real definition.');
+  assert.ok(d.meta.warnings.some((w) => /FR9\.9 is defined but appears in no traceability/.test(w)));
+});
+
+test('stories: headings without the dash, with the priority first, or with a colon', () => {
+  const stories = `# Stories
+
+### US1.1 지도 보기
+사용자로서 지도를 보고 싶다.
+
+- AC1.1.1 앱 로드 시 Leaflet 지도가 OpenStreetMap 타일로 렌더링된다 (FR1.1).
+
+### US1.2 (Must) 관리자 계정 생성
+관리자로서 계정을 만들고 싶다.
+
+### US2.1 — Create an item (Should) — FR1.1, FR1.2
+As a developer, I want to create an item.
+
+### US3.1: Search by name (Could)
+As a user, I want to search.
+`;
+  const root = makeProject({
+    'inception/user-stories/stories.md': stories,
+    'inception/user-stories/traceability.json': {
+      stage: 'user-stories',
+      coverage: [{ id: 'FR1.1', status: 'OK', target: 'US1.1, US1.2, US2.1, US3.1' }]
+    },
+    'construction/u1/code-generation/traceability.json': {
+      stage: 'code-generation',
+      unit: 'u1',
+      coverage: [{ id: 'AC1.1.1', status: 'OK', target: 'src/a.ts' }]
+    },
+    '/src/a.ts': 'x'
+  });
+  const n = nodesById(readTraceData(root));
+  assert.deepStrictEqual([n['US1.1'].label, n['US1.1'].priority], ['지도 보기', undefined]);
+  assert.strictEqual(n['US1.1'].text, '사용자로서 지도를 보고 싶다.');
+  assert.deepStrictEqual([n['US1.2'].label, n['US1.2'].priority], ['관리자 계정 생성', 'Must']);
+  assert.deepStrictEqual([n['US2.1'].label, n['US2.1'].priority], ['Create an item', 'Should'], 'the reference shape, unchanged');
+  assert.deepStrictEqual([n['US3.1'].label, n['US3.1'].priority], ['Search by name', 'Could']);
+  assert.strictEqual(n['AC1.1.1'].label, '앱 로드 시 Leaflet 지도가 OpenStreetMap 타일로 렌더링된다 (FR1.1).');
+});
+
+test('rules: bullets stand in for the yaml block the spec asks for, with a warning that says so', () => {
+  const root = makeProject({
+    'construction/map-app/functional-design/rules.md': '# Rules\n\n## 지도\n- BR1.1 기본 중심은 (37.5665, 126.9780), zoom 13이다 (FR1.4).\n- BR1.2 사용자는 지도를 드래그로 이동할 수 있다 (FR1.2).\n',
+    'construction/map-app/functional-design/traceability.json': {
+      stage: 'functional-design',
+      unit: 'map-app',
+      coverage: [{ id: 'FR1.4', status: 'OK', target: 'BR1.1' }, { id: 'FR1.2', status: 'OK', target: 'BR1.2' }]
+    }
+  });
+  const d = readTraceData(root);
+  const n = nodesById(d);
+  assert.strictEqual(n['BR1.1'].label, '기본 중심은 (37.5665, 126.9780), zoom 13이다 (FR1.4).');
+  assert.strictEqual(n['BR1.2'].label, '사용자는 지도를 드래그로 이동할 수 있다 (FR1.2).');
+  assert.ok(d.meta.warnings.some((w) => /no rule yaml block found; 2 rule\(s\) read from its bullets/.test(w)), d.meta.warnings.join('\n'));
+});
+
+test('stage-major runs keep rules and NFR details under construction/ itself, with no unit directory', () => {
+  // v2-probe: construction/functional-design/rules.md (yaml present) and
+  // construction/nfr-requirements/security-requirements.md, whose table puts the parent NFR
+  // in the second column and the requirement in the third.
+  const root = makeProject({
+    'construction/functional-design/rules.md': '```yaml\n- id: BR1.1\n    statement: 계정 생성은 관리자(admin) 역할만 수행할 수 있다.\n    category: authorization\n```\n',
+    'construction/functional-design/traceability.json': {
+      stage: 'functional-design',
+      coverage: [{ id: 'FR1.1', status: 'OK', target: 'BR1.1' }]
+    },
+    'construction/nfr-requirements/security-requirements.md': '| ID | 상속 | 요구사항 | 검증 |\n|---|---|---|---|\n| NFR1.1 | NFR1 | 비밀번호는 검증된 해시 함수(bcrypt/argon2 계열 등)로만 저장한다. | 코드 리뷰 |\n',
+    'construction/nfr-requirements/traceability.json': {
+      stage: 'nfr-requirements',
+      coverage: [{ id: 'NFR1', status: 'OK', target: 'NFR1.1' }]
+    }
+  });
+  const n = nodesById(readTraceData(root));
+  assert.strictEqual(n['BR1.1'].label, '계정 생성은 관리자(admin) 역할만 수행할 수 있다.');
+  assert.strictEqual(n['BR1.1'].kind, 'authorization');
+  assert.strictEqual(n['NFR1.1'].label, '비밀번호는 검증된 해시 함수(bcrypt/argon2 계열 등)로만 저장한다.', 'the first non-ID cell, not the parent');
+  assert.strictEqual(n['NFR1.1'].category, 'security');
+});
+
+test('components: the yaml catalogue gives text and kind when the table is not headed Component; units: the directory names the unit', () => {
+  const components = `# Components
+
+## Catalogue
+\`\`\`yaml
+components:
+  - id: CMP-app
+    name: app-bootstrap
+    kind: ui
+    responsibility: 앱 초기화와 조립.
+  - id: CMP-map
+    name: map
+    kind: library
+    responsibility: Leaflet 지도 초기화, OSM 타일, attribution, 기본 중심(서울)·줌, 이동/줌.
+    covers: [FR1.1, FR1.2, FR1.3, FR1.4, US1.1, US1.2]
+\`\`\`
+
+## Summary Table
+| ID | 모듈 | 종류 | 주요 커버 |
+|----|------|------|-----------|
+| CMP-app | app-bootstrap | ui | FR1.1 |
+| CMP-map | map | library | FR1.1 |
+`;
+  const uow = `# Units
+
+| Unit ID | Directory | 이름 | Kind | 복잡도 | 배포 모델 |
+|---------|-----------|------|------|--------|-----------|
+| U1 | u1-map-app | 지도 앱 | service | 중 | 정적 |
+`;
+  const root = makeProject({
+    'inception/domain-design/components.md': components,
+    'inception/domain-design/traceability.json': {
+      stage: 'domain-design',
+      coverage: [{ id: 'FR1.1', status: 'OK', target: 'CMP-map, CMP-app' }]
+    },
+    'inception/units-generation/unit-of-work.md': uow,
+    'inception/units-generation/traceability.json': {
+      stage: 'units-generation',
+      coverage: [{ id: 'FR1.1', status: 'OK', target: 'U1' }]
+    }
+  });
+  const n = nodesById(readTraceData(root));
+  assert.strictEqual(n['CMP-map'].label, 'CMP-map', 'a component is labelled by its id, as in the table path');
+  assert.strictEqual(n['CMP-map'].text, 'map: Leaflet 지도 초기화, OSM 타일, attribution, 기본 중심(서울)·줌, 이동/줌.');
+  assert.strictEqual(n['CMP-map'].kind, 'library');
+  assert.strictEqual(n['CMP-app'].text, 'app-bootstrap: 앱 초기화와 조립.');
+  assert.ok(n['CMP-map'].path.endsWith('components.md'));
+  assert.strictEqual(n.U1.label, 'map-app', 'no Name column: the directory, less its u1- prefix');
+  assert.strictEqual(n.U1.kind, 'service');
+});
+
 test('GAP rows, upstream-only IDs, deferrals and N/A notes', () => {
   const root = makeProject({
     'inception/user-stories/traceability.json': {
