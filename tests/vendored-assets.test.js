@@ -70,3 +70,56 @@ test('markdown-it and its task-list plugin are the npm builds the notices name',
   assert.equal(noticedVersion('markdown-it-task-lists'), '2.1.1');
   assert.equal(sha('markdown-it-task-lists.min.js'), '4f3b23f41bb3787957da2602fbccc4df0d017928c1fce62583159e096b832a81');
 });
+
+test('the notices name every licence the shipped files carry, with each text reproduced', () => {
+  // The first notices file said "All are MIT" two lines above the task-list plugin's own
+  // "ISC License", and said nothing about what the single-file Mermaid build inlines:
+  // DOMPurify (MPL-2.0 OR Apache-2.0), chevrotain (Apache-2.0), elkjs (EPL-2.0 OR
+  // GPL-3.0-or-later), d3-sankey (BSD-3-Clause), d3 (ISC). Each is now named with the
+  // licence it is taken under, and every licence named is reproduced in full.
+  assert.ok(!/all are MIT/i.test(notices), 'the blanket claim is gone');
+  assert.match(notices, /^## markdown-it-task-lists 2\.1\.1 \(.*\) -- ISC$/m);
+  assert.match(notices, /^## mermaid 12\.4\.0 \(.*\) -- MIT, with bundled components under other licences$/m);
+  assert.match(notices, /DOMPurify 3\.4\.17[^]*?Apache License 2\.0 or the Mozilla Public License 2\.0/);
+  assert.match(notices, /chevrotain[^]*?Apache License 2\.0|Apache License 2\.0[^]*?chevrotain/);
+  assert.match(notices, /elkjs[^]*?EPL-2\.0 or\s+GPL-3\.0-or-later and taken here under EPL-2\.0/);
+  assert.match(notices, /BSD 3-Clause\*\*: d3-sankey, Copyright 2015 Mike Bostock/);
+  assert.match(notices, /\*\*ISC\*\*: d3 and its `d3-\*` modules/);
+  // The texts, each identified by a sentence only it has.
+  const textsAt = notices.indexOf('\n## Licence texts\n');
+  assert.ok(textsAt > 0, 'the notices end with a "Licence texts" section');
+  const texts = notices.slice(textsAt);
+  const expect = {
+    '### MIT License': 'Permission is hereby granted, free of charge, to any person obtaining a copy',
+    '### ISC License': 'Permission to use, copy, modify, and/or distribute this software for any purpose',
+    '### BSD 3-Clause License': 'Neither the name of the author nor the names of contributors may be used',
+    '### Apache License 2.0': 'TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION',
+    '### Eclipse Public License - v 2.0': 'THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THIS ECLIPSE',
+  };
+  for (const [heading, sentence] of Object.entries(expect)) {
+    assert.ok(texts.includes(`\n${heading}\n`), `${heading} is a section of Licence texts`);
+    assert.ok(texts.includes(sentence), `${heading} is reproduced, not only named`);
+  }
+  // A licence text pasted from a LICENSE.md keeps its own headings; they are demoted so
+  // the document's top level stays the list of files (EPL-2.0's "## 1. DEFINITIONS" etc.).
+  assert.ok(!/^## /m.test(texts.slice('\n## Licence texts\n'.length)), 'no top-level heading after "Licence texts"');
+  assert.ok(!/\{#[a-z-]+\}/.test(notices), 'no Pandoc heading anchors left from the paste');
+});
+
+test('the Mermaid bundle keeps its own licence comments, which the notices point at', () => {
+  // esbuild collects the /*! ... */ comments of what it inlines into one block at the end of
+  // the file. The notices say it is there and unmodified; this is that statement, checked.
+  const text = fs.readFileSync(path.join(MEDIA, 'mermaid.min.js'), 'latin1');
+  const at = text.indexOf('/*! Bundled license information:');
+  assert.ok(at > 0, 'the bundled-licence block is present');
+  assert.ok(text.length - at < 4096, 'and sits at the end of the file');
+  const block = text.slice(at);
+  assert.ok(block.includes('DOMPurify 3.4.17 | (c) Cure53 and other contributors | Released under the Apache license 2.0 and Mozilla Public License 2.0'));
+  assert.ok(block.includes('regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc.'));
+  assert.ok(block.includes('Lodash (Custom Build)'));
+  assert.ok(block.includes('cytoscape/dist/cytoscape.esm.mjs'));
+  assert.ok(notices.includes('DOMPurify 3.4.17'), 'the notices name the DOMPurify version the bundle names');
+  // Mermaid 12 inlines the Eclipse Layout Kernel (no licence comment of its own survives
+  // minification, only its package names), which is why the notices carry EPL-2.0.
+  assert.ok(text.includes('org.eclipse.elk.'), 'ELK is inside the file');
+});

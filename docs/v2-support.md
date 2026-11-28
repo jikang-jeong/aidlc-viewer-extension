@@ -916,6 +916,32 @@ reads 2.1.0, so the hash is the check, not the banner). Not done: no job watches
 three files for new advisories; the upstream cron watches the engine, not the viewer's
 libraries, and that would be the place to add it.
 
+**The third-party notices said "All are MIT", and two of the four entries were not, nor
+was a third of the Mermaid file.** The first `media/THIRD-PARTY-NOTICES.md` opened with
+that sentence two lines above the task-list plugin's own line, "ISC License", and
+described Mermaid by Mermaid's licence alone. A single-file Mermaid build inlines its
+dependencies, and 12.4.0's are not all MIT (read 2026-11-28 from each package's `license`
+field and LICENSE file in the tarballs the 12.4.0 dependency set resolves to): DOMPurify
+3.4.17 is `(MPL-2.0 OR Apache-2.0)`, chevrotain 13.2.0 Apache-2.0, elkjs 0.12.2 `EPL-2.0
+OR GPL-3.0-or-later` and inlined whole since Mermaid 12 (the `org.eclipse.elk.*` package
+names are in the file), d3-sankey 0.12.3 BSD-3-Clause, d3 7.9 and internmap and delaunator
+ISC; the rest MIT. Pointed out by the user, with the bundle's own licence comments as the
+evidence: esbuild keeps every `/*! ... */` comment of what it inlines in one `Bundled
+license information` block at the end of `mermaid.min.js`, and that block names DOMPurify's
+dual licence in so many words. The notices now name each component with the licence it is
+taken under (Apache-2.0 for DOMPurify, EPL-2.0 for ELK, with ELK's source locations as
+EPL asks) and reproduce every licence text named, copied from the packages' LICENSE files;
+the EPL text's own `##` headings are demoted so the document's top level stays the list of
+files. The VS Code stylesheet entry was right and stays. Rule: a notices file names the
+licence per component and never summarises, and a bundle is listed by what it contains,
+read from the bundle, not by the licence of the package that built it. Pins:
+vendored-assets "the notices name every licence the shipped files carry" (no blanket
+claim, the ISC heading, the DOMPurify/chevrotain/elkjs/d3-sankey/d3 lines, each of the
+five texts present by a sentence only it has, no top-level heading after "Licence
+texts") and "the Mermaid bundle keeps its own licence comments" (the block exists, sits
+at the end, names DOMPurify 3.4.17's dual licence, regenerator-runtime, lodash and
+cytoscape; ELK's package names are in the file).
+
 **The Trace Explorer reads names and answers from markdown, and on older runs most of them
 do not resolve.** The panel (0.2.0, #6, @CloudaYolla) is the one place in this extension
 that parses markdown content. Its graph is JSON (`traceability.json` per stage,

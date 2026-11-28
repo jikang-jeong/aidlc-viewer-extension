@@ -111,7 +111,10 @@ A tour of all four tabs and the design notes: [docs/trace-explorer/README.md](do
   denial-of-service advisory; 12.4.0 has none and carries the fixed js-yaml. The file is the npm
   release byte for byte (its hash is in `media/THIRD-PARTY-NOTICES.md` and checked by a test).
   Flowcharts, state, class and ER diagrams keep the dagre layout they had: Mermaid 12 made ELK
-  the default, and this viewer names dagre so existing diagrams draw as before.
+  the default, and this viewer names dagre so existing diagrams draw as before. The notices
+  file now lists what the Mermaid build inlines with each component's own licence (Apache-2.0,
+  EPL-2.0, BSD-3-Clause and ISC beside MIT) and reproduces every licence text; its first
+  version said everything was MIT, which the task-list plugin (ISC) already was not.
 
 
 ### 0.1.6
