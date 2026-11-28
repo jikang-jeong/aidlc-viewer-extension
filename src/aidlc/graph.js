@@ -1,8 +1,9 @@
 'use strict';
 
-// Readers for the two compiled JSON files a v2 project keeps under
-// `.kiro/tools/data/`. Both are written by the engine, so reading a named field
-// is a contract; deriving meaning from a value is not.
+// Readers for the two compiled JSON files a v2 project keeps under its harness
+// directory's `tools/data/` (`.kiro/tools/data/` on Kiro; see harness-dirs.js for the
+// others). Both are written by the engine, so reading a named field is a contract;
+// deriving meaning from a value is not.
 //
 // Design rule for this whole module: nothing about a specific project is
 // hardcoded. Stage slugs, phase names, sensor ids and scope names are all read
@@ -15,9 +16,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const { harnessDataDir, STAGE_GRAPH_FILE } = require('./harness-dirs');
 
-const STAGE_GRAPH = ['.kiro', 'tools', 'data', 'stage-graph.json'];
-const SCOPE_GRID = ['.kiro', 'tools', 'data', 'scope-grid.json'];
+const SCOPE_GRID_FILE = 'scope-grid.json';
 
 // Fields this module reads off a stage node. Anything else present in the file
 // is surfaced through `unknownStageFields` instead of being silently ignored,
@@ -30,9 +31,15 @@ const KNOWN_STAGE_FIELDS = new Set([
   'reviewer_max_iterations', 'protocol_modules', 'stage_file', 'summary'
 ]);
 
-function readJson(root, segments) {
+// A compiled-data file by name, from whichever harness directory the project has. The
+// directory is resolved on every read rather than remembered: the two readers below are
+// called together, and a cached answer could outlive an `aidlc config` that moved the
+// data (the cache in index.js stamps the resolved directory for the same reason).
+function readData(root, file) {
+  const data = harnessDataDir(root);
+  if (!data) return undefined;
   try {
-    return JSON.parse(fs.readFileSync(path.join(root, ...segments), 'utf8'));
+    return JSON.parse(fs.readFileSync(path.join(root, ...data, file), 'utf8'));
   } catch {
     return undefined;
   }
@@ -42,7 +49,7 @@ function readJson(root, segments) {
 // `number` (e.g. "3.5") is a display label, not a sort key we can rely on being
 // numeric, so file order is preserved rather than re-sorted.
 function readStageGraph(root) {
-  const raw = readJson(root, STAGE_GRAPH);
+  const raw = readData(root, STAGE_GRAPH_FILE);
   if (!Array.isArray(raw)) return undefined;
 
   const unknownStageFields = new Set();
@@ -119,7 +126,7 @@ function phaseOrder(stageGraph) {
 const EXECUTE = 'EXECUTE';
 
 function readScopeGrid(root) {
-  const raw = readJson(root, SCOPE_GRID);
+  const raw = readData(root, SCOPE_GRID_FILE);
   if (!raw || typeof raw !== 'object') return undefined;
   const scopes = {};
   const unknownDecisions = new Set();
@@ -175,8 +182,8 @@ function stagesForScope(stageGraph, scopeGrid, scopeName, overrides = new Map())
 module.exports = {
   EXECUTE,
   KNOWN_STAGE_FIELDS,
-  STAGE_GRAPH,
-  SCOPE_GRID,
+  STAGE_GRAPH_FILE,
+  SCOPE_GRID_FILE,
   readStageGraph,
   readScopeGrid,
   phaseOrder,

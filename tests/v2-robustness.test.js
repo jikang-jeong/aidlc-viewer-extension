@@ -54,6 +54,10 @@ function makeProject(spec = {}) {
   if ('intentDir' in spec) {
     const dir = path.join(intents, spec.intentDir);
     fs.mkdirSync(path.join(root, dir), { recursive: true });
+    // Every intent record the engine creates holds aidlc-state.md; it is what makes a
+    // directory under intents/ a record at all (the engine's listIntentDirs, mirrored by
+    // runtime.isIntentRecord). A test about the state file's content overwrites this.
+    write(path.join(dir, 'aidlc-state.md'), '# AI-DLC State\n');
     if ('runtimeGraph' in spec) write(path.join(dir, 'runtime-graph.json'), spec.runtimeGraph);
     if ('auditShard' in spec) write(path.join(dir, 'audit', 'shard.md'), spec.auditShard);
   }
@@ -209,13 +213,19 @@ test('runtime: a manifest whose entries name a directory that is absent reports 
   assert.deepEqual(listing.intents.map((i) => i.id), ['260101-here']);
 });
 
-test('runtime: a directory absent from the manifest is reported, not hidden', () => {
+test('runtime: a record absent from the manifest is reported, not hidden; a bare directory is neither', () => {
   const root = makeProject({
     manifest: [{ slug: 'a', dirName: '260101-a' }],
     intentDir: '260101-a'
   });
-  const extra = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-unlisted');
-  fs.mkdirSync(extra, { recursive: true });
+  const intents = path.join(root, 'aidlc', 'spaces', 'default', 'intents');
+  // A record (holds aidlc-state.md) the manifest does not list: the two sources disagree.
+  fs.mkdirSync(path.join(intents, '260101-unlisted'), { recursive: true });
+  fs.writeFileSync(path.join(intents, '260101-unlisted', 'aidlc-state.md'), '# AI-DLC State\n');
+  // A directory with no record in it is not an intent, so not a disagreement either: this is
+  // the shape of the space-level audit shard `intents/audit/` (issue #5).
+  fs.mkdirSync(path.join(intents, 'audit'), { recursive: true });
+  fs.writeFileSync(path.join(intents, 'audit', 'host-clone.md'), '# AI-DLC Audit Log\n');
   const listing = runtime.listIntents(root, 'default');
   assert.deepEqual(listing.missingFromManifest, ['260101-unlisted']);
 });
@@ -583,6 +593,7 @@ test('denominator: the scope comes from the intent, so two intents can differ in
   });
   const second = path.join(root, 'aidlc', 'spaces', 'default', 'intents', '260101-narrow');
   fs.mkdirSync(second, { recursive: true });
+  fs.writeFileSync(path.join(second, 'aidlc-state.md'), '# AI-DLC State\n');
   fs.writeFileSync(
     path.join(second, 'runtime-graph.json'),
     JSON.stringify({ scope: 'narrow', stages: [] })
@@ -1196,7 +1207,9 @@ test('plan override: the regex is the engine\'s; every checkbox state it accepts
   assert.deepEqual([...graph.planOverridesFromState('')], []);
 });
 
-test('plan override: no state file, or one without suffixes, leaves the scope grid in charge', () => {
+test('plan override: a state file without checklist suffixes leaves the scope grid in charge', () => {
+  // (A record always has a state file -- without one the directory is not an intent at
+  // all, see isIntentRecord -- so "no state file" is not a case this reader meets.)
   const root = ledgerProject({
     scopeGrid: { s: { stages: { a: 'EXECUTE', b: 'SKIP', c: 'EXECUTE', d: 'EXECUTE' } } }
   });

@@ -3,6 +3,22 @@
 The same notes as the README's What's New section, kept identical by a test
 (tests/changelog.test.js). Edit both, or the suite fails. Newest first.
 
+## 0.1.7
+
+- **Projects set up for Claude Code, Codex CLI, Cursor, Copilot or opencode are read too.**
+  The engine writes the same compiled data under the directory of the harness you chose
+  (`.claude/`, `.codex/`, `.cursor/`, `.aidlc/`), and the viewer looked under `.kiro/` only, so a
+  project with no `.kiro/` was detected as v2 and then showed nothing. It now reads whichever
+  harness directory the project has, `.kiro/` first when there are several; the Start page's
+  scope table, the file watcher and **Check setup** follow it, and Check setup names the tool the
+  project is configured for instead of sending it to Set up. Setting up and removing AI-DLC from
+  the extension stays a Kiro matter. Reported in [issue #5](https://github.com/jikang-jeong/aidlc-viewer-extension/issues/5),
+  with a patch and the measurements that made this a one-line question. Thank you, @mageshwaranr.
+- **No more phantom `audit` intent.** The engine keeps a space-level audit folder at
+  `aidlc/spaces/<space>/intents/audit/`, which the viewer listed as an intent with every stage
+  pending, or reported as missing from the manifest. An intent is now what the engine says it
+  is: a directory under `intents/` that holds `aidlc-state.md`. Also from issue #5.
+
 ## 0.1.6
 
 - **Windows: the completion dialog no longer claims PATH was not registered.** On the first

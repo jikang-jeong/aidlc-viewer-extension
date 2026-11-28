@@ -252,6 +252,7 @@ test('a repeat read of an unchanged project does not re-parse the ledger', () =>
     );
     const intent = path.join(dir, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
     fs.mkdirSync(path.join(intent, 'audit'), { recursive: true });
+    fs.writeFileSync(path.join(intent, 'aidlc-state.md'), '# AI-DLC State\n');
     fs.writeFileSync(
       path.join(intent, 'runtime-graph.json'),
       JSON.stringify({ scope: 's', stages: [] })
@@ -281,6 +282,7 @@ test('appending to the ledger invalidates the cache', () => {
     );
     const intent = path.join(dir, 'aidlc', 'spaces', 'default', 'intents', '260101-x');
     fs.mkdirSync(path.join(intent, 'audit'), { recursive: true });
+    fs.writeFileSync(path.join(intent, 'aidlc-state.md'), '# AI-DLC State\n');
     fs.writeFileSync(
       path.join(intent, 'runtime-graph.json'),
       JSON.stringify({ scope: 's', stages: [] })
@@ -552,6 +554,13 @@ test("v2's evidence lives in dot-directories, and events there must still refres
     '.kiro/tools/data/runtime-graph.json',
     '.kiro/tools/data/stage-graph.json',
     '.kiro/tools/data/scope-grid.json',
+    // The same data under the other harness directories the engine writes (issue #5: a
+    // Claude Code project has it under .claude/ and no .kiro/ at all).
+    '.claude/tools/data/stage-graph.json',
+    '.codex/tools/data/scope-grid.json',
+    '.cursor/tools/data/stage-graph.json',
+    '.aidlc/tools/data/stage-graph.json',
+    '.claude/scopes/aidlc-bugfix.md',
     'aidlc/spaces/default/intents/i1/.aidlc-sensors/intent-capture/claim-sources-abc.md',
     'aidlc/spaces/default/intents/i1/audit/shard.md'
   ]) {
